@@ -81,12 +81,20 @@ if ($hassiteconfig) {
             $status .= html_writer::tag('p', get_string('connect:intro', 'local_reportlms'));
         }
 
-        $buttons = html_writer::link(
+        $buttons = '';
+        if ($connected) {
+            $buttons .= html_writer::link(
+                new moodle_url('/local/reportlms/view.php'),
+                get_string('dashboard:openbutton', 'local_reportlms'),
+                ['class' => 'btn btn-primary']
+            ) . ' ';
+        }
+        $buttons .= html_writer::link(
             $connecturl,
             $connected
                 ? get_string('connect:reconnectbutton', 'local_reportlms')
                 : get_string('connect:button', 'local_reportlms'),
-            ['class' => 'btn btn-primary']
+            ['class' => $connected ? 'btn btn-secondary' : 'btn btn-primary']
         );
         if ($connected) {
             $buttons .= ' ' . html_writer::link(

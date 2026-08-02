@@ -61,7 +61,7 @@ class api_client {
             'platform' => config::PLATFORM,
         ]);
 
-        foreach (['environment_id', 'api_key', 'signing_secret'] as $required) {
+        foreach (['environment_id', 'api_key', 'signing_secret', 'launch_secret'] as $required) {
             if (empty($data[$required])) {
                 throw new \moodle_exception('error:connectrejected', 'local_reportlms', '', 'missing ' . $required);
             }

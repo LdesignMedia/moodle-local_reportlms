@@ -54,9 +54,16 @@ $string['settings:pushpath_desc'] = 'The endpoint on the Report LMS host that re
 $string['settings:enabled'] = 'Send data';
 $string['settings:enabled_desc'] = 'Turn off to keep the connection but stop sending data.';
 
+// Dashboard.
+$string['dashboard:title'] = 'Report LMS dashboard';
+$string['dashboard:notconnected'] = 'This site is not connected to Report LMS yet, so there is no report to show.';
+$string['dashboard:gotosettings'] = 'Go to the Report LMS settings';
+$string['dashboard:openbutton'] = 'Open the dashboard';
+
 // Scheduled tasks.
 $string['task:reconcile'] = 'Report LMS: find learners changed outside the normal events';
 
 // Errors.
+$string['error:nosalt'] = 'This site has no Report LMS coding key yet. Reconnect from the Report LMS settings.';
 $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';

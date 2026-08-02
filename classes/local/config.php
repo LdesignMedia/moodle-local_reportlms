@@ -47,6 +47,9 @@ class config {
     /** @var string Where the plugin asks to be connected. */
     public const CONNECT_PATH = '/api/v1/connect';
 
+    /** @var string Where the SaaS serves the embedded dashboard. */
+    public const DEFAULT_EMBED_PATH = '/embed';
+
     /** @var string Public path this plugin serves its verification token on. */
     public const VERIFY_PATH = '/local/reportlms/verify.php';
 
