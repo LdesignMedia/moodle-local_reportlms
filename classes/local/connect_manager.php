@@ -127,6 +127,11 @@ class connect_manager {
             set_config('saltepoch', 1, 'local_reportlms');
         }
 
+        // Put the report within reach straight away. Never fatal: the site is
+        // connected either way, and a missing convenience link is not a reason
+        // to fail what the admin actually asked for.
+        dashboard_block::ensure();
+
         \core\notification::success(get_string('connect:success', 'local_reportlms'));
     }
 

@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Puts a link to the report on the site front page.
+ * Puts a link to the report where users actually land.
  *
  * @package    local_reportlms
  * @copyright  2026 Luuk Verhoeven, ldesignmedia.nl <info@ldesignmedia.nl>
@@ -28,44 +28,92 @@ namespace local_reportlms\local;
 /**
  * Creates and removes an HTML block holding a button to the report.
  *
- * It goes on the site front page, not the Dashboard. The Dashboard looks like
- * the obvious home for it, but Moodle copies the default Dashboard to each user
- * the first time they open it, so a block added to the default only ever
- * reaches people who have never logged in. On a live site that is almost
- * nobody: the admin who just pressed the button would not see it either. The
- * front page block is a single shared instance that appears immediately.
+ * Added automatically when the site connects, so the report is reachable
+ * without anyone hunting for a plugin URL. Adding is idempotent, so a reconnect
+ * never produces a second copy. An admin who removes it by hand is not
+ * overruled: the removal is remembered and a later reconnect leaves it alone.
  *
- * Deliberately an explicit action rather than something the connect flow does
- * on its own. Adding a block changes what every visitor sees, which is not a
- * side effect anyone should get from pressing Connect, and a reconnect would
- * then quietly add a second copy.
+ * Where it goes follows $CFG->defaulthomepage, because a block on a page nobody
+ * opens is the same as no block at all.
+ *
+ * The Dashboard case is the awkward one. Moodle copies the default Dashboard to
+ * each user the first time they open it, so writing only to the default reaches
+ * nobody who has already logged in, which on a live site is close to everyone.
+ * The default gets a row so future users inherit it, and every Dashboard a user
+ * already owns gets one too, in a single insert-select rather than a query per
+ * user.
  */
 class dashboard_block {
-    /** @var string Plugin config key holding the id of the block we created. */
-    protected const CONFIG_KEY = 'dashboardblockid';
+    /** @var string Plugin config key holding the configdata of the blocks we created. */
+    protected const CONFIG_KEY = 'dashboardblockdata';
+
+    /** @var string Set when an admin removed the block, so connect stops re-adding it. */
+    protected const DISMISSED_KEY = 'dashboardblockdismissed';
+
+    /** @var int Moodle's context level for a user. */
+    protected const CONTEXT_USER = 30;
 
     /**
-     * Whether our block is currently on the front page.
+     * Whether our block is currently in place.
      *
      * @return bool
      */
     public static function exists(): bool {
         global $DB;
 
-        $id = (int) get_config('local_reportlms', self::CONFIG_KEY);
+        $configdata = (string) get_config('local_reportlms', self::CONFIG_KEY);
 
-        return $id > 0 && $DB->record_exists('block_instances', ['id' => $id]);
+        if ($configdata === '') {
+            return false;
+        }
+
+        return $DB->record_exists_sql(
+            'SELECT 1 FROM {block_instances} WHERE blockname = :name AND ' . self::configdata_match($DB),
+            ['name' => 'html', 'configdata' => $configdata],
+        );
     }
 
     /**
-     * Add the block to the site front page.
+     * The WHERE fragment matching our own blocks.
      *
-     * @return void
+     * configdata is a TEXT column, and Moodle refuses a plain equality on those
+     * because not every database can index or compare them directly. Without
+     * sql_compare_text this throws a dml_exception on every call after the
+     * first, which is the sort of failure that only shows up once a site has
+     * been connected for a while.
+     *
+     * @param \moodle_database $db
+     * @return string
+     */
+    protected static function configdata_match(\moodle_database $db): string {
+        return $db->sql_compare_text('configdata', 255) . ' = ' . $db->sql_compare_text(':configdata', 255);
+    }
+
+    /**
+     * Add the block unless it is already there or an admin removed it.
+     *
+     * Called from the connect flow, where a failure must never matter: the site
+     * is connected either way, and a missing convenience link is not a reason to
+     * fail the thing the admin actually asked for.
+     */
+    public static function ensure(): void {
+        if (self::exists() || (int) get_config('local_reportlms', self::DISMISSED_KEY) === 1) {
+            return;
+        }
+
+        try {
+            self::add();
+        } catch (\Throwable $e) {
+            debugging('local_reportlms could not add the block: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+    }
+
+    /**
+     * Add the block to whichever page this site uses as its home.
+     *
      * @throws \moodle_exception When the html block is unavailable.
      */
     public static function add(): void {
-        global $DB;
-
         if (self::exists()) {
             return;
         }
@@ -74,13 +122,71 @@ class dashboard_block {
             throw new \moodle_exception('error:nohtmlblock', 'local_reportlms');
         }
 
-        $config = (object) [
-            'title' => get_string('block:title', 'local_reportlms'),
-            'text' => self::content(),
-            'format' => FORMAT_HTML,
-        ];
+        $configdata = self::configdata();
 
-        $id = $DB->insert_record('block_instances', (object) [
+        if (self::homepage_is_dashboard()) {
+            self::add_to_dashboards($configdata);
+        } else {
+            self::add_to_frontpage($configdata);
+        }
+
+        set_config(self::CONFIG_KEY, $configdata, 'local_reportlms');
+        unset_config(self::DISMISSED_KEY, 'local_reportlms');
+    }
+
+    /**
+     * Remove every block we created.
+     *
+     * Matched on the exact configdata we wrote, so a block an admin created or
+     * edited themselves is never touched.
+     *
+     * @param bool $dismiss Remember the removal, so connect does not put it back.
+     */
+    public static function remove(bool $dismiss = true): void {
+        global $DB;
+
+        $configdata = (string) get_config('local_reportlms', self::CONFIG_KEY);
+
+        if ($configdata !== '') {
+            $instances = $DB->get_records_sql(
+                'SELECT * FROM {block_instances} WHERE blockname = :name AND ' . self::configdata_match($DB),
+                ['name' => 'html', 'configdata' => $configdata],
+            );
+
+            foreach ($instances as $instance) {
+                blocks_delete_instance($instance);
+            }
+        }
+
+        unset_config(self::CONFIG_KEY, 'local_reportlms');
+
+        if ($dismiss) {
+            set_config(self::DISMISSED_KEY, 1, 'local_reportlms');
+        }
+    }
+
+    /**
+     * Whether this site sends people somewhere other than the front page.
+     *
+     * @return bool
+     */
+    protected static function homepage_is_dashboard(): bool {
+        global $CFG;
+
+        return (int) ($CFG->defaulthomepage ?? HOMEPAGE_SITE) !== HOMEPAGE_SITE;
+    }
+
+    /**
+     * One shared block on the site front page.
+     *
+     * @param string $configdata
+     */
+    protected static function add_to_frontpage(string $configdata): void {
+        global $DB;
+
+        $now = time();
+
+        $DB->insert_record('block_instances', (object) [
             'blockname' => 'html',
             'parentcontextid' => \context_course::instance(SITEID)->id,
             'showinsubcontexts' => 0,
@@ -89,38 +195,84 @@ class dashboard_block {
             'subpagepattern' => null,
             'defaultregion' => 'side-pre',
             'defaultweight' => -5,
-            'configdata' => base64_encode(serialize($config)),
-            'timecreated' => time(),
-            'timemodified' => time(),
+            'configdata' => $configdata,
+            'timecreated' => $now,
+            'timemodified' => $now,
         ]);
-
-        set_config(self::CONFIG_KEY, $id, 'local_reportlms');
     }
 
     /**
-     * Remove the block we created.
+     * The default Dashboard, plus every Dashboard a user already owns.
      *
-     * Only ever removes the instance recorded in our own config, so an admin
-     * who later edited or replaced it by hand does not lose their work.
+     * @param string $configdata
      */
-    public static function remove(): void {
+    protected static function add_to_dashboards(string $configdata): void {
         global $DB;
 
-        $id = (int) get_config('local_reportlms', self::CONFIG_KEY);
+        $now = time();
 
-        if ($id > 0 && $DB->record_exists('block_instances', ['id' => $id])) {
-            blocks_delete_instance($DB->get_record('block_instances', ['id' => $id]));
+        // Future users, who are seeded from the default page.
+        $default = $DB->get_record('my_pages', ['userid' => null, 'name' => '__default', 'private' => 1]);
+
+        if ($default) {
+            $DB->insert_record('block_instances', (object) [
+                'blockname' => 'html',
+                'parentcontextid' => \context_system::instance()->id,
+                'showinsubcontexts' => 0,
+                'requiredbytheme' => 0,
+                'pagetypepattern' => 'my-index',
+                'subpagepattern' => $default->id,
+                'defaultregion' => 'side-pre',
+                'defaultweight' => -5,
+                'configdata' => $configdata,
+                'timecreated' => $now,
+                'timemodified' => $now,
+            ]);
         }
 
-        unset_config(self::CONFIG_KEY, 'local_reportlms');
+        // Everyone who already has their own copy. One statement rather than a
+        // query per user, so this stays sane on a site with 100k accounts.
+        $sql = "INSERT INTO {block_instances}
+                    (blockname, parentcontextid, showinsubcontexts, requiredbytheme,
+                     pagetypepattern, subpagepattern, defaultregion, defaultweight,
+                     configdata, timecreated, timemodified)
+                SELECT 'html', ctx.id, 0, 0, 'my-index', mp.id, 'side-pre', -5, :configdata, :created, :modified
+                  FROM {my_pages} mp
+                  JOIN {context} ctx ON ctx.contextlevel = :userlevel AND ctx.instanceid = mp.userid
+                 WHERE mp.private = 1
+                   AND mp.userid IS NOT NULL";
+
+        $DB->execute($sql, [
+            'configdata' => $configdata,
+            'created' => $now,
+            'modified' => $now,
+            'userlevel' => self::CONTEXT_USER,
+        ]);
+    }
+
+    /**
+     * The serialised block configuration.
+     *
+     * Also the marker used to find our blocks again: every instance we create
+     * carries byte-identical configdata, so removal can match on it exactly
+     * without recording thousands of ids.
+     *
+     * @return string
+     */
+    protected static function configdata(): string {
+        return base64_encode(serialize((object) [
+            'title' => get_string('block:title', 'local_reportlms'),
+            'text' => self::content(),
+            'format' => FORMAT_HTML,
+        ]));
     }
 
     /**
      * The block body: one sentence and a button.
      *
-     * The link goes to the plugin page rather than straight to the SaaS,
-     * because the token has to be minted per view and only that page knows who
-     * is looking.
+     * The link goes to the plugin page rather than straight to the SaaS, because
+     * the token has to be minted per view and only that page knows who is
+     * looking.
      *
      * @return string
      */

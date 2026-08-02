@@ -131,7 +131,7 @@ if ($hassiteconfig) {
 
         $settings->add(new admin_setting_heading(
             'local_reportlms/header',
-            get_string('pluginname', 'local_reportlms'),
+            '',
             $status
         ));
 

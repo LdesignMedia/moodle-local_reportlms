@@ -58,6 +58,26 @@ if (!connect_manager::is_connected()) {
     exit;
 }
 
+// Back to wherever this site sends people, which is the page the block that
+// brought them here lives on.
+$home = get_home_page();
+if ($home == HOMEPAGE_MY) {
+    $backurl = new moodle_url('/my/');
+} else if (defined('HOMEPAGE_MYCOURSES') && $home == HOMEPAGE_MYCOURSES) {
+    $backurl = new moodle_url('/my/courses.php');
+} else {
+    $backurl = new moodle_url('/');
+}
+
+echo html_writer::div(
+    html_writer::link(
+        $backurl,
+        get_string('dashboard:back', 'local_reportlms'),
+        ['class' => 'btn btn-secondary']
+    ),
+    'mb-3'
+);
+
 // The token is minted per page load and is good for a few minutes only, so it
 // is built here rather than cached anywhere.
 echo html_writer::tag('iframe', '', [
