@@ -87,14 +87,4 @@ class config {
         return self::baseurl() . self::pushpath();
     }
 
-    /**
-     * This site's public verification URL.
-     *
-     * @return string
-     */
-    public static function verifyurl(): string {
-        global $CFG;
-
-        return $CFG->wwwroot . self::VERIFY_PATH;
-    }
 }
