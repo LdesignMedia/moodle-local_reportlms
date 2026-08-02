@@ -103,6 +103,26 @@ if ($hassiteconfig) {
                 ['class' => 'btn btn-secondary']
             );
         }
+        if ($connected) {
+            // Puts the report one click away for everyone, instead of only for
+            // whoever knows the plugin URL.
+            $hasblock = \local_reportlms\local\dashboard_block::exists();
+            $blockurl = new moodle_url('/local/reportlms/block.php', [
+                'sesskey' => sesskey(),
+                'action' => $hasblock ? 'remove' : 'add',
+            ]);
+            $buttons .= ' ' . html_writer::link(
+                $blockurl,
+                $hasblock
+                    ? get_string('block:removebutton', 'local_reportlms')
+                    : get_string('block:addbutton', 'local_reportlms'),
+                ['class' => 'btn btn-secondary']
+            );
+            if ($hasblock) {
+                $details[] = get_string('block:present', 'local_reportlms');
+            }
+        }
+
         $status .= html_writer::div($buttons, 'mt-2 mb-2');
 
         if ($details) {

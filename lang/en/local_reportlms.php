@@ -60,10 +60,21 @@ $string['dashboard:notconnected'] = 'This site is not connected to Report LMS ye
 $string['dashboard:gotosettings'] = 'Go to the Report LMS settings';
 $string['dashboard:openbutton'] = 'Open the dashboard';
 
+// Dashboard block.
+$string['block:title'] = 'Report LMS';
+$string['block:intro'] = 'See how your teams are progressing through their training.';
+$string['block:button'] = 'Open the report';
+$string['block:addbutton'] = 'Add a block to the front page';
+$string['block:removebutton'] = 'Remove the front page block';
+$string['block:added'] = 'A Report LMS block has been added to the site front page.';
+$string['block:removed'] = 'The Report LMS block has been removed from the site front page.';
+$string['block:present'] = 'A Report LMS block is on the site front page.';
+
 // Scheduled tasks.
 $string['task:reconcile'] = 'Report LMS: find learners changed outside the normal events';
 
 // Errors.
+$string['error:nohtmlblock'] = 'The HTML block is not available on this site, so the Dashboard block cannot be created.';
 $string['error:nosalt'] = 'This site has no Report LMS coding key yet. Reconnect from the Report LMS settings.';
 $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';
