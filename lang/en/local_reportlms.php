@@ -54,6 +54,9 @@ $string['settings:pushpath_desc'] = 'The endpoint on the Report LMS host that re
 $string['settings:enabled'] = 'Send data';
 $string['settings:enabled_desc'] = 'Turn off to keep the connection but stop sending data.';
 
+// Scheduled tasks.
+$string['task:reconcile'] = 'Report LMS: find learners changed outside the normal events';
+
 // Errors.
 $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';

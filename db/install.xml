@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/reportlms/db" VERSION="20260802" COMMENT="Report LMS local plugin tables."
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+    <TABLE NAME="local_reportlms_userstate" COMMENT="Which learners changed since their data was last accepted by Report LMS.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="The learner this row tracks."/>
+        <FIELD NAME="dirty" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="1 when this learner has changes not yet confirmed by the SaaS. This is what the push selects on."/>
+        <FIELD NAME="timechanged" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When a change was last noticed."/>
+        <FIELD NAME="timepushed" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When the SaaS last confirmed this learner."/>
+        <FIELD NAME="contenthash" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="Hash of the slice last accepted, so an unchanged learner is skipped instead of re-sent."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign-unique" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="dirty" UNIQUE="false" FIELDS="dirty" COMMENT="The push reads WHERE dirty = 1, so this is the index that keeps it cheap at 100k learners."/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>
