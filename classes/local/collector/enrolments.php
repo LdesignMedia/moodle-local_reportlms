@@ -75,7 +75,18 @@ class enrolments {
               GROUP BY ue.userid, e.courseid
               ORDER BY ue.userid, e.courseid";
 
-        return array_values($DB->get_records_sql($sql, $params));
+        // A recordset, never get_records_sql: that helper keys rows by the
+        // first column, and userid repeats once per course here, so on any
+        // multi-course site all but one enrolment per learner would be
+        // silently dropped.
+        $rows = [];
+        $recordset = $DB->get_recordset_sql($sql, $params);
+        foreach ($recordset as $record) {
+            $rows[] = $record;
+        }
+        $recordset->close();
+
+        return $rows;
     }
 
 }

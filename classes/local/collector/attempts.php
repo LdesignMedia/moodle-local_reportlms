@@ -82,8 +82,13 @@ class attempts {
               GROUP BY qa.userid, cm.id
               ORDER BY qa.userid, cm.id";
 
+        // A recordset, never get_records_sql: that helper keys rows by the
+        // first column, and userid repeats once per main quiz here, so on a
+        // site with several criteria-gated courses all but one attempt row
+        // per learner would be silently dropped.
         $rows = [];
-        foreach ($DB->get_records_sql($sql, $params) as $record) {
+        $recordset = $DB->get_recordset_sql($sql, $params);
+        foreach ($recordset as $record) {
             $rows[] = (object) [
                 'userid' => (int) $record->userid,
                 'cmid' => (int) $record->cmid,
@@ -92,6 +97,7 @@ class attempts {
                 'attempts' => (int) $record->attempts,
             ];
         }
+        $recordset->close();
 
         return $rows;
     }
