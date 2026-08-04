@@ -127,6 +127,16 @@ class connect_manager {
             set_config('saltepoch', 1, 'local_reportlms');
         }
 
+        // The first push after connect is a full backfill, per the contract.
+        // Flag every reportable learner now; the scheduled push task works
+        // through them in chunks. This also covers a reconnect: if the
+        // registry was not trusted, it is rebuilt from scratch here.
+        userstate::mark_all_dirty();
+
+        // Force the org tree into that backfill too: what the SaaS held
+        // before this connection is not assumed.
+        unset_config('lastorghash', 'local_reportlms');
+
         // Put the report within reach straight away. Never fatal: the site is
         // connected either way, and a missing convenience link is not a reason
         // to fail what the admin actually asked for.
