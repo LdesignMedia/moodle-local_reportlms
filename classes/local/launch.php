@@ -57,6 +57,10 @@ class launch {
         return config::baseurl() . $embedpath . '?' . http_build_query([
             'env' => $environmentid,
             'token' => self::mint(),
+            // The iframe shares no cookies with the SaaS, so the viewer's
+            // language travels with the launch. The SaaS normalises pack
+            // codes (nl_kids) to the primary subtag itself.
+            'lang' => current_language(),
         ], '', '&');
     }
 
