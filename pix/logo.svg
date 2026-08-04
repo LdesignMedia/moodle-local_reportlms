@@ -5,10 +5,6 @@
       <stop offset="0%" stop-color="#FA9147"/>
       <stop offset="100%" stop-color="#FA6E10"/>
     </linearGradient>
-    <linearGradient id="reportlmsWord" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#FA9147"/>
-      <stop offset="100%" stop-color="#FA6E10"/>
-    </linearGradient>
   </defs>
 
   <!--
@@ -29,8 +25,13 @@
     <rect x="76.5" y="38" width="13" height="52" rx="6.5" fill="#DC5304"/>
   </g>
 
+  <!--
+    The wordmark inherits its colour from wherever the file is placed, so one
+    file works on a light page and a dark one. #16233a is only the fallback for
+    contexts that pass no colour down, such as an <img> tag.
+  -->
   <text x="150" y="82" font-family="'Rajdhani', 'Segoe UI', system-ui, sans-serif"
-        font-weight="700" font-size="56" letter-spacing="1.5">
-    <tspan fill="url(#reportlmsWord)">Report</tspan><tspan fill="#DC5304" dx="10">LMS</tspan>
+        font-weight="700" font-size="56" letter-spacing="1.5" fill="currentColor" color="#16233a">
+    <tspan>Report</tspan><tspan dx="10">LMS</tspan>
   </text>
 </svg>

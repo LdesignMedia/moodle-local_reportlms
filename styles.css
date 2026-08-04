@@ -27,18 +27,18 @@
     white-space: nowrap;
 }
 
-.local-reportlms-word {
-    /* Falls back to the flat brand orange wherever the gradient does not
-       apply, so the wordmark is never invisible. */
-    color: #fa6e10;
-    background: linear-gradient(90deg, #fa9147 0%, #fa6e10 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+/*
+ * The wordmark takes the surrounding text colour rather than the brand orange.
+ * The mark already carries the brand, and currentColor is what keeps the name
+ * readable on a dark theme, on a printed page and in forced-colours mode
+ * without a single override.
+ */
+.local-reportlms-word,
+.local-reportlms-suffix {
+    color: inherit;
 }
 
 .local-reportlms-suffix {
-    color: #dc5304;
     margin-left: 0.18em;
 }
 
@@ -62,14 +62,3 @@
     margin: 0;
 }
 
-@media (forced-colors: active) {
-    .local-reportlms-word {
-        -webkit-text-fill-color: currentColor;
-        background: none;
-        color: currentColor;
-    }
-
-    .local-reportlms-suffix {
-        color: currentColor;
-    }
-}
