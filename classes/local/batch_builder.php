@@ -174,9 +174,11 @@ class batch_builder {
             return null;
         }
 
-        $nodeid = function (?string $key): string {
+        // A null parent means top level: the SaaS stores the root as null,
+        // there is no root sentinel node.
+        $nodeid = function (?string $key): ?string {
             if ($key === null) {
-                return 'n_root';
+                return null;
             }
             [$level, $value] = explode(':', $key, 2);
             return pseudonym::node($level, $value);
