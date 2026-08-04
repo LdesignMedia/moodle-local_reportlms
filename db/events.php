@@ -35,6 +35,10 @@ $callback = '\local_reportlms\observer::mark_learner_changed';
 
 $observers = [
     // Profile and account changes: these feed the org tree and the attributes.
+    // user_created matters on its own: a brand-new account raises no update,
+    // no enrolment and no completion, so without it a new colleague is
+    // invisible until the nightly sweep happens to notice them.
+    ['eventname' => '\core\event\user_created', 'callback' => $callback],
     ['eventname' => '\core\event\user_updated', 'callback' => $callback],
     ['eventname' => '\core\event\user_deleted', 'callback' => $callback],
 
