@@ -42,6 +42,17 @@
     margin-left: 0.18em;
 }
 
+/*
+ * The lockup doubles as the page heading. It sizes itself from the mark, so it
+ * inherits nothing from h1 except the semantics, and the default h1 margin
+ * would only push it away from the button beside it.
+ */
+.local-reportlms-heading {
+    font-size: inherit;
+    font-weight: inherit;
+    margin: 0;
+}
+
 /* The dashboard page: lockup on the left, back button on the right. */
 .local-reportlms-header {
     align-items: center;

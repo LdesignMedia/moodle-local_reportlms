@@ -50,7 +50,8 @@ $PAGE->set_context($context);
 $PAGE->set_url($pageurl);
 $PAGE->set_pagelayout('report');
 $PAGE->set_title(get_string('people:title', 'local_reportlms'));
-$PAGE->set_heading(get_string('people:title', 'local_reportlms'));
+// Same reason as the dashboard page: the branded heading below is the heading.
+$PAGE->set_heading('');
 
 $filter = filter::from_codes($node, $course, $fn);
 $rows = people::not_completed($filter);
@@ -58,7 +59,7 @@ $rows = people::not_completed($filter);
 echo $OUTPUT->header();
 
 echo html_writer::div(
-    branding::lockup(40)
+    html_writer::tag('h1', branding::lockup(40), ['class' => 'local-reportlms-heading'])
     . html_writer::link(
         new moodle_url('/local/reportlms/view.php'),
         get_string('people:backtoreport', 'local_reportlms'),

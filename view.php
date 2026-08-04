@@ -42,7 +42,9 @@ $PAGE->set_context($context);
 $PAGE->set_url(new moodle_url('/local/reportlms/view.php'));
 $PAGE->set_pagelayout('report');
 $PAGE->set_title(get_string('dashboard:title', 'local_reportlms'));
-$PAGE->set_heading(get_string('dashboard:title', 'local_reportlms'));
+// No Moodle heading: the page draws its own branded one below, and both would
+// say the same thing twice in a row.
+$PAGE->set_heading('');
 
 echo $OUTPUT->header();
 
@@ -80,7 +82,9 @@ if ($referer && strpos($referer, '/local/reportlms/view.php') === false) {
 }
 
 echo html_writer::div(
-    branding::lockup(40)
+    // The lockup is the page heading, so it is marked up as one rather than
+    // sitting next to an empty h1.
+    html_writer::tag('h1', branding::lockup(40), ['class' => 'local-reportlms-heading'])
     . html_writer::link(
         $backurl,
         get_string('dashboard:back', 'local_reportlms'),
