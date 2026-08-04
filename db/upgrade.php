@@ -57,5 +57,15 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026080300, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026080402) {
+        // Sites connected before the block was identified by its own contents
+        // can carry a copy per uninstall-and-reconnect cycle, with only the
+        // last one removable. Clear the extras and re-record what is left.
+        \local_reportlms\local\dashboard_block::deduplicate();
+        \local_reportlms\local\dashboard_block::exists();
+
+        upgrade_plugin_savepoint(true, 2026080402, 'local', 'reportlms');
+    }
+
     return true;
 }

@@ -54,6 +54,20 @@ class dashboard_block {
     protected const CONTEXT_USER = 30;
 
     /**
+     * What makes an html block one of ours: its body links to the report page.
+     *
+     * Deliberately the link and not a version marker. It is true of every block
+     * this plugin has ever written, in any language and at any release, so a
+     * site that has been through several of them is still recognisable.
+     *
+     * @var string
+     */
+    protected const SIGNATURE = '/local/reportlms/view.php';
+
+    /** @var array<int, string> The only page types we ever place a block on. */
+    protected const PAGE_TYPES = ['site-index', 'my-index'];
+
+    /**
      * Whether our block is currently in place.
      *
      * @return bool
@@ -63,14 +77,141 @@ class dashboard_block {
 
         $configdata = (string) get_config('local_reportlms', self::CONFIG_KEY);
 
-        if ($configdata === '') {
+        if ($configdata !== '' && $DB->record_exists_sql(
+            'SELECT 1 FROM {block_instances} WHERE blockname = :name AND ' . self::configdata_match($DB),
+            ['name' => 'html', 'configdata' => $configdata],
+        )) {
+            return true;
+        }
+
+        // The config says there is no block, so ask the blocks themselves.
+        //
+        // This is the case that used to produce duplicates. The config lives in
+        // config_plugins, which Moodle wipes when the plugin is uninstalled, and
+        // the blocks live in block_instances, which it does not: an uninstall
+        // and reinstall therefore left real blocks on the site with nothing
+        // pointing at them, connect saw "no block" and added another pair, and
+        // the pair before that became unremovable. Three cycles, six blocks.
+        return self::adopt() !== null;
+    }
+
+    /**
+     * Take ownership of blocks that are ours but that the config has lost.
+     *
+     * @return string|null The configdata now recorded, or null if there are none.
+     */
+    protected static function adopt(): ?string {
+        $instances = self::instances();
+
+        if ($instances === []) {
+            return null;
+        }
+
+        // The newest generation, so removal matches what a current add would
+        // write rather than an older wording of the same block.
+        $configdata = (string) end($instances)->configdata;
+
+        set_config(self::CONFIG_KEY, $configdata, 'local_reportlms');
+
+        return $configdata;
+    }
+
+    /**
+     * Every block instance on this site that this plugin created.
+     *
+     * Reads the rows rather than matching a stored blob, so blocks written by
+     * an earlier release, in another language, or before an uninstall are all
+     * found. Narrowed to the html block on the two page types we use, so the
+     * decode only runs on rows that could plausibly be ours.
+     *
+     * @return array<int, \stdClass> Keyed and ordered by id.
+     */
+    public static function instances(): array {
+        global $DB;
+
+        [$pagesql, $pageparams] = $DB->get_in_or_equal(self::PAGE_TYPES, SQL_PARAMS_NAMED, 'pt');
+
+        $recordset = $DB->get_recordset_select(
+            'block_instances',
+            "blockname = :name AND pagetypepattern {$pagesql}",
+            array_merge(['name' => 'html'], $pageparams),
+            'id'
+        );
+
+        $ours = [];
+
+        foreach ($recordset as $row) {
+            if (self::is_ours($row->configdata)) {
+                $ours[$row->id] = $row;
+            }
+        }
+
+        $recordset->close();
+
+        return $ours;
+    }
+
+    /**
+     * Whether a block's stored configuration is one we wrote.
+     *
+     * @param string|null $configdata
+     *
+     * @return bool
+     */
+    protected static function is_ours(?string $configdata): bool {
+        if ((string) $configdata === '') {
             return false;
         }
 
-        return $DB->record_exists_sql(
-            'SELECT 1 FROM {block_instances} WHERE blockname = :name AND ' . self::configdata_match($DB),
-            ['name' => 'html', 'configdata' => $configdata],
-        );
+        $decoded = base64_decode((string) $configdata, true);
+
+        if ($decoded === false) {
+            return false;
+        }
+
+        // Only stdClass, and never a class this site happens to autoload: a
+        // block's configdata is admin-editable, and unserialising it into
+        // arbitrary objects would be an object injection surface.
+        $config = @unserialize($decoded, ['allowed_classes' => ['stdClass']]);
+
+        if (!is_object($config) || !isset($config->text)) {
+            return false;
+        }
+
+        return strpos((string) $config->text, self::SIGNATURE) !== false;
+    }
+
+    /**
+     * Leave one of our blocks per page, delete the rest.
+     *
+     * A page can legitimately hold several html blocks; what it must not hold
+     * is two copies of ours. Keeps the oldest in each slot, because that is the
+     * one an admin may have already moved or reordered.
+     *
+     * @return int How many were deleted.
+     */
+    public static function deduplicate(): int {
+        global $CFG;
+
+        require_once($CFG->dirroot . '/lib/blocklib.php');
+
+        $seen = [];
+        $deleted = 0;
+
+        foreach (self::instances() as $instance) {
+            $slot = $instance->parentcontextid . '|' . $instance->pagetypepattern
+                . '|' . (string) $instance->subpagepattern;
+
+            if (!isset($seen[$slot])) {
+                $seen[$slot] = true;
+                continue;
+            }
+
+            blocks_delete_instance($instance);
+            $deleted++;
+        }
+
+        return $deleted;
     }
 
     /**
@@ -97,11 +238,20 @@ class dashboard_block {
      * fail the thing the admin actually asked for.
      */
     public static function ensure(): void {
-        if (self::exists() || (int) get_config('local_reportlms', self::DISMISSED_KEY) === 1) {
+        if ((int) get_config('local_reportlms', self::DISMISSED_KEY) === 1) {
             return;
         }
 
         try {
+            if (self::exists()) {
+                // Connect is the moment this runs on a site that may already
+                // carry duplicates from before this check existed, so tidy
+                // rather than merely decline to add another.
+                self::deduplicate();
+
+                return;
+            }
+
             self::add();
         } catch (\Throwable $e) {
             debugging('local_reportlms could not add the block: ' . $e->getMessage(), DEBUG_DEVELOPER);
@@ -115,6 +265,8 @@ class dashboard_block {
      */
     public static function add(): void {
         if (self::exists()) {
+            self::deduplicate();
+
             return;
         }
 
@@ -137,25 +289,20 @@ class dashboard_block {
     /**
      * Remove every block we created.
      *
-     * Matched on the exact configdata we wrote, so a block an admin created or
-     * edited themselves is never touched.
+     * Found by their link to the report page rather than by a stored blob, so
+     * "remove the block" also clears copies left by an earlier release or by an
+     * uninstall. A block an admin wrote themselves that happens to link here is
+     * removed too, which is what an admin asking for this would expect.
      *
      * @param bool $dismiss Remember the removal, so connect does not put it back.
      */
     public static function remove(bool $dismiss = true): void {
-        global $DB;
+        global $CFG;
 
-        $configdata = (string) get_config('local_reportlms', self::CONFIG_KEY);
+        require_once($CFG->dirroot . '/lib/blocklib.php');
 
-        if ($configdata !== '') {
-            $instances = $DB->get_records_sql(
-                'SELECT * FROM {block_instances} WHERE blockname = :name AND ' . self::configdata_match($DB),
-                ['name' => 'html', 'configdata' => $configdata],
-            );
-
-            foreach ($instances as $instance) {
-                blocks_delete_instance($instance);
-            }
+        foreach (self::instances() as $instance) {
+            blocks_delete_instance($instance);
         }
 
         unset_config(self::CONFIG_KEY, 'local_reportlms');
