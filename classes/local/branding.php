@@ -54,6 +54,12 @@ class branding {
             'alt' => '',
             'width' => $size,
             'height' => $size,
+            // Sized inline, not from a custom property set by an ancestor. The
+            // file carries a viewBox and no intrinsic size, so if the CSS
+            // width resolves to auto the browser falls back to the default
+            // replaced-element box and the mark renders enormous. Which is
+            // exactly what happened the moment it was used outside the lockup.
+            'style' => 'width: ' . $size . 'px; height: ' . $size . 'px;',
             'class' => 'local-reportlms-mark',
         ]);
     }
