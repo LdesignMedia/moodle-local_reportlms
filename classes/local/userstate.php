@@ -40,6 +40,18 @@ class userstate {
     public const TABLE = 'local_reportlms_userstate';
 
     /**
+     * The lowest id that can belong to a learner.
+     *
+     * Every Moodle reserves 1 for the guest and 2 for the primary admin.
+     * Neither is a person being trained, so neither belongs in a report.
+     * The rule lives here once and is applied by every path that fills the
+     * registry: the bulk backfill, the nightly sweep and the event
+     * observers. Applied on only some of them, an admin who happens to be
+     * enrolled somewhere quietly becomes a reported employee.
+     */
+    public const FIRST_REPORTABLE_USERID = 3;
+
+    /**
      * Note that a learner changed.
      *
      * Cheap by design: one indexed upsert, called from event observers on the
@@ -50,7 +62,7 @@ class userstate {
     public static function mark_dirty(int $userid): void {
         global $DB;
 
-        if ($userid <= 0 || \core_user::is_real_user($userid) === false) {
+        if ($userid < self::FIRST_REPORTABLE_USERID || \core_user::is_real_user($userid) === false) {
             return;
         }
 
@@ -100,7 +112,7 @@ class userstate {
                 SELECT u.id, 1, ?, 0
                   FROM {user} u
                  WHERE u.deleted = 0
-                   AND u.id > 2
+                   AND u.id >= ' . self::FIRST_REPORTABLE_USERID . '
                    AND NOT EXISTS (SELECT 1 FROM {' . self::TABLE . '} s WHERE s.userid = u.id)';
         $DB->execute($sql, [time()]);
 

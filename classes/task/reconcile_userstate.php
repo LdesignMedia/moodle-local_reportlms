@@ -100,7 +100,7 @@ class reconcile_userstate extends \core\task\scheduled_task {
                       JOIN {user} u ON u.id = s.{$source['userfield']}
                      WHERE s.{$source['column']} > :from
                        AND u.deleted = 0
-                       AND u.id > 2
+                       AND u.id >= " . userstate::FIRST_REPORTABLE_USERID . "
                   GROUP BY s.{$source['userfield']}";
 
             $recordset = $DB->get_recordset_sql($sql, ['from' => $from]);
