@@ -132,7 +132,7 @@ if ($hassiteconfig) {
         $settings->add(new admin_setting_heading(
             'local_reportlms/header',
             '',
-            $status
+            \local_reportlms\local\branding::lockup(44) . $status
         ));
 
         // Everything below is advanced: an end user only needs the button above.

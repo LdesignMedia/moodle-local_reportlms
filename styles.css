@@ -1,0 +1,75 @@
+/*
+ * Report LMS branding.
+ *
+ * Scoped to .local-reportlms-* so nothing here can reach a theme's own
+ * elements. The block renders inside whatever theme the site uses, so the
+ * lockup inherits the surrounding font rather than imposing one.
+ */
+
+.local-reportlms-lockup {
+    --local-reportlms-mark-size: 40px;
+    align-items: center;
+    display: flex;
+    gap: 0.6em;
+}
+
+.local-reportlms-mark {
+    flex: 0 0 auto;
+    height: var(--local-reportlms-mark-size);
+    width: var(--local-reportlms-mark-size);
+}
+
+.local-reportlms-wordmark {
+    font-size: calc(var(--local-reportlms-mark-size) * 0.62);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.local-reportlms-word {
+    /* Falls back to the flat brand orange wherever the gradient does not
+       apply, so the wordmark is never invisible. */
+    color: #fa6e10;
+    background: linear-gradient(90deg, #fa9147 0%, #fa6e10 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.local-reportlms-suffix {
+    color: #dc5304;
+    margin-left: 0.18em;
+}
+
+/* The dashboard page: lockup on the left, back button on the right. */
+.local-reportlms-header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+/* The front page block: mark beside the sentence, button underneath. */
+.local-reportlms-block .local-reportlms-lockup {
+    align-items: flex-start;
+    margin-bottom: 0.6rem;
+}
+
+.local-reportlms-blurb {
+    margin: 0;
+}
+
+@media (forced-colors: active) {
+    .local-reportlms-word {
+        -webkit-text-fill-color: currentColor;
+        background: none;
+        color: currentColor;
+    }
+
+    .local-reportlms-suffix {
+        color: currentColor;
+    }
+}

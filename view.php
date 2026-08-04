@@ -26,6 +26,7 @@
 require(__DIR__ . '/../../config.php');
 
 use local_reportlms\local\access;
+use local_reportlms\local\branding;
 use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
 use local_reportlms\local\launch;
@@ -79,12 +80,13 @@ if ($referer && strpos($referer, '/local/reportlms/view.php') === false) {
 }
 
 echo html_writer::div(
-    html_writer::link(
+    branding::lockup(40)
+    . html_writer::link(
         $backurl,
         get_string('dashboard:back', 'local_reportlms'),
         ['class' => 'btn btn-secondary']
     ),
-    'mb-3'
+    'local-reportlms-header'
 );
 
 // The token is minted per page load and is good for a few minutes only, so it

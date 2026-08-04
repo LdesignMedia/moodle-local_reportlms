@@ -287,6 +287,49 @@ class dashboard_block {
     }
 
     /**
+     * Rewrite our blocks to the current wording and markup.
+     *
+     * Blocks store their body, so a change to what add() would write today
+     * reaches only sites that have not connected yet. An upgrade that changes
+     * the block calls this so existing sites are not left on last release's
+     * version of it for good.
+     *
+     * Untouched if there is nothing of ours on the site: this never creates.
+     *
+     * @return int How many were rewritten.
+     */
+    public static function refresh(): int {
+        global $DB;
+
+        $instances = self::instances();
+
+        if ($instances === []) {
+            return 0;
+        }
+
+        $configdata = self::configdata();
+        $now = time();
+        $rewritten = 0;
+
+        foreach ($instances as $instance) {
+            if ((string) $instance->configdata === $configdata) {
+                continue;
+            }
+
+            $DB->update_record('block_instances', (object) [
+                'id' => $instance->id,
+                'configdata' => $configdata,
+                'timemodified' => $now,
+            ]);
+            $rewritten++;
+        }
+
+        set_config(self::CONFIG_KEY, $configdata, 'local_reportlms');
+
+        return $rewritten;
+    }
+
+    /**
      * Remove every block we created.
      *
      * Found by their link to the report page rather than by a stored blob, so
@@ -426,11 +469,20 @@ class dashboard_block {
     protected static function content(): string {
         $url = new \moodle_url('/local/reportlms/view.php');
 
-        return \html_writer::tag('p', get_string('block:intro', 'local_reportlms'))
-            . \html_writer::link(
+        $blurb = \html_writer::div(
+            branding::mark(36)
+            . \html_writer::tag('p', get_string('block:intro', 'local_reportlms'), ['class' => 'local-reportlms-blurb']),
+            'local-reportlms-lockup',
+            ['style' => '--local-reportlms-mark-size: 36px;']
+        );
+
+        return \html_writer::div(
+            $blurb . \html_writer::link(
                 $url,
                 get_string('block:button', 'local_reportlms'),
                 ['class' => 'btn btn-primary']
-            );
+            ),
+            'local-reportlms-block'
+        );
     }
 }

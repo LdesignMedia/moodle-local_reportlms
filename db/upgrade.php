@@ -62,7 +62,11 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         // can carry a copy per uninstall-and-reconnect cycle, with only the
         // last one removable. Clear the extras and re-record what is left.
         \local_reportlms\local\dashboard_block::deduplicate();
-        \local_reportlms\local\dashboard_block::exists();
+
+        // And bring the survivors up to the current markup, which now carries
+        // the product mark. Never creates one: a site that removed the block on
+        // purpose stays without it.
+        \local_reportlms\local\dashboard_block::refresh();
 
         upgrade_plugin_savepoint(true, 2026080402, 'local', 'reportlms');
     }

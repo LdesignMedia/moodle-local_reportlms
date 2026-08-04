@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 128" role="img" aria-label="Report LMS">
+  <title>Report LMS</title>
+  <defs>
+    <linearGradient id="reportlmsLogoRing" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FA9147"/>
+      <stop offset="100%" stop-color="#FA6E10"/>
+    </linearGradient>
+    <linearGradient id="reportlmsWord" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FA9147"/>
+      <stop offset="100%" stop-color="#FA6E10"/>
+    </linearGradient>
+  </defs>
+
+  <!--
+    The horizontal lockup, for a single-file use such as a report header. In the
+    plugin's own pages the wordmark is real HTML text next to pix/mark.svg
+    instead, so it stays translatable, selectable and crisp at any zoom.
+
+    No webfont is loaded here on purpose. Pulling one in would make every page
+    that shows this logo call out to a third party, which is a strange thing for
+    a product whose whole argument is that data stays on your own server.
+  -->
+  <g transform="translate(0,0)">
+    <path d="M45 22.1 A46 46 0 1 0 83 22.1"
+          fill="none" stroke="url(#reportlmsLogoRing)" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="83" cy="22.1" r="9" fill="#DC5304"/>
+    <rect x="38.5" y="66" width="13" height="24" rx="6.5" fill="#FA9147"/>
+    <rect x="57.5" y="52" width="13" height="38" rx="6.5" fill="#FA6E10"/>
+    <rect x="76.5" y="38" width="13" height="52" rx="6.5" fill="#DC5304"/>
+  </g>
+
+  <text x="150" y="82" font-family="'Rajdhani', 'Segoe UI', system-ui, sans-serif"
+        font-weight="700" font-size="56" letter-spacing="1.5">
+    <tspan fill="url(#reportlmsWord)">Report</tspan><tspan fill="#DC5304" dx="10">LMS</tspan>
+  </text>
+</svg>
