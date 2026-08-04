@@ -58,15 +58,23 @@ if (!connect_manager::is_connected()) {
     exit;
 }
 
-// Back to wherever this site sends people, which is the page the block that
-// brought them here lives on.
-$home = get_home_page();
-if ($home == HOMEPAGE_MY) {
-    $backurl = new moodle_url('/my/');
-} else if (defined('HOMEPAGE_MYCOURSES') && $home == HOMEPAGE_MYCOURSES) {
-    $backurl = new moodle_url('/my/courses.php');
+// Back to the page the visitor actually came from, when that is a page on
+// this site (get_local_referer never returns a foreign host, so this cannot
+// redirect off-site). Never this page itself, or the button would go nowhere
+// after a refresh. Bookmarks and direct links have no referer and fall back
+// to wherever this site sends people.
+$referer = get_local_referer(false);
+if ($referer && strpos($referer, '/local/reportlms/view.php') === false) {
+    $backurl = new moodle_url($referer);
 } else {
-    $backurl = new moodle_url('/');
+    $home = get_home_page();
+    if ($home == HOMEPAGE_MY) {
+        $backurl = new moodle_url('/my/');
+    } else if (defined('HOMEPAGE_MYCOURSES') && $home == HOMEPAGE_MYCOURSES) {
+        $backurl = new moodle_url('/my/courses.php');
+    } else {
+        $backurl = new moodle_url('/');
+    }
 }
 
 echo html_writer::div(
