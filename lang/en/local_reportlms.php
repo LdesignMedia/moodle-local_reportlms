@@ -30,7 +30,6 @@ $string['privacy:metadata'] = 'The Report LMS plugin stores no personal data. It
 
 // Connect flow.
 $string['connect:button'] = 'Connect to Report LMS';
-$string['connect:reconnectbutton'] = 'Reconnect';
 $string['connect:disconnectbutton'] = 'Disconnect';
 $string['connect:statuslabel'] = 'Status:';
 $string['connect:statusconnected'] = 'Connected';
@@ -59,7 +58,6 @@ $string['dashboard:title'] = 'Report LMS dashboard';
 $string['dashboard:notconnected'] = 'This site is not connected to Report LMS yet, so there is no report to show.';
 $string['dashboard:gotosettings'] = 'Go to the Report LMS settings';
 $string['dashboard:back'] = 'Back';
-$string['dashboard:openbutton'] = 'Open the dashboard';
 
 // Labels resolved locally for the embedded dashboard.
 $string['label:unassigned'] = 'Unassigned';
@@ -91,7 +89,6 @@ $string['block:addbutton'] = 'Add a block to the front page';
 $string['block:removebutton'] = 'Remove the front page block';
 $string['block:added'] = 'A Report LMS block has been added to the site front page.';
 $string['block:removed'] = 'The Report LMS block has been removed from the site front page.';
-$string['block:present'] = 'A Report LMS block is on the site front page.';
 
 // Scheduled tasks.
 $string['task:push'] = 'Report LMS: push changed learners to the SaaS';

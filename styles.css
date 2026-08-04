@@ -43,17 +43,13 @@
 }
 
 /*
- * The settings page: the mark beside the connection status. No wordmark here,
- * because Moodle's own page heading already carries the product name.
+ * The settings page: the mark sits on the status line. No wordmark, because
+ * Moodle's own page heading already carries the product name.
  */
-.local-reportlms-settings-head {
-    align-items: flex-start;
+.local-reportlms-status {
+    align-items: center;
     display: flex;
-    gap: 0.9rem;
-}
-
-.local-reportlms-settings-head > .local-reportlms-mark {
-    margin-top: 0.1rem;
+    gap: 0.45rem;
 }
 
 /*

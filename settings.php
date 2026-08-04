@@ -42,9 +42,12 @@ if ($hassiteconfig) {
         $connecturl = new moodle_url('/local/reportlms/connect.php', ['sesskey' => sesskey()]);
         $disconnecturl = new moodle_url('/local/reportlms/disconnect.php', ['sesskey' => sesskey()]);
 
-        // One status line, green when connected and red when not.
+        // One status line, green when connected and red when not. The mark
+        // sits on it rather than above it: Moodle's own page heading already
+        // carries the product name, so this is decoration, not a masthead.
         $status = html_writer::div(
-            html_writer::span(get_string('connect:statuslabel', 'local_reportlms')) . ' ' .
+            \local_reportlms\local\branding::mark(22) .
+            html_writer::span(get_string('connect:statuslabel', 'local_reportlms')) .
             html_writer::span(
                 $connected
                     ? get_string('connect:statusconnected', 'local_reportlms')
@@ -81,31 +84,27 @@ if ($hassiteconfig) {
             $status .= html_writer::tag('p', get_string('connect:intro', 'local_reportlms'));
         }
 
-        $buttons = '';
-        if ($connected) {
-            $buttons .= html_writer::link(
-                new moodle_url('/local/reportlms/view.php'),
-                get_string('dashboard:openbutton', 'local_reportlms'),
-                ['class' => 'btn btn-primary']
-            ) . ' ';
-        }
-        $buttons .= html_writer::link(
-            $connecturl,
-            $connected
-                ? get_string('connect:reconnectbutton', 'local_reportlms')
-                : get_string('connect:button', 'local_reportlms'),
-            ['class' => $connected ? 'btn btn-secondary' : 'btn btn-primary']
-        );
-        if ($connected) {
-            $buttons .= ' ' . html_writer::link(
+        // Connect or disconnect, never both. Reconnecting is disconnecting and
+        // connecting again, so a separate button for it only offered a third
+        // path to the same two states, and the one an admin picked decided
+        // whether the old keys were cleared first.
+        $buttons = $connected
+            ? html_writer::link(
                 $disconnecturl,
                 get_string('connect:disconnectbutton', 'local_reportlms'),
                 ['class' => 'btn btn-secondary']
+            )
+            : html_writer::link(
+                $connecturl,
+                get_string('connect:button', 'local_reportlms'),
+                ['class' => 'btn btn-primary']
             );
-        }
+
         if ($connected) {
             // Puts the report one click away for everyone, instead of only for
-            // whoever knows the plugin URL.
+            // whoever knows the plugin URL. Whether the block is there is
+            // already the button's own label, so it needs no separate line
+            // underneath repeating it.
             $hasblock = \local_reportlms\local\dashboard_block::exists();
             $blockurl = new moodle_url('/local/reportlms/block.php', [
                 'sesskey' => sesskey(),
@@ -118,9 +117,6 @@ if ($hassiteconfig) {
                     : get_string('block:addbutton', 'local_reportlms'),
                 ['class' => 'btn btn-secondary']
             );
-            if ($hasblock) {
-                $details[] = get_string('block:present', 'local_reportlms');
-            }
         }
 
         $status .= html_writer::div($buttons, 'mt-2 mb-2');
@@ -132,12 +128,7 @@ if ($hassiteconfig) {
         $settings->add(new admin_setting_heading(
             'local_reportlms/header',
             '',
-            // The mark only. Moodle already prints "Report LMS" as this page's
-            // heading, so a wordmark here would say it a second time.
-            html_writer::div(
-                \local_reportlms\local\branding::mark(40) . html_writer::div($status),
-                'local-reportlms-settings-head'
-            )
+            $status
         ));
 
         // Everything below is advanced: an end user only needs the button above.
