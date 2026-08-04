@@ -68,6 +68,26 @@ class config {
     }
 
     /**
+     * The Report LMS origin: scheme, host and port, nothing else.
+     *
+     * postMessage compares origins, not URLs, so a base URL carrying a path
+     * would never match an incoming event.origin and label resolution would
+     * silently do nothing.
+     *
+     * @return string
+     */
+    public static function origin(): string {
+        $parts = parse_url(self::baseurl());
+
+        if (empty($parts['scheme']) || empty($parts['host'])) {
+            return '';
+        }
+
+        return $parts['scheme'] . '://' . $parts['host']
+            . (isset($parts['port']) ? ':' . $parts['port'] : '');
+    }
+
+    /**
      * The batch push path, with a leading slash.
      *
      * @return string

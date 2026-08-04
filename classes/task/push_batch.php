@@ -30,6 +30,7 @@ use local_reportlms\local\api_client;
 use local_reportlms\local\batch_builder;
 use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
+use local_reportlms\local\label_map;
 use local_reportlms\local\userstate;
 
 /**
@@ -132,6 +133,12 @@ class push_batch extends \core\task\scheduled_task {
             // now holds so unchanged trees are omitted from later pushes.
             if (isset($chunk->payload['org'])) {
                 set_config('lastorghash', substr($chunk->payload['org']['org_state_hash'], 2), 'local_reportlms');
+
+                // An org section only rides along when the tree changed, so
+                // this is the one moment we know a label may have moved. The
+                // dashboard resolves codes against that map, and a stale entry
+                // would put an old department name on new numbers.
+                label_map::purge();
             }
             // Same for the dimensions catalogue.
             if (!empty($chunk->dimhash)) {

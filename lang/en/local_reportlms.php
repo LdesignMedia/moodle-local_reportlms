@@ -61,6 +61,10 @@ $string['dashboard:gotosettings'] = 'Go to the Report LMS settings';
 $string['dashboard:back'] = 'Back';
 $string['dashboard:openbutton'] = 'Open the dashboard';
 
+// Labels resolved locally for the embedded dashboard.
+$string['label:unassigned'] = 'Unassigned';
+$string['cachedef_labels'] = 'Coded identifier to label map for the embedded dashboard';
+
 // Dashboard block.
 $string['block:title'] = 'Report LMS';
 $string['block:intro'] = 'See how your teams are progressing through their training.';

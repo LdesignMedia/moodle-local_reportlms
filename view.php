@@ -25,16 +25,17 @@
 
 require(__DIR__ . '/../../config.php');
 
+use local_reportlms\local\access;
+use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
 use local_reportlms\local\launch;
 
 require_login();
 $context = context_system::instance();
 
-// Administrators only, for now. Every token currently claims the whole
-// organisation (see launch::viewer), so widening this before the org tree
-// drives the scope would hand every viewer everyone else's data.
-require_capability('moodle/site:config', $context);
+// Administrators only, for now. The same check guards the label resolver and
+// the people list this page drills into, so the four cannot drift apart.
+access::require_view($context);
 
 $PAGE->set_context($context);
 $PAGE->set_url(new moodle_url('/local/reportlms/view.php'));
@@ -94,9 +95,21 @@ echo html_writer::tag('iframe', '', [
     'class' => 'local-reportlms-frame',
     'style' => 'width:100%;min-height:80vh;border:0;border-radius:12px;',
     'loading' => 'lazy',
-    // The frame shows a report and never needs to reach back into this page.
+    // allow-scripts and allow-same-origin together are what let the frame talk
+    // to this page at all. That channel is how the report gets its department
+    // and function names, since Report LMS only ever holds the codes, so
+    // tightening this would leave the dashboard showing hashes.
     'sandbox' => 'allow-scripts allow-same-origin allow-popups allow-downloads',
     'referrerpolicy' => 'no-referrer',
+]);
+
+// The frame asks this page to name the codes it is drawing, and to send the
+// visitor to the people behind a figure they clicked. Both answers are built
+// here, from this site's own data.
+$PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
+    config::origin(),
+    '.local-reportlms-frame',
+    (new moodle_url('/local/reportlms/people.php'))->out(false),
 ]);
 
 echo $OUTPUT->footer();
