@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Report LMS">
+  <title>Report LMS</title>
+  <!--
+    The plugin list icon. Same mark as pix/mark.svg, drawn heavier because
+    Moodle renders it at 16 to 24 pixels: at that size the full-size ring and
+    the gaps between the bars close up into a smudge. Thicker stroke, fewer
+    pixels of empty space, one flat colour per element rather than a gradient
+    that cannot resolve.
+  -->
+  <path d="M42 26 A46 46 0 1 0 86 26"
+        fill="none" stroke="#FA6E10" stroke-width="16" stroke-linecap="round"/>
+
+  <circle cx="86" cy="26" r="11" fill="#DC5304"/>
+
+  <rect x="36" y="66" width="15" height="26" rx="7.5" fill="#FA9147"/>
+  <rect x="56.5" y="52" width="15" height="40" rx="7.5" fill="#FA6E10"/>
+  <rect x="77" y="38" width="15" height="54" rx="7.5" fill="#DC5304"/>
+</svg>
