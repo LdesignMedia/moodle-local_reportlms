@@ -29,6 +29,7 @@ namespace local_reportlms\local;
 use local_reportlms\local\collector\activity_completion;
 use local_reportlms\local\collector\attempts;
 use local_reportlms\local\collector\completion;
+use local_reportlms\local\collector\dimensions;
 use local_reportlms\local\collector\enrolments;
 use local_reportlms\local\collector\grades;
 use local_reportlms\local\collector\org;
@@ -136,9 +137,10 @@ class batch_builder {
             $chunks[] = $current;
         }
 
-        // Wrap each chunk in the envelope; org rides in the first chunk only,
-        // and only when the tree actually changed.
+        // Wrap each chunk in the envelope; the org tree and the dimensions
+        // catalogue ride in the first chunk only, and only when they changed.
         $orgsection = self::org_section_if_changed();
+        $dimensions = self::dimensions_section_if_changed();
 
         $result = [];
         foreach ($chunks as $i => $chunk) {
@@ -146,15 +148,59 @@ class batch_builder {
             if ($i === 0 && $orgsection !== null) {
                 $payload['org'] = $orgsection;
             }
+            if ($i === 0 && $dimensions !== null) {
+                $payload['dimensions'] = $dimensions['section'];
+            }
             $payload['facts'] = array_filter($chunk['facts']);
             $result[] = (object) [
                 'payload' => $payload,
                 'userids' => $chunk['userids'],
                 'factrows' => $chunk['rows'],
+                // For the push task to remember after a 202, never before.
+                'dimhash' => ($i === 0 && $dimensions !== null) ? $dimensions['hash'] : null,
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * The coded dimensions catalogue, or null when unchanged since the last
+     * accepted push.
+     *
+     * Same discipline as the org tree: the hash is remembered in lastdimhash
+     * by the push task after a 202, never here, so a refused batch does not
+     * mark the catalogue as delivered.
+     *
+     * @return array{section: array, hash: string}|null
+     */
+    public static function dimensions_section_if_changed(): ?array {
+        $dims = dimensions::collect();
+        $hash = dimensions::state_hash($dims);
+
+        if ($hash === (string) get_config('local_reportlms', 'lastdimhash')) {
+            return null;
+        }
+
+        $section = ['courses' => [], 'activities' => []];
+        foreach ($dims->courses as $course) {
+            $section['courses'][] = [
+                'course_ref' => pseudonym::course($course->courseid),
+                'title' => \core_text::substr($course->title, 0, 255),
+                'active' => $course->active,
+            ];
+        }
+        foreach ($dims->activities as $activity) {
+            $section['activities'][] = [
+                'activity_ref' => pseudonym::activity($activity->cmid),
+                'course_ref' => pseudonym::course($activity->courseid),
+                'title' => \core_text::substr($activity->title, 0, 255),
+                'kind' => $activity->kind,
+                'summative' => $activity->summative,
+            ];
+        }
+
+        return ['section' => $section, 'hash' => $hash];
     }
 
     /**

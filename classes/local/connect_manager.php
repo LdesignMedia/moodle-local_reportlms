@@ -133,9 +133,10 @@ class connect_manager {
         // registry was not trusted, it is rebuilt from scratch here.
         userstate::mark_all_dirty();
 
-        // Force the org tree into that backfill too: what the SaaS held
-        // before this connection is not assumed.
+        // Force the org tree and the dimensions catalogue into that backfill
+        // too: what the SaaS held before this connection is not assumed.
         unset_config('lastorghash', 'local_reportlms');
+        unset_config('lastdimhash', 'local_reportlms');
 
         // Put the report within reach straight away. Never fatal: the site is
         // connected either way, and a missing convenience link is not a reason

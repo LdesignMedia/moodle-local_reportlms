@@ -110,6 +110,10 @@ class push_batch extends \core\task\scheduled_task {
             if (isset($chunk->payload['org'])) {
                 set_config('lastorghash', substr($chunk->payload['org']['org_state_hash'], 2), 'local_reportlms');
             }
+            // Same for the dimensions catalogue.
+            if (!empty($chunk->dimhash)) {
+                set_config('lastdimhash', $chunk->dimhash, 'local_reportlms');
+            }
 
             $sent += count($chunk->userids);
             mtrace("chunk {$i}: {$chunk->factrows} fact rows for " . count($chunk->userids)
