@@ -87,6 +87,37 @@ class label_map {
     }
 
     /**
+     * The course a coded course ref stands for.
+     *
+     * Kept apart from {@see all}: course titles are sent to Report LMS by
+     * contract, so the dashboard already shows readable course names and never
+     * asks about these. Only a drill-through does, and only for one course at a
+     * time, so there is no reason to carry every course in the label map.
+     *
+     * @param string $ref
+     *
+     * @return int|null Null when no course on this site produces that ref.
+     */
+    public static function course_id(string $ref): ?int {
+        global $DB;
+
+        $cache = \cache::make('local_reportlms', 'labels');
+        $map = $cache->get('coursecodes');
+
+        if ($map === false) {
+            $map = [];
+
+            foreach ($DB->get_fieldset_select('course', 'id', 'id > 1') as $courseid) {
+                $map[pseudonym::course((int) $courseid)] = (int) $courseid;
+            }
+
+            $cache->set('coursecodes', $map);
+        }
+
+        return $map[$ref] ?? null;
+    }
+
+    /**
      * Drop the cached map.
      *
      * Called when the org state changes under us, so a renamed department does
@@ -95,7 +126,7 @@ class label_map {
      * @return void
      */
     public static function purge(): void {
-        \cache::make('local_reportlms', 'labels')->delete(self::CACHE_KEY);
+        \cache::make('local_reportlms', 'labels')->delete_many([self::CACHE_KEY, 'coursecodes']);
     }
 
     /**

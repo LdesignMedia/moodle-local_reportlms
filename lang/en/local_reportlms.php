@@ -65,6 +65,24 @@ $string['dashboard:openbutton'] = 'Open the dashboard';
 $string['label:unassigned'] = 'Unassigned';
 $string['cachedef_labels'] = 'Coded identifier to label map for the embedded dashboard';
 
+// The people behind a figure, and the export of them.
+$string['people:title'] = 'Report LMS: who is not finished';
+$string['people:notcompleted'] = 'Not yet completed';
+$string['people:scope'] = 'Showing: {$a}';
+$string['people:everyone'] = 'the whole organisation';
+$string['people:none'] = 'Nobody in this selection has an unfinished training.';
+$string['people:backtoreport'] = 'Back to the report';
+$string['people:export'] = 'Download as CSV';
+$string['people:truncated'] = 'Only the first {$a} rows are shown. Narrow the selection to see the rest.';
+$string['people:unresolved'] = 'Part of this selection no longer matches anything on this site, so the list below may be wider than the figure you clicked. It usually means a department, job title or course was renamed since the report was last updated.';
+$string['people:col:name'] = 'Name';
+$string['people:col:email'] = 'E-mail';
+$string['people:col:course'] = 'Training';
+$string['people:col:enrolled'] = 'Enrolled since';
+$string['people:col:status'] = 'Status';
+$string['people:status:notstarted'] = 'Not started';
+$string['people:status:inprogress'] = 'In progress';
+
 // Dashboard block.
 $string['block:title'] = 'Report LMS';
 $string['block:intro'] = 'See how your teams are progressing through their training.';
