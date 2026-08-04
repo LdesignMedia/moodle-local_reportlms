@@ -43,6 +43,20 @@
 }
 
 /*
+ * The settings page: the mark beside the connection status. No wordmark here,
+ * because Moodle's own page heading already carries the product name.
+ */
+.local-reportlms-settings-head {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.9rem;
+}
+
+.local-reportlms-settings-head > .local-reportlms-mark {
+    margin-top: 0.1rem;
+}
+
+/*
  * The lockup doubles as the page heading. It sizes itself from the mark, so it
  * inherits nothing from h1 except the semantics, and the default h1 margin
  * would only push it away from the button beside it.

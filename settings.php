@@ -132,7 +132,12 @@ if ($hassiteconfig) {
         $settings->add(new admin_setting_heading(
             'local_reportlms/header',
             '',
-            \local_reportlms\local\branding::lockup(44) . $status
+            // The mark only. Moodle already prints "Report LMS" as this page's
+            // heading, so a wordmark here would say it a second time.
+            html_writer::div(
+                \local_reportlms\local\branding::mark(40) . html_writer::div($status),
+                'local-reportlms-settings-head'
+            )
         ));
 
         // Everything below is advanced: an end user only needs the button above.
