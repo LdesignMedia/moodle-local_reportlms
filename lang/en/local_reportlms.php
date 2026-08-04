@@ -72,6 +72,7 @@ $string['block:removed'] = 'The Report LMS block has been removed from the site 
 $string['block:present'] = 'A Report LMS block is on the site front page.';
 
 // Scheduled tasks.
+$string['task:push'] = 'Report LMS: push changed learners to the SaaS';
 $string['task:reconcile'] = 'Report LMS: find learners changed outside the normal events';
 
 // Errors.
@@ -79,3 +80,5 @@ $string['error:nohtmlblock'] = 'The HTML block is not available on this site, so
 $string['error:nosalt'] = 'This site has no Report LMS coding key yet. Reconnect from the Report LMS settings.';
 $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';
+$string['error:pushfailed'] = 'Could not reach Report LMS for the push: {$a}';
+$string['error:pushrejected'] = 'Report LMS refused the push: {$a}';

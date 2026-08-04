@@ -71,6 +71,66 @@ class api_client {
     }
 
     /**
+     * Send one signed batch to Report LMS.
+     *
+     * The body is passed in pre-encoded so the signature covers the exact
+     * bytes that go on the wire: any re-encoding of the JSON would break it.
+     * A retry must re-sign with a fresh timestamp, which callers get by
+     * simply calling this again.
+     *
+     * @param string $pushpath Path on the Report LMS host.
+     * @param string $rawbody The JSON body, already encoded.
+     * @param string $apikey Bearer key identifying the environment.
+     * @param string $signingsecret Secret the body signature is built with.
+     * @param string $idempotencykey environment:snapshot:bodyhash, per the contract.
+     * @return array Decoded response, carrying batch_id on a 202.
+     * @throws \moodle_exception On transport failure or a non-2xx reply.
+     */
+    public function push(string $pushpath, string $rawbody, string $apikey,
+            string $signingsecret, string $idempotencykey): array {
+        global $CFG;
+        require_once($CFG->libdir . '/filelib.php');
+
+        $timestamp = time();
+        $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawbody, $signingsecret);
+
+        // Same rationale as post(): the admin-configured first-party endpoint
+        // must not be rejected by the cURL SSRF blocklist.
+        $curl = new \curl(['ignoresecurity' => true]);
+        $curl->setHeader([
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Authorization: Bearer ' . $apikey,
+            'X-RL-Timestamp: ' . $timestamp,
+            'X-RL-Signature: ' . $signature,
+            'Idempotency-Key: ' . $idempotencykey,
+        ]);
+
+        $response = $curl->post($this->baseurl . $pushpath, $rawbody, [
+            // Batches run to a few MB on a first backfill.
+            'CURLOPT_TIMEOUT' => 120,
+            'CURLOPT_CONNECTTIMEOUT' => 10,
+        ]);
+
+        if ($curl->get_errno()) {
+            throw new \moodle_exception('error:pushfailed', 'local_reportlms', '', $curl->error);
+        }
+
+        $info = $curl->get_info();
+        $httpcode = (int) ($info['http_code'] ?? 0);
+        $decoded = json_decode((string) $response, true);
+
+        if ($httpcode < 200 || $httpcode >= 300 || !is_array($decoded)) {
+            $message = is_array($decoded) && !empty($decoded['message'])
+                ? $decoded['message']
+                : 'HTTP ' . $httpcode;
+            throw new \moodle_exception('error:pushrejected', 'local_reportlms', '', $message);
+        }
+
+        return $decoded;
+    }
+
+    /**
      * POST JSON and decode the reply.
      *
      * @param string $path Path on the Report LMS host.

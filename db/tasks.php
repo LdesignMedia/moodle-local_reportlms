@@ -27,6 +27,17 @@ defined('MOODLE_INTERNAL') || die();
 
 $tasks = [
     [
+        // The push itself. Every fifteen minutes by default; the cadence is
+        // tuned per site in the scheduled task admin screen.
+        'classname' => 'local_reportlms\task\push_batch',
+        'blocking' => 0,
+        'minute' => '*/15',
+        'hour' => '*',
+        'day' => '*',
+        'dayofweek' => '*',
+        'month' => '*',
+    ],
+    [
         // Nightly, and at a randomised minute so a fleet of sites does not all
         // sweep at once. This only catches what the observers missed, so it
         // does not need to keep pace with the push.
