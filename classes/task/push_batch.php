@@ -74,6 +74,29 @@ class push_batch extends \core\task\scheduled_task {
             return;
         }
 
+        // One push at a time: the ad-hoc run queued at connect and the
+        // fifteen-minute schedule may fire together, and while re-sending is
+        // harmless (upserts), sending the same learners twice side by side
+        // is pure waste. First runner wins, the other simply skips.
+        $lockfactory = \core\lock\lock_config::get_lock_factory('local_reportlms');
+        $lock = $lockfactory->get_lock('push', 0);
+        if (!$lock) {
+            mtrace('Report LMS: another push is already running, skipping.');
+
+            return;
+        }
+
+        try {
+            $this->push();
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * The push itself, under the lock.
+     */
+    protected function push(): void {
         $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN);
         if (!$userids) {
             mtrace('Report LMS: nothing to push.');

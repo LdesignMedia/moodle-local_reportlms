@@ -138,6 +138,11 @@ class connect_manager {
         unset_config('lastorghash', 'local_reportlms');
         unset_config('lastdimhash', 'local_reportlms');
 
+        // Start the backfill at the next cron tick rather than whenever the
+        // fifteen-minute schedule next fires: an admin who just connected
+        // should see data arriving, not an empty dashboard and a wait.
+        \local_reportlms\task\push_now::queue();
+
         // Put the report within reach straight away. Never fatal: the site is
         // connected either way, and a missing convenience link is not a reason
         // to fail what the admin actually asked for.
