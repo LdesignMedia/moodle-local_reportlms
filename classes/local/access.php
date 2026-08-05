@@ -33,12 +33,21 @@ namespace local_reportlms\local;
  * times they would eventually disagree, and the one that drifts open is the
  * one nobody notices.
  *
- * Administrators only, for now. Every launch token currently claims the whole
- * organisation (see {@see launch::viewer}), so widening this before the org
- * tree drives the scope would hand every viewer everyone else's data. When the
- * manager capability from the org and permissions task lands, it lands here.
+ * Getting in and seeing whose data are two different questions. This class only
+ * answers the first. What a viewer may then see is decided by
+ * {@see manager_resolver}, carried in the launch token's scope, and enforced by
+ * the SaaS on every query.
  */
 class access {
+    /** @var string Opens the report at all. */
+    public const VIEW = 'local/reportlms:view';
+
+    /** @var string Names the holder the direct manager of their courses' participants. */
+    public const MANAGE = 'local/reportlms:manage';
+
+    /** @var string Lifts the scope to the whole organisation. */
+    public const VIEWALL = 'local/reportlms:viewall';
+
     /**
      * Stop unless the current user may see the report.
      *
@@ -47,7 +56,7 @@ class access {
      * @return void
      */
     public static function require_view(?\context $context = null): void {
-        require_capability('moodle/site:config', $context ?? \context_system::instance());
+        require_capability(self::VIEW, $context ?? \context_system::instance());
     }
 
     /**
@@ -58,6 +67,20 @@ class access {
      * @return bool
      */
     public static function can_view(?\context $context = null): bool {
-        return has_capability('moodle/site:config', $context ?? \context_system::instance());
+        return has_capability(self::VIEW, $context ?? \context_system::instance());
+    }
+
+    /**
+     * Whether this viewer sees the whole organisation rather than a subtree.
+     *
+     * Site administrators do too, without holding anything: Moodle grants them
+     * every capability, so the check below already answers true for them.
+     *
+     * @param \context|null $context Defaults to the system context.
+     *
+     * @return bool
+     */
+    public static function can_view_all(?\context $context = null): bool {
+        return has_capability(self::VIEWALL, $context ?? \context_system::instance());
     }
 }

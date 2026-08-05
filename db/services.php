@@ -35,6 +35,6 @@ $functions = [
         'description' => 'Resolve org node and function codes to the labels this site holds for them.',
         'type' => 'read',
         'ajax' => true,
-        'capabilities' => 'moodle/site:config',
+        'capabilities' => 'local/reportlms:view',
     ],
 ];

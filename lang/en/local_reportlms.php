@@ -60,6 +60,11 @@ $string['dashboard:gotosettings'] = 'Go to the Report LMS settings';
 $string['dashboard:back'] = 'Back';
 $string['dashboard:settings'] = 'Report LMS settings';
 
+// Capabilities.
+$string['reportlms:view'] = 'Open the Report LMS dashboard';
+$string['reportlms:manage'] = 'Manage the training of a course\'s participants';
+$string['reportlms:viewall'] = 'See the whole organisation in Report LMS';
+
 // Labels resolved locally for the embedded dashboard.
 $string['label:unassigned'] = 'Unassigned';
 $string['cachedef_labels'] = 'Coded identifier to label map for the embedded dashboard';
