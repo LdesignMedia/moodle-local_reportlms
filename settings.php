@@ -42,11 +42,11 @@ if ($hassiteconfig) {
         $connecturl = new moodle_url('/local/reportlms/connect.php', ['sesskey' => sesskey()]);
         $disconnecturl = new moodle_url('/local/reportlms/disconnect.php', ['sesskey' => sesskey()]);
 
-        // One status line, green when connected and red when not. The mark
-        // sits on it rather than above it: Moodle's own page heading already
-        // carries the product name, so this is decoration, not a masthead.
+        // One status line, green when connected and red when not. The mark is
+        // not here: it sits against the page heading, which styles.css draws
+        // in, because admin/settings.php owns that heading and has already
+        // printed it by the time this file runs.
         $status = html_writer::div(
-            \local_reportlms\local\branding::mark(22) .
             html_writer::span(get_string('connect:statuslabel', 'local_reportlms')) .
             html_writer::span(
                 $connected

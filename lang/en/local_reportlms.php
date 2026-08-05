@@ -58,6 +58,7 @@ $string['dashboard:title'] = 'Report LMS dashboard';
 $string['dashboard:notconnected'] = 'This site is not connected to Report LMS yet, so there is no report to show.';
 $string['dashboard:gotosettings'] = 'Go to the Report LMS settings';
 $string['dashboard:back'] = 'Back';
+$string['dashboard:settings'] = 'Report LMS settings';
 
 // Labels resolved locally for the embedded dashboard.
 $string['label:unassigned'] = 'Unassigned';

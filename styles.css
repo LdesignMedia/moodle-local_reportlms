@@ -42,9 +42,30 @@
 }
 
 /*
- * The settings page: the mark sits on the status line. No wordmark, because
- * Moodle's own page heading already carries the product name.
+ * The mark against the settings page heading.
+ *
+ * Drawn in CSS rather than printed by settings.php, because the heading belongs
+ * to admin/settings.php and has already been rendered by the time a plugin's
+ * settings file runs. Putting an image in the page's visible name is not an
+ * option either: the same string becomes the browser title and the admin search
+ * result, where markup would show up as literal text.
+ *
+ * The h2 in core_admin/settings, not the page h1: on this page Moodle sets the
+ * h1 to the site's full name and prints the plugin name as the form's heading.
+ *
+ * [[pix:...]] is Moodle's own placeholder, rewritten to the real image URL when
+ * the stylesheet is compiled, so this survives an image revision bump.
  */
+#page-admin-setting-local_reportlms .settingsform h2::before {
+    background: url([[pix:local_reportlms|mark]]) no-repeat center / contain;
+    content: '';
+    display: inline-block;
+    height: 1em;
+    margin-right: 0.45rem;
+    vertical-align: -0.12em;
+    width: 1em;
+}
+
 .local-reportlms-status {
     align-items: center;
     display: flex;
@@ -62,7 +83,13 @@
     margin: 0;
 }
 
-/* The dashboard page: lockup on the left, back button on the right. */
+/* The dashboard page: lockup on the left, actions on the right. */
+.local-reportlms-actions {
+    align-items: center;
+    display: flex;
+    gap: 0.4rem;
+}
+
 .local-reportlms-header {
     align-items: center;
     display: flex;

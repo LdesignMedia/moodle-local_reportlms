@@ -81,15 +81,29 @@ if ($referer && strpos($referer, '/local/reportlms/view.php') === false) {
     }
 }
 
+$actions = '';
+
+// Administrators only. The settings page is where a site is connected and
+// disconnected, which is not a manager's business even though the report is.
+if (has_capability('moodle/site:config', $context)) {
+    $actions .= html_writer::link(
+        new moodle_url('/admin/settings.php', ['section' => 'local_reportlms']),
+        $OUTPUT->pix_icon('t/cog', get_string('dashboard:settings', 'local_reportlms')),
+        ['class' => 'btn btn-secondary', 'title' => get_string('dashboard:settings', 'local_reportlms')]
+    );
+}
+
+$actions .= html_writer::link(
+    $backurl,
+    get_string('dashboard:back', 'local_reportlms'),
+    ['class' => 'btn btn-secondary']
+);
+
 echo html_writer::div(
     // The lockup is the page heading, so it is marked up as one rather than
     // sitting next to an empty h1.
     html_writer::tag('h1', branding::lockup(40), ['class' => 'local-reportlms-heading'])
-    . html_writer::link(
-        $backurl,
-        get_string('dashboard:back', 'local_reportlms'),
-        ['class' => 'btn btn-secondary']
-    ),
+    . html_writer::div($actions, 'local-reportlms-actions'),
     'local-reportlms-header'
 );
 
