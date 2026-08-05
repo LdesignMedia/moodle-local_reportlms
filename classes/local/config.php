@@ -50,6 +50,9 @@ class config {
     /** @var string Where the SaaS serves the embedded dashboard. */
     public const DEFAULT_EMBED_PATH = '/embed';
 
+    /** @var string Where the SaaS explains what to do before a site is connected. */
+    public const START_PATH = '/start';
+
     /** @var string Public path this plugin serves its verification token on. */
     public const VERIFY_PATH = '/local/reportlms/verify.php';
 
@@ -85,6 +88,23 @@ class config {
 
         return $parts['scheme'] . '://' . $parts['host']
             . (isset($parts['port']) ? ':' . $parts['port'] : '');
+    }
+
+    /**
+     * Where to send somebody whose site is not connected yet.
+     *
+     * Carries this site's address so the page can tell which steps are already
+     * done, and the language so the steps are not in English on a Dutch site.
+     *
+     * @return string
+     */
+    public static function start_url(): string {
+        global $CFG;
+
+        return self::baseurl() . self::START_PATH . '?' . http_build_query([
+            'site' => $CFG->wwwroot,
+            'lang' => current_language(),
+        ], '', '&');
     }
 
     /**

@@ -43,6 +43,12 @@ const LABELS = 'reportlms:labels';
 const DRILLDOWN = 'reportlms:drilldown';
 
 /**
+ * Message the getting-started frame sends once the site is licensed and
+ * connected. The frame cannot reload the page around it; only this side can.
+ */
+const CONNECTED = 'reportlms:connected';
+
+/**
  * Whether a message came from the dashboard we actually embedded.
  *
  * @param {MessageEvent} event
@@ -125,6 +131,13 @@ export const init = (origin, frameselector, peopleurl) => {
 
         if (message.type === DRILLDOWN) {
             drilldown(peopleurl, message.filters || {});
+            return;
+        }
+
+        if (message.type === CONNECTED) {
+            // Setup finished while somebody was watching the steps. Reload, and
+            // the dashboard is simply there, with nothing to press.
+            window.location.reload();
             return;
         }
 

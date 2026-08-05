@@ -49,15 +49,43 @@ $PAGE->set_heading('');
 echo $OUTPUT->header();
 
 if (!connect_manager::is_connected()) {
-    echo $OUTPUT->notification(
-        get_string('dashboard:notconnected', 'local_reportlms'),
-        \core\output\notification::NOTIFY_WARNING
+    // The four steps, in the frame the dashboard would occupy. A notice saying
+    // "not connected" told somebody what was wrong and nothing about what to do
+    // next, which on a site nobody has set up yet is the only useful thing to
+    // say.
+    echo html_writer::div(
+        html_writer::tag('h1', branding::lockup(40), ['class' => 'local-reportlms-heading'])
+        . html_writer::div(
+            has_capability('moodle/site:config', $context)
+                ? html_writer::link(
+                    new moodle_url('/admin/settings.php', ['section' => 'local_reportlms']),
+                    get_string('dashboard:gotosettings', 'local_reportlms'),
+                    ['class' => 'btn btn-primary']
+                )
+                : '',
+            'local-reportlms-actions'
+        ),
+        'local-reportlms-header'
     );
-    echo $OUTPUT->single_button(
-        new moodle_url('/admin/settings.php', ['section' => 'local_reportlms']),
-        get_string('dashboard:gotosettings', 'local_reportlms'),
-        'get'
-    );
+
+    echo html_writer::tag('iframe', '', [
+        'src' => config::start_url(),
+        'title' => get_string('dashboard:title', 'local_reportlms'),
+        'class' => 'local-reportlms-frame',
+        'style' => 'width:100%;min-height:70vh;border:0;border-radius:12px;',
+        'sandbox' => 'allow-scripts allow-same-origin allow-popups',
+        'referrerpolicy' => 'no-referrer',
+    ]);
+
+    // The frame polls until the site is licensed and connected, then asks this
+    // page to reload, which is the moment the dashboard appears without anyone
+    // being told to press anything.
+    $PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
+        config::origin(),
+        '.local-reportlms-frame',
+        (new moodle_url('/local/reportlms/people.php'))->out(false),
+    ]);
+
     echo $OUTPUT->footer();
     exit;
 }
