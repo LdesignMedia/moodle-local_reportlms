@@ -226,7 +226,12 @@ class label_map {
              LEFT JOIN {user_info_data} d ON d.userid = u.id AND d.fieldid = :departmentid
                  WHERE u.deleted = 0 AND u.id > 2";
 
-        $rows = $DB->get_records_sql($sql, [
+        // A recordset, not get_records_sql: that keys the result by the first
+        // column, and the first column here is the sector, which repeats once
+        // per department under it. Keyed, every sector kept exactly one
+        // department and the rest vanished, so most nodes had no label and the
+        // dashboard showed their hash.
+        $recordset = $DB->get_recordset_sql($sql, [
             // 0 never matches a real field id, which is how an unconfigured
             // level degrades to "nobody has one" instead of a broken query.
             'sectorid' => $sectorid ?? 0,
@@ -235,7 +240,7 @@ class label_map {
 
         $pairs = [];
 
-        foreach ($rows as $row) {
+        foreach ($recordset as $row) {
             $sector = self::clean($row->sector);
             $department = self::clean($row->department);
 
@@ -248,6 +253,8 @@ class label_map {
                 'department' => $department,
             ];
         }
+
+        $recordset->close();
 
         return array_values($pairs);
     }

@@ -433,4 +433,29 @@ final class manager_resolver_test extends \advanced_testcase {
             $this->assertArrayHasKey($code, $map, "No label for node {$node->key}");
         }
     }
+
+    public function test_every_department_under_one_sector_gets_a_label(): void {
+        // The bug this pins cost 278 of 291 nodes their name on a live site.
+        // The pair query was keyed by sector, and Moodle keys a result set by
+        // its first column, so every sector kept exactly one department and
+        // silently dropped the rest.
+        $sector = 'Transport';
+        $departments = ['Rotterdam', 'Utrecht', 'Amsterdam', 'Eindhoven'];
+
+        foreach ($departments as $department) {
+            $user = $this->getDataGenerator()->create_user();
+            $this->set_field($user->id, 'sector', $sector);
+            $this->set_field($user->id, 'department', $department);
+        }
+
+        \local_reportlms\local\label_map::purge();
+        $map = \local_reportlms\local\label_map::all();
+
+        foreach ($departments as $department) {
+            $code = \local_reportlms\local\pseudonym::node('department', $sector . '/' . $department);
+
+            $this->assertArrayHasKey($code, $map, "No label for {$department}");
+            $this->assertSame($department, $map[$code]['label']);
+        }
+    }
 }
