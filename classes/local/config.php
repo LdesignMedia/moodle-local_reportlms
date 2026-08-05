@@ -104,6 +104,11 @@ class config {
         return self::baseurl() . self::START_PATH . '?' . http_build_query([
             'site' => $CFG->wwwroot,
             'lang' => current_language(),
+            // This site's own answer, which is the one that counts. A row on
+            // the Report LMS side can still hold a usable key after a site
+            // disconnected locally, so asking it would tick a step the
+            // administrator has not taken.
+            'connected' => connect_manager::is_connected() ? 1 : 0,
         ], '', '&');
     }
 
