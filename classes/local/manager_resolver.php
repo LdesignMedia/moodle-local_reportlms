@@ -140,7 +140,7 @@ class manager_resolver {
      * Which department each participant inherits, and from whom.
      *
      * @return array<int, \stdClass> Keyed by participant user id:
-     *         {department (value), managerid}.
+     *         {sector (value|null), department (value), managerid}.
      */
     public static function membership(): array {
         $membership = [];
@@ -154,6 +154,7 @@ class manager_resolver {
             }
 
             $department = reset($manager->departments);
+            $sector = self::sector_of($manager->userid);
 
             foreach ($manager->participants as $participantid) {
                 // A manager never inherits from themselves, and the first
@@ -164,6 +165,12 @@ class manager_resolver {
                 }
 
                 $membership[$participantid] = (object) [
+                    // The sector comes from the manager too, not from the
+                    // participant. Taking one and not the other produces a node
+                    // under a sector the department does not belong to: a key
+                    // no real person carries, which then resolves to no label
+                    // at all and leaves a hash on screen.
+                    'sector' => $sector,
                     'department' => $department,
                     'managerid' => $manager->userid,
                 ];
@@ -320,6 +327,28 @@ class manager_resolver {
                    AND u.id > 2";
 
         return array_map('intval', $DB->get_fieldset_sql($sql, $params));
+    }
+
+    /**
+     * A user's mapped sector value, or null.
+     *
+     * @param int $userid
+     *
+     * @return string|null
+     */
+    protected static function sector_of(int $userid): ?string {
+        global $DB;
+
+        $shortname = org::fieldmap()['sector'];
+
+        $sql = "SELECT d.data
+                  FROM {user_info_data} d
+                  JOIN {user_info_field} f ON f.id = d.fieldid
+                 WHERE f.shortname = :shortname AND d.userid = :userid";
+
+        $value = trim((string) $DB->get_field_sql($sql, ['shortname' => $shortname, 'userid' => $userid]));
+
+        return $value === '' ? null : $value;
     }
 
     /**

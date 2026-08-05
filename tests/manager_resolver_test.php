@@ -379,4 +379,58 @@ final class manager_resolver_test extends \advanced_testcase {
         access::require_scope(\local_reportlms\local\pseudonym::node('department', 'Utrecht'));
         $this->assertTrue(true);
     }
+
+    public function test_an_inherited_department_keeps_its_managers_sector(): void {
+        // The bug this pins: inheriting the department but keeping your own
+        // sector builds a node key that no real person carries, so label_map
+        // has nothing to resolve it against and the dashboard shows the hash.
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->set_field($manager->id, 'sector', 'Transport');
+        $this->set_field($manager->id, 'department', 'Rotterdam');
+
+        // A different sector of their own, which must not survive.
+        $this->set_field($learner->id, 'sector', 'Office');
+        $this->set_field($learner->id, 'department', 'Utrecht');
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->make_manager($manager->id, \context_course::instance($course->id));
+
+        $bylearner = [];
+        foreach (org::collect()->members as $member) {
+            $bylearner[$member->userid] = $member->nodekey;
+        }
+
+        $this->assertSame('department:Transport/Rotterdam', $bylearner[$learner->id]);
+        $this->assertNotSame('department:Office/Rotterdam', $bylearner[$learner->id]);
+    }
+
+    public function test_every_node_the_collector_emits_can_be_named(): void {
+        // The end-to-end version: whatever keys reach the wire, the label map
+        // has to be able to turn all of them back into words. A code with no
+        // label is a hash on somebody's dashboard.
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->set_field($manager->id, 'sector', 'Transport');
+        $this->set_field($manager->id, 'department', 'Rotterdam');
+        $this->set_field($learner->id, 'sector', 'Office');
+        $this->set_field($learner->id, 'department', 'Utrecht');
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->make_manager($manager->id, \context_course::instance($course->id));
+
+        \local_reportlms\local\label_map::purge();
+        $map = \local_reportlms\local\label_map::all();
+
+        foreach (org::collect()->nodes as $node) {
+            [$level, $value] = explode(':', $node->key, 2);
+            $code = \local_reportlms\local\pseudonym::node($level, $value);
+
+            $this->assertArrayHasKey($code, $map, "No label for node {$node->key}");
+        }
+    }
 }

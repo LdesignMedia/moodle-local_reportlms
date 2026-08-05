@@ -74,6 +74,31 @@ class org {
     }
 
     /**
+     * Lock the mapped department field, so a learner cannot edit their own.
+     *
+     * Called on every push rather than once at upgrade, because the mapping is
+     * a config value an administrator changes long after installing: locking
+     * only at upgrade would lock whatever the mapping happened to point at that
+     * day, which is usually nothing.
+     *
+     * Moodle then allows only moodle/user:update holders to change it. The lock
+     * affects the edit form alone, so an HR upload or a web service sync keeps
+     * writing normally.
+     *
+     * @return void
+     */
+    public static function lock_department_field(): void {
+        global $DB;
+
+        $shortname = self::fieldmap()['department'];
+        $field = $DB->get_record('user_info_field', ['shortname' => $shortname], 'id, locked');
+
+        if ($field && empty($field->locked)) {
+            $DB->set_field('user_info_field', 'locked', 1, ['id' => $field->id]);
+        }
+    }
+
+    /**
      * The full org state.
      *
      * @return \stdClass {nodes, members, managers, attrs}:
@@ -122,6 +147,9 @@ class org {
 
         foreach ($managed as $uid => $inherited) {
             if (isset($users[$uid])) {
+                // Both levels, or the key names a department under a sector it
+                // does not sit in, and no label ever resolves for it.
+                $users[$uid]->sector = $inherited->sector;
                 $users[$uid]->department = $inherited->department;
             }
         }

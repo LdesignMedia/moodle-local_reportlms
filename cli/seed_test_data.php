@@ -30,6 +30,8 @@ require(__DIR__ . '/../../../config.php');
 require_once($CFG->libdir . '/clilib.php');
 require_once($CFG->libdir . '/enrollib.php');
 require_once($CFG->dirroot . '/completion/completion_completion.php');
+require_once($CFG->dirroot . '/completion/criteria/completion_criteria.php');
+require_once($CFG->libdir . '/grade/constants.php');
 
 /*
  * Hosts this may run against.
@@ -177,30 +179,62 @@ foreach ($courses as $course) {
         }
     }
 
-    // One grade item per course, so the score distribution card has something.
-    $item = $DB->get_record('grade_items', ['courseid' => $course->id, 'itemtype' => 'course']);
+    /*
+     * Grades have to hang off the course's main activity, not off the course
+     * item. The collectors find that activity through a completion criterion of
+     * type ACTIVITY, which is the same rule the attempts collector uses, so a
+     * grade written anywhere else is simply never sent.
+     */
+    $item = $DB->get_record_select(
+        'grade_items',
+        'courseid = :courseid AND itemtype = :itemtype AND gradetype = :gradetype',
+        ['courseid' => $course->id, 'itemtype' => 'mod', 'gradetype' => GRADE_TYPE_VALUE],
+        '*',
+        IGNORE_MULTIPLE
+    );
 
     if ($item) {
-        foreach (array_slice($slice, 0, 400) as $i => $learnerid) {
-            if ($DB->record_exists('grade_grades', ['itemid' => $item->id, 'userid' => $learnerid])) {
-                continue;
+        $module = $DB->get_record('modules', ['name' => $item->itemmodule]);
+        $cm = $module ? $DB->get_record('course_modules', [
+            'course' => $course->id,
+            'module' => $module->id,
+            'instance' => $item->iteminstance,
+        ]) : null;
+
+        if ($cm) {
+            // Mark it as the course's main activity, if nobody has.
+            $criteria = [
+                'course' => $course->id,
+                'criteriatype' => COMPLETION_CRITERIA_TYPE_ACTIVITY,
+                'module' => $item->itemmodule,
+                'moduleinstance' => $cm->id,
+            ];
+
+            if (!$DB->record_exists('course_completion_criteria', $criteria)) {
+                $DB->insert_record('course_completion_criteria', (object) ($criteria + ['gradepass' => null]));
             }
 
-            // Spread across the four bands the dashboard buckets into, so none
-            // of them reads zero.
-            $percent = 45 + (($i * 7) % 55);
+            foreach (array_slice($slice, 0, 600) as $i => $learnerid) {
+                if ($DB->record_exists('grade_grades', ['itemid' => $item->id, 'userid' => $learnerid])) {
+                    continue;
+                }
 
-            $DB->insert_record('grade_grades', (object) [
-                'itemid' => $item->id,
-                'userid' => $learnerid,
-                'rawgrademax' => 100,
-                'rawgrademin' => 0,
-                'finalgrade' => $percent,
-                'rawgrade' => $percent,
-                'timecreated' => $now,
-                'timemodified' => $now,
-            ]);
-            $graded++;
+                // Spread across the four bands the dashboard buckets into, so
+                // none of them reads zero.
+                $percent = 45 + (($i * 7) % 55);
+
+                $DB->insert_record('grade_grades', (object) [
+                    'itemid' => $item->id,
+                    'userid' => $learnerid,
+                    'rawgrademax' => $item->grademax,
+                    'rawgrademin' => $item->grademin,
+                    'finalgrade' => $percent,
+                    'rawgrade' => $percent,
+                    'timecreated' => $now,
+                    'timemodified' => $now,
+                ]);
+                $graded++;
+            }
         }
     }
 

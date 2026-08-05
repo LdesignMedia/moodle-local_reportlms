@@ -113,6 +113,10 @@ class push_batch extends \core\task\scheduled_task {
         $signingsecret = (string) get_config('local_reportlms', 'signingsecret');
         $environment = (string) get_config('local_reportlms', 'environmentid');
 
+        // Cheap and idempotent, and it has to happen after the mapping is set
+        // rather than at upgrade, when it usually is not yet.
+        \local_reportlms\local\collector\org::lock_department_field();
+
         $sent = 0;
         foreach ($chunks as $i => $chunk) {
             $rawbody = json_encode($chunk->payload);
