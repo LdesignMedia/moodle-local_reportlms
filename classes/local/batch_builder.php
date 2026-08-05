@@ -244,6 +244,12 @@ class batch_builder {
                 'node_id' => $nodeid($member->nodekey),
             ];
         }
+        foreach ($org->managers as $manager) {
+            $section['managers'][] = [
+                'manager_pid' => pseudonym::learner($manager->userid),
+                'node_id' => $nodeid($manager->nodekey),
+            ];
+        }
         foreach ($org->attrs as $attr) {
             $section['attrs'][] = [
                 'learner_pid' => pseudonym::learner($attr->userid),

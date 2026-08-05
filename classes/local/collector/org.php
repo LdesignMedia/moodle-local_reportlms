@@ -43,9 +43,15 @@ namespace local_reportlms\local\collector;
  * People without a mapped value land in a visible "Unassigned" node rather
  * than disappearing, so HR can spot data gaps.
  *
- * Managers are empty on purpose: how a site defines who manages which node
- * is the open design of the org and permissions task, and the dashboard is
- * admin-only until that lands.
+ * Managers come from the local/reportlms:manage capability rather than from a
+ * profile field: see {@see \local_reportlms\local\manager_resolver}. A managed
+ * participant takes their manager's department, overriding whatever they have
+ * set on themselves, so one person being responsible for a group is enough to
+ * place the whole group in the tree.
+ *
+ * The state hash covers managers too, because it is computed over everything
+ * returned here. A role assignment or an enrolment change therefore moves the
+ * hash and gets pushed, which it would not if managers were computed later.
  */
 class org {
     /** @var string Node key of the unassigned bucket. */
@@ -107,8 +113,22 @@ class org {
             }
         }
 
+        // Who manages whom, from the capability and course enrolment. A managed
+        // participant takes their manager's department, whatever they have set
+        // on themselves: one person is responsible for the group, and the group
+        // inherits their place in the tree.
+        $managerids = \local_reportlms\local\manager_resolver::managers();
+        $managed = \local_reportlms\local\manager_resolver::membership();
+
+        foreach ($managed as $uid => $inherited) {
+            if (isset($users[$uid])) {
+                $users[$uid]->department = $inherited->department;
+            }
+        }
+
         $nodes = [];
         $members = [];
+        $managers = [];
         $attrs = [];
 
         $nodes[self::UNASSIGNED] = (object) ['key' => self::UNASSIGNED, 'parent' => null, 'kind' => 'department'];
@@ -131,7 +151,15 @@ class org {
             }
 
             // Membership: the most specific node the person maps to.
-            $members[] = (object) ['userid' => $uid, 'nodekey' => $deptkey ?? $sectorkey ?? self::UNASSIGNED];
+            $nodekey = $deptkey ?? $sectorkey ?? self::UNASSIGNED;
+            $members[] = (object) ['userid' => $uid, 'nodekey' => $nodekey];
+
+            // A manager manages the node their own department resolves to, so
+            // it is recorded here rather than worked out again: this is the
+            // same key their participants were just placed in.
+            if (isset($managerids[$uid]) && $deptkey !== null) {
+                $managers[] = (object) ['userid' => $uid, 'nodekey' => $deptkey];
+            }
 
             $attrs[] = (object) [
                 'userid' => $uid,
@@ -146,7 +174,7 @@ class org {
         return (object) [
             'nodes' => array_values($nodes),
             'members' => $members,
-            'managers' => [],
+            'managers' => $managers,
             'attrs' => $attrs,
         ];
     }

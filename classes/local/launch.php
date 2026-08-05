@@ -81,6 +81,9 @@ class launch {
             'sub' => $viewer['sub'],
             'role' => $viewer['role'],
             'scope' => $viewer['scope'],
+            // Absent for an unscoped viewer, which is how the SaaS tells "every
+            // course" from "these courses and no others".
+            'courses' => $viewer['courses'] ?? null,
             'iat' => $now,
             'exp' => $now + self::TTL,
             // One-time id. A launch URL ends up in browser history, in referrer
@@ -116,13 +119,83 @@ class launch {
      * @return array{sub: string, role: string, scope: array}
      */
     protected static function viewer(): array {
+        global $USER;
+
+        // The whole organisation, for site administrators and anyone holding
+        // viewall. An empty scope on the organisation role is what the contract
+        // already means by "everything", so nothing special is needed to say it.
+        if (access::can_view_all()) {
+            return [
+                'sub' => pseudonym::learner((int) $USER->id),
+                'role' => 'organisation',
+                'scope' => [],
+            ];
+        }
+
+        // Otherwise the viewer is a manager, and their scope is the nodes their
+        // own department resolves to, crossed with the courses they manage. An
+        // empty scope here means nothing rather than everything, which is why
+        // the two cases are kept apart above.
+        $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
+
         return [
-            'sub' => pseudonym::learner(2),
-            'role' => 'organisation',
-            // Empty means the whole organisation. A manager's token will carry
-            // their node ids here.
-            'scope' => [],
+            'sub' => pseudonym::learner((int) $USER->id),
+            'role' => 'department',
+            'scope' => $manager ? self::scope_of($manager) : [],
+            // The courses they manage, so the SaaS can refuse a cell for a
+            // training they have nothing to do with.
+            'courses' => $manager ? array_map(
+                static fn(int $courseid): string => pseudonym::course($courseid),
+                $manager->courseids
+            ) : [],
         ];
+    }
+
+    /**
+     * The coded org nodes a manager may see.
+     *
+     * Built with the same key rule the org collector uses, because the SaaS
+     * matches these against the node ids that collector pushed. A department's
+     * identity includes its sector, so a manager with no sector value lands on
+     * a different node than one with the same department under a sector.
+     *
+     * @param \stdClass $manager As returned by {@see manager_resolver::managers}.
+     *
+     * @return array<int, string>
+     */
+    protected static function scope_of(\stdClass $manager): array {
+        if (!$manager->departments) {
+            return [];
+        }
+
+        $department = reset($manager->departments);
+        $sector = self::sector_of($manager->userid);
+
+        return [
+            pseudonym::node('department', ($sector !== null ? $sector . '/' : '') . $department),
+        ];
+    }
+
+    /**
+     * A user's mapped sector value, or null.
+     *
+     * @param int $userid
+     *
+     * @return string|null
+     */
+    protected static function sector_of(int $userid): ?string {
+        global $DB;
+
+        $shortname = collector\org::fieldmap()['sector'];
+
+        $sql = "SELECT d.data
+                  FROM {user_info_data} d
+                  JOIN {user_info_field} f ON f.id = d.fieldid
+                 WHERE f.shortname = :shortname AND d.userid = :userid";
+
+        $value = trim((string) $DB->get_field_sql($sql, ['shortname' => $shortname, 'userid' => $userid]));
+
+        return $value === '' ? null : $value;
     }
 
     /**

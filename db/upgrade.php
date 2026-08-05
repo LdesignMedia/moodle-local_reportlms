@@ -71,5 +71,23 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026080402, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026080500) {
+        // Lock the mapped department field, so a learner cannot edit their own.
+        // Moodle then allows only moodle/user:update holders to change it.
+        //
+        // Belt and braces on purpose: a managed learner already takes their
+        // manager's department whatever their own value says, so this is what
+        // protects the learners nobody manages. It affects the edit form only,
+        // so an HR upload or a web service sync keeps writing normally.
+        $shortname = \local_reportlms\local\collector\org::fieldmap()['department'];
+        $field = $DB->get_record('user_info_field', ['shortname' => $shortname]);
+
+        if ($field && empty($field->locked)) {
+            $DB->set_field('user_info_field', 'locked', 1, ['id' => $field->id]);
+        }
+
+        upgrade_plugin_savepoint(true, 2026080500, 'local', 'reportlms');
+    }
+
     return true;
 }
