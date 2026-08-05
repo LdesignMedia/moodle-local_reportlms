@@ -42,6 +42,10 @@ $node = optional_param('node', '', PARAM_ALPHANUMEXT);
 $course = optional_param('course', '', PARAM_ALPHANUMEXT);
 $fn = optional_param('fn', '', PARAM_ALPHANUMEXT);
 
+// The dashboard's filters are narrowed and the SaaS refuses a cell outside the
+// scope, but this page arrives as a plain URL, and it is where the names live.
+access::require_scope($node);
+
 $filter = filter::from_codes($node, $course, $fn);
 $rows = people::not_completed($filter);
 

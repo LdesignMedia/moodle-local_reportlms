@@ -102,6 +102,7 @@ $string['task:reconcile'] = 'Report LMS: find learners changed outside the norma
 
 // Errors.
 $string['error:nohtmlblock'] = 'The HTML block is not available on this site, so the Dashboard block cannot be created.';
+$string['error:outsidescope'] = 'That part of the organisation is not yours to see.';
 $string['error:nosalt'] = 'This site has no Report LMS coding key yet. Reconnect from the Report LMS settings.';
 $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';

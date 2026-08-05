@@ -53,6 +53,10 @@ $PAGE->set_title(get_string('people:title', 'local_reportlms'));
 // Same reason as the dashboard page: the branded heading below is the heading.
 $PAGE->set_heading('');
 
+// The dashboard's filters are narrowed and the SaaS refuses a cell outside the
+// scope, but this page arrives as a plain URL, and it is where the names live.
+access::require_scope($node);
+
 $filter = filter::from_codes($node, $course, $fn);
 $rows = people::not_completed($filter);
 

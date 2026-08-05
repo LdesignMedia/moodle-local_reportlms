@@ -152,6 +152,29 @@ class launch {
     }
 
     /**
+     * The coded org nodes the current viewer may see, subtree inclusive.
+     *
+     * Public because the people list and the export need the same answer the
+     * token carries. Null means unscoped, which only reaches here for someone
+     * who is not a manager at all, since can_view_all is checked first.
+     *
+     * @return array<int, string>|null
+     */
+    public static function viewer_scope(): ?array {
+        global $USER;
+
+        $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
+
+        if (!$manager) {
+            return null;
+        }
+
+        $nodes = self::scope_of($manager);
+
+        return $nodes ?: null;
+    }
+
+    /**
      * The coded org nodes a manager may see.
      *
      * Built with the same key rule the org collector uses, because the SaaS
