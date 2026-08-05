@@ -109,3 +109,38 @@
     margin: 0;
 }
 
+.local-reportlms-actions {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* The cog belongs in the card's top right corner, level with the block title.
+   A block body cannot write into the header the theme draws around it, so the
+   link is stored in the body and lifted out of it here.
+
+   :has() is what scopes this to blocks that actually contain ours, rather than
+   repositioning every html block on the site. Where it is unsupported the cog
+   simply stays where it sits in the body, which is untidy but still works. */
+.block:has(.local-reportlms-block) {
+    position: relative;
+}
+
+.block:has(.local-reportlms-block) .local-reportlms-cog {
+    position: absolute;
+    right: 1rem;
+    top: 0.9rem;
+    z-index: 1;
+}
+
+.local-reportlms-cog {
+    color: inherit;
+    line-height: 1;
+    opacity: 0.65;
+}
+
+.local-reportlms-cog:hover,
+.local-reportlms-cog:focus {
+    opacity: 1;
+}
+

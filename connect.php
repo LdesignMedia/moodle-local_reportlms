@@ -17,9 +17,10 @@
 /**
  * Report LMS connect starter.
  *
- * A bare action endpoint: it does not render a page. The Connect button on the
- * plugin settings page sends the admin here; this asks Report LMS to connect
- * the site and stores the keys it returns.
+ * A bare action endpoint: it does not render a page. Nothing in the plugin
+ * links here any more, because connecting is now done from the setup steps in
+ * the report frame, through the local_reportlms_connect web service. This stays
+ * as the plain, scriptless way to do the same thing.
  *
  * @package    local_reportlms
  * @copyright  2026 Luuk Verhoeven, ldesignmedia.nl <info@ldesignmedia.nl>
@@ -34,12 +35,13 @@ use local_reportlms\local\connect_manager;
 require_login();
 $context = context_system::instance();
 require_capability('moodle/site:config', $context);
-require_sesskey();
 
 $PAGE->set_context($context);
 $PAGE->set_url(new moodle_url('/local/reportlms/connect.php'));
 
 $returnurl = new moodle_url('/admin/settings.php', ['section' => 'local_reportlms']);
+
+require_sesskey();
 
 try {
     (new connect_manager())->connect();
@@ -47,4 +49,9 @@ try {
     redirect($returnurl, $exception->getMessage(), null, \core\output\notification::NOTIFY_ERROR);
 }
 
-redirect($returnurl);
+redirect(
+    $returnurl,
+    get_string('connect:success', 'local_reportlms'),
+    null,
+    \core\output\notification::NOTIFY_SUCCESS
+);

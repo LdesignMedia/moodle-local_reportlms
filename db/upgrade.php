@@ -89,5 +89,22 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026080500, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026080505) {
+        // The block body gained a settings cog, now a theme icon lifted into
+        // the card corner, so bring existing blocks up to it. Never creates
+        // one: a site that removed the block on purpose stays without it.
+        \local_reportlms\local\dashboard_block::refresh();
+
+        upgrade_plugin_savepoint(true, 2026080505, 'local', 'reportlms');
+    }
+
+    if ($oldversion < 2026080510) {
+        // The stored block markup carried a t/cog icon, which 404s on themes
+        // that do not ship it. Rewrite it with one every theme has.
+        \local_reportlms\local\dashboard_block::refresh();
+
+        upgrade_plugin_savepoint(true, 2026080510, 'local', 'reportlms');
+    }
+
     return true;
 }

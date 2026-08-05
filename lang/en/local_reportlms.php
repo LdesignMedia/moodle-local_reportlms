@@ -34,7 +34,9 @@ $string['connect:disconnectbutton'] = 'Disconnect';
 $string['connect:statuslabel'] = 'Status:';
 $string['connect:statusconnected'] = 'Connected';
 $string['connect:statusdisconnected'] = 'Not connected';
-$string['connect:intro'] = 'Connect this site to Report LMS to start sending reporting data. Your site must already be registered in the Report LMS licence system.';
+$string['connect:gotosetup'] = 'Go to setup';
+$string['connect:setupintro'] = 'Setup runs on the Report LMS page in this site. It shows which steps are done, what is left, and makes the connection when you are ready. This page is for changing the connection afterwards.';
+$string['block:settings'] = 'Report LMS settings';
 $string['connect:success'] = 'This site is now connected to Report LMS.';
 $string['connect:disconnected'] = 'This site is no longer connected to Report LMS.';
 $string['connect:environmentid'] = 'Environment: {$a}';
@@ -56,7 +58,6 @@ $string['settings:enabled_desc'] = 'Turn off to keep the connection but stop sen
 // Dashboard.
 $string['dashboard:title'] = 'Report LMS dashboard';
 $string['dashboard:notconnected'] = 'This site is not connected to Report LMS yet, so there is no report to show.';
-$string['dashboard:gotosettings'] = 'Go to the Report LMS settings';
 $string['dashboard:back'] = 'Back';
 $string['dashboard:settings'] = 'Report LMS settings';
 

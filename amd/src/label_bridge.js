@@ -49,6 +49,28 @@ const DRILLDOWN = 'reportlms:drilldown';
 const CONNECTED = 'reportlms:connected';
 
 /**
+ * Message the getting-started frame sends when an administrator confirms they
+ * have read what leaves this site. The record is kept here rather than at
+ * Report LMS: it names a person, which is precisely what the statement being
+ * acknowledged says never leaves.
+ */
+const ACKNOWLEDGE = 'reportlms:acknowledge';
+
+/** Message this page sends back once that is stored. */
+const ACKNOWLEDGED = 'reportlms:acknowledged';
+
+/**
+ * Message the getting-started frame sends when an administrator presses
+ * connect. The frame cannot post to this site directly: a sesskey guards the
+ * change and that token must never leave this origin, so the frame asks and
+ * this page does it.
+ */
+const CONNECT = 'reportlms:connect';
+
+/** Message this page sends back when connecting did not work. */
+const CONNECT_FAILED = 'reportlms:connect-failed';
+
+/**
  * Whether a message came from the dashboard we actually embedded.
  *
  * @param {MessageEvent} event
@@ -88,6 +110,30 @@ const resolve = (codes) => {
 };
 
 /**
+ * Record the reading against this site.
+ *
+ * @returns {Promise<Object>}
+ */
+const acknowledge = () => {
+    return Ajax.call([{
+        methodname: 'local_reportlms_acknowledge_privacy',
+        args: {},
+    }])[0];
+};
+
+/**
+ * Connect this site.
+ *
+ * @returns {Promise<Object>} {connected, error}
+ */
+const connect = () => {
+    return Ajax.call([{
+        methodname: 'local_reportlms_connect',
+        args: {},
+    }])[0];
+};
+
+/**
  * Send the visitor to the people behind a figure they clicked.
  *
  * The filters are codes, which this site can read and Report LMS cannot, so the
@@ -118,6 +164,18 @@ const drilldown = (peopleurl, filters) => {
 export const init = (origin, frameselector, peopleurl) => {
     const frame = document.querySelector(frameselector);
 
+    // The welcome flag is spent the moment the frame is built with it. Take it
+    // out of the address so a refresh is a refresh and not a second connection
+    // being celebrated.
+    if (window.history && window.history.replaceState) {
+        const here = new URL(window.location.href);
+
+        if (here.searchParams.has('welcome')) {
+            here.searchParams.delete('welcome');
+            window.history.replaceState(null, '', here.toString());
+        }
+    }
+
     window.addEventListener('message', (event) => {
         if (!isFromOurFrame(event, origin, frame)) {
             return;
@@ -131,6 +189,68 @@ export const init = (origin, frameselector, peopleurl) => {
 
         if (message.type === DRILLDOWN) {
             drilldown(peopleurl, message.filters || {});
+            return;
+        }
+
+        if (message.type === ACKNOWLEDGE) {
+            acknowledge().then((result) => {
+                if (result.connected) {
+                    // Reading it was the last thing in the way, so the steps
+                    // have nothing left to say. This happens on a site that
+                    // connected before the statement existed.
+                    window.location.reload();
+
+                    return true;
+                }
+
+                // Targeted at the frame's origin, never '*'.
+                event.source.postMessage({type: ACKNOWLEDGED, ok: true}, origin);
+
+                return true;
+            }).catch((error) => {
+                // Tell the frame it failed, so it can leave the step open
+                // rather than showing a tick for something nothing recorded.
+                //
+                // Carry the reason across. Swallowing it left the frame with
+                // nothing to say and nothing to log, which is how a broken web
+                // service turns into a button that simply never finishes.
+                event.source.postMessage({
+                    type: ACKNOWLEDGED,
+                    ok: false,
+                    error: String((error && (error.message || error.errorcode)) || error),
+                }, origin);
+            });
+
+            return;
+        }
+
+        if (message.type === CONNECT) {
+            connect().then((result) => {
+                if (result.connected) {
+                    // The dashboard replaces the steps, so there is nothing to
+                    // tell the frame: this page is about to be a different one.
+                    // It comes back with welcome=1, which is how the report
+                    // knows to say hello rather than just appearing.
+                    const next = new URL(window.location.href);
+                    next.searchParams.set('welcome', '1');
+                    window.location.replace(next.toString());
+
+                    return true;
+                }
+
+                event.source.postMessage({
+                    type: CONNECT_FAILED,
+                    error: result.error,
+                }, origin);
+
+                return false;
+            }).catch((error) => {
+                event.source.postMessage({
+                    type: CONNECT_FAILED,
+                    error: String((error && (error.message || error.errorcode)) || error),
+                }, origin);
+            });
+
             return;
         }
 

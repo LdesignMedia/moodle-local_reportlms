@@ -458,16 +458,28 @@ class dashboard_block {
     }
 
     /**
-     * The block body: one sentence and a button.
+     * The block body: one sentence, and the two ways out of it.
      *
-     * The link goes to the plugin page rather than straight to the SaaS, because
-     * the token has to be minted per view and only that page knows who is
-     * looking.
+     * The report link goes to the plugin page rather than straight to the SaaS,
+     * because the token has to be minted per view and only that page knows who
+     * is looking.
+     *
+     * The cog is the administration route. It is stored inline here and moved
+     * into the card's top corner by styles.css, because a block body cannot
+     * write into the header its theme draws around it.
+     *
+     * Note that a block body is one stored string shown to every viewer, so it
+     * cannot be hidden from people who lack moodle/site:config; it is drawn as
+     * a bare icon for that reason, and the settings page refuses anyone who
+     * should not be there. Gating it properly needs a real block plugin.
      *
      * @return string
      */
     protected static function content(): string {
+        global $OUTPUT;
+
         $url = new \moodle_url('/local/reportlms/view.php');
+        $settingsurl = new \moodle_url('/admin/settings.php', ['section' => 'local_reportlms']);
 
         $blurb = \html_writer::div(
             branding::mark(36)
@@ -476,13 +488,26 @@ class dashboard_block {
             ['style' => '--local-reportlms-mark-size: 36px;']
         );
 
-        return \html_writer::div(
-            $blurb . \html_writer::link(
+        $cog = \html_writer::link(
+            $settingsurl,
+            // i/settings, not t/cog: not every theme ships the latter, and
+            // this markup is stored, so a broken image would stay broken.
+            $OUTPUT->pix_icon('i/settings', get_string('block:settings', 'local_reportlms')),
+            [
+                'class' => 'local-reportlms-cog',
+                'title' => get_string('block:settings', 'local_reportlms'),
+            ]
+        );
+
+        $actions = \html_writer::div(
+            \html_writer::link(
                 $url,
                 get_string('block:button', 'local_reportlms'),
                 ['class' => 'btn btn-primary']
             ),
-            'local-reportlms-block'
+            'local-reportlms-actions'
         );
+
+        return \html_writer::div($cog . $blurb . $actions, 'local-reportlms-block');
     }
 }

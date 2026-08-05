@@ -147,8 +147,6 @@ class connect_manager {
         // connected either way, and a missing convenience link is not a reason
         // to fail what the admin actually asked for.
         dashboard_block::ensure();
-
-        \core\notification::success(get_string('connect:success', 'local_reportlms'));
     }
 
     /**

@@ -37,4 +37,27 @@ $functions = [
         'ajax' => true,
         'capabilities' => 'local/reportlms:view',
     ],
+
+    // Also AJAX only. It writes a site setting, so it is guarded by the
+    // capability that lets somebody change site settings in the first place.
+    'local_reportlms_acknowledge_privacy' => [
+        'classname' => 'local_reportlms\external\acknowledge_privacy',
+        'methodname' => 'execute',
+        'description' => 'Record that an administrator has read what leaves this site.',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'moodle/site:config',
+    ],
+
+    // Also AJAX only. The setup steps run in a frame served by Report LMS and
+    // cannot be handed a sesskey, so they ask this page to do it and Moodle's
+    // own AJAX endpoint supplies the token from the administrator's session.
+    'local_reportlms_connect' => [
+        'classname' => 'local_reportlms\external\connect',
+        'methodname' => 'execute',
+        'description' => 'Connect this site to Report LMS.',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'moodle/site:config',
+    ],
 ];

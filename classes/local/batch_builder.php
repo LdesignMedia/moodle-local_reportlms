@@ -286,6 +286,11 @@ class batch_builder {
             'platform' => config::PLATFORM,
             'platform_version' => (string) $CFG->release,
             'plugin_version' => (int) get_config('local_reportlms', 'version'),
+            // When somebody here read what leaves this site, or 0 if nobody
+            // has. Report LMS refuses the batch until this is set, so it is
+            // sent on every push rather than once. A timestamp only: who read
+            // it stays on this side, which is the point of the statement.
+            'privacy_acknowledged_at' => privacy_statement::acknowledged_at(),
             'environment_id' => (string) get_config('local_reportlms', 'environmentid'),
             'snapshot_at' => self::iso($snapshotat),
         ];

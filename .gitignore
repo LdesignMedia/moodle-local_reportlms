@@ -1,1 +1,4 @@
 /.moodle/
+# Written by admin/tool/phpunit/cli/init.php for one particular Moodle
+# checkout, so it is machine state rather than source.
+/phpunit.xml

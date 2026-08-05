@@ -39,8 +39,8 @@ if ($hassiteconfig) {
 
         $connected = \local_reportlms\local\connect_manager::is_connected();
 
-        $connecturl = new moodle_url('/local/reportlms/connect.php', ['sesskey' => sesskey()]);
         $disconnecturl = new moodle_url('/local/reportlms/disconnect.php', ['sesskey' => sesskey()]);
+        $reporturl = new moodle_url('/local/reportlms/view.php');
 
         // One status line, green when connected and red when not. The mark is
         // not here: it sits against the page heading, which styles.css draws
@@ -81,13 +81,18 @@ if ($hassiteconfig) {
                 $details[] = get_string('connect:lastpush', 'local_reportlms', userdate($lastpush));
             }
         } else {
-            $status .= html_writer::tag('p', get_string('connect:intro', 'local_reportlms'));
+            $status .= html_writer::tag('p', get_string('connect:setupintro', 'local_reportlms'));
         }
 
-        // Connect or disconnect, never both. Reconnecting is disconnecting and
-        // connecting again, so a separate button for it only offered a third
-        // path to the same two states, and the one an admin picked decided
-        // whether the old keys were cleared first.
+        // Connecting is not offered here. Setting a site up is a sequence,
+        // licence, then reading what will leave the site, then the connection
+        // itself, and only the report page shows where in that sequence a site
+        // actually is. A second Connect button on this page would let somebody
+        // skip straight past the middle step without ever seeing it, and then
+        // two pages would disagree about what was left to do.
+        //
+        // Disconnecting stays, because it is the one thing that belongs to
+        // settings: it is not a step, it is an undo.
         $buttons = $connected
             ? html_writer::link(
                 $disconnecturl,
@@ -95,8 +100,8 @@ if ($hassiteconfig) {
                 ['class' => 'btn btn-secondary']
             )
             : html_writer::link(
-                $connecturl,
-                get_string('connect:button', 'local_reportlms'),
+                $reporturl,
+                get_string('connect:gotosetup', 'local_reportlms'),
                 ['class' => 'btn btn-primary']
             );
 

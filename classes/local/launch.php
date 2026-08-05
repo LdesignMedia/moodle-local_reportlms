@@ -42,7 +42,12 @@ class launch {
      *
      * @return string
      */
-    public static function embed_url(): string {
+    /**
+     * @param bool $welcome Whether to greet the viewer, just after connecting.
+     *
+     * @return string
+     */
+    public static function embed_url(bool $welcome = false): string {
         $environmentid = (string) get_config('local_reportlms', 'environmentid');
         $embedpath = (string) get_config('local_reportlms', 'embedpath');
 
@@ -61,6 +66,10 @@ class launch {
             // language travels with the launch. The SaaS normalises pack
             // codes (nl_kids) to the primary subtag itself.
             'lang' => current_language(),
+            // Said inside the frame rather than as a Moodle notification above
+            // it: the report is what the administrator just switched on, so
+            // the confirmation belongs on the report, not in a bar over it.
+            'welcome' => $welcome ? 1 : 0,
         ], '', '&');
     }
 

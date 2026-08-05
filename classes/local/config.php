@@ -47,6 +47,9 @@ class config {
     /** @var string Where the plugin asks to be connected. */
     public const CONNECT_PATH = '/api/v1/connect';
 
+    /** @var string Where a site reports that somebody has read the data statement. */
+    public const ACKNOWLEDGE_PATH = '/api/v1/privacy-acknowledgement';
+
     /** @var string Where the SaaS serves the embedded dashboard. */
     public const DEFAULT_EMBED_PATH = '/embed';
 
@@ -98,6 +101,20 @@ class config {
      *
      * @return string
      */
+    /**
+     * Whether somebody here has read what leaves this site.
+     *
+     * @return bool
+     */
+    public static function privacy_acknowledged(): bool {
+        // What Report LMS knows, not merely what this site recorded: it is
+        // the refusal on that side that the report waits on.
+        return privacy_statement::confirmed();
+    }
+
+    /**
+     * @return string
+     */
     public static function start_url(): string {
         global $CFG;
 
@@ -109,6 +126,9 @@ class config {
             // disconnected locally, so asking it would tick a step the
             // administrator has not taken.
             'connected' => connect_manager::is_connected() ? 1 : 0,
+            // Whether somebody here has read what leaves this site. Held on
+            // this side, so the steps have to be told.
+            'acknowledged' => privacy_statement::confirmed() ? 1 : 0,
         ], '', '&');
     }
 

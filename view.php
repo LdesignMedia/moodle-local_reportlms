@@ -48,23 +48,20 @@ $PAGE->set_heading('');
 
 echo $OUTPUT->header();
 
-if (!connect_manager::is_connected()) {
+// The steps stay up until this site is both connected and has confirmed
+// reading what leaves it. Report LMS refuses data from a site that has not, so
+// showing the dashboard first would show a report that is never going to fill.
+if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
     // The four steps, in the frame the dashboard would occupy. A notice saying
     // "not connected" told somebody what was wrong and nothing about what to do
     // next, which on a site nobody has set up yet is the only useful thing to
     // say.
+    // Just the branded heading. There was a button here to the settings page,
+    // which was the wrong way round: the steps below are the setup, and sending
+    // somebody to settings first offered them a shortcut past the very thing
+    // they had come to read.
     echo html_writer::div(
-        html_writer::tag('h1', branding::lockup(40), ['class' => 'local-reportlms-heading'])
-        . html_writer::div(
-            has_capability('moodle/site:config', $context)
-                ? html_writer::link(
-                    new moodle_url('/admin/settings.php', ['section' => 'local_reportlms']),
-                    get_string('dashboard:gotosettings', 'local_reportlms'),
-                    ['class' => 'btn btn-primary']
-                )
-                : '',
-            'local-reportlms-actions'
-        ),
+        html_writer::tag('h1', branding::lockup(40), ['class' => 'local-reportlms-heading']),
         'local-reportlms-header'
     );
 
@@ -73,6 +70,9 @@ if (!connect_manager::is_connected()) {
         'title' => get_string('dashboard:title', 'local_reportlms'),
         'class' => 'local-reportlms-frame',
         'style' => 'width:100%;min-height:70vh;border:0;border-radius:12px;',
+        // No top-navigation permission: connecting happens through the
+        // bridge below rather than by sending the page somewhere, so the frame
+        // has no reason to be able to move the page around it.
         'sandbox' => 'allow-scripts allow-same-origin allow-popups',
         'referrerpolicy' => 'no-referrer',
     ]);
@@ -116,7 +116,9 @@ $actions = '';
 if (has_capability('moodle/site:config', $context)) {
     $actions .= html_writer::link(
         new moodle_url('/admin/settings.php', ['section' => 'local_reportlms']),
-        $OUTPUT->pix_icon('t/cog', get_string('dashboard:settings', 'local_reportlms')),
+        // i/settings, not t/cog: not every theme ships the latter, and a
+        // missing pix renders as a broken image rather than as nothing.
+        $OUTPUT->pix_icon('i/settings', get_string('dashboard:settings', 'local_reportlms')),
         ['class' => 'btn btn-secondary', 'title' => get_string('dashboard:settings', 'local_reportlms')]
     );
 }
@@ -138,7 +140,8 @@ echo html_writer::div(
 // The token is minted per page load and is good for a few minutes only, so it
 // is built here rather than cached anywhere.
 echo html_writer::tag('iframe', '', [
-    'src' => launch::embed_url(),
+    // Set by the reload that follows a connect, and by nothing else.
+    'src' => launch::embed_url(optional_param('welcome', 0, PARAM_BOOL)),
     'title' => get_string('dashboard:title', 'local_reportlms'),
     'class' => 'local-reportlms-frame',
     'style' => 'width:100%;min-height:80vh;border:0;border-radius:12px;',
