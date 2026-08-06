@@ -197,3 +197,11 @@
     font-size: 0.85rem;
     margin: 0;
 }
+
+/* A stale report says so, above the figures rather than instead of them.
+
+   The numbers are real, they are just old, and a manager who can see "as at
+   14 June" is better served than one who can see nothing. */
+.local-reportlms-stale {
+    margin-bottom: 1rem;
+}

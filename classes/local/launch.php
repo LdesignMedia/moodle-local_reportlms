@@ -93,6 +93,20 @@ class launch {
             // Absent for an unscoped viewer, which is how the SaaS tells "every
             // course" from "these courses and no others".
             'courses' => $viewer['courses'] ?? null,
+            /*
+             * When this site's cron last ran, and when the push task last ran.
+             *
+             * Carried on the token rather than on the push, because a site
+             * whose cron is dead cannot use the push to report that its cron is
+             * dead. The token is minted whenever somebody opens the report,
+             * which is exactly the moment the answer becomes interesting.
+             *
+             * Timestamps about a server, not about a person: the same class of
+             * thing as the plugin version, so nothing about the privacy
+             * position changes.
+             */
+            'cron_last_run_at' => cron_health::cron_last_run(),
+            'push_task_last_run_at' => cron_health::push_last_run(),
             'iat' => $now,
             'exp' => $now + self::TTL,
             // One-time id. A launch URL ends up in browser history, in referrer

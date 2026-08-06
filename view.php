@@ -137,6 +137,24 @@ echo html_writer::div(
     'local-reportlms-header'
 );
 
+/*
+ * A stale report explains itself.
+ *
+ * Above the dashboard rather than instead of it: the figures are real, they are
+ * just old, and a manager who can see "as at 14 June" is better served than one
+ * who can see nothing while somebody fixes a server. Hiding it outright would
+ * reproduce the original failure with extra steps.
+ */
+$cronproblem = \local_reportlms\local\cron_health::message();
+
+if ($cronproblem !== null) {
+    echo html_writer::div(
+        html_writer::tag('strong', get_string('cron:stalereport', 'local_reportlms'))
+        . ' ' . $cronproblem,
+        'local-reportlms-stale alert alert-warning'
+    );
+}
+
 // The token is minted per page load and is good for a few minutes only, so it
 // is built here rather than cached anywhere.
 echo html_writer::tag('iframe', '', [

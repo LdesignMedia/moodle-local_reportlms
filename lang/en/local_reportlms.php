@@ -47,6 +47,7 @@ $string['warn:footnote'] = 'These counts are not sent to Report LMS. They are wo
 // Cron health. Named for Moodle's own scheduled tasks rather than for this
 // plugin: the fault is not ours, and an administrator sent to our settings page
 // would find nothing wrong there.
+$string['cron:stalereport'] = 'These figures may be out of date.';
 $string['cron:heading'] = 'Scheduled tasks:';
 $string['cron:never'] = 'never run on this site.';
 $string['cron:ago'] = 'last ran {$a} ago.';
