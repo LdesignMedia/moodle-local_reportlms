@@ -82,8 +82,20 @@ class people {
         $where = array_merge($where, $profilesql);
         $params = array_merge($params, $profileparams);
 
+        /*
+         * Every name field, not just first and last.
+         *
+         * fullname() honours the site's fullnamedisplay setting, which can
+         * name middlename, alternatename or the phonetic fields. Handed a
+         * record without them it raises a debugging warning and falls back,
+         * so on a site that uses any of those the drill-through would quietly
+         * render the wrong name for everybody. Invisible in production, where
+         * debugging is off, which is exactly why it needs pinning.
+         */
+        $namefields = \core_user\fields::for_name()->get_sql('u', false, '', '', false)->selects;
+
         $sql = "SELECT " . $DB->sql_concat('u.id', "'-'", 'c.id') . " AS rowkey,
-                       u.id AS userid, u.firstname, u.lastname, u.email,
+                       u.id AS userid, u.email, {$namefields},
                        c.id AS courseid, c.fullname AS coursename,
                        ue.timestart, ue.timecreated, cc.timestarted
                   FROM {user} u
