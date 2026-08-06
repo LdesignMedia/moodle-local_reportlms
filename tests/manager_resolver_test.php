@@ -458,4 +458,123 @@ final class manager_resolver_test extends \advanced_testcase {
             $this->assertSame($department, $map[$code]['label']);
         }
     }
+
+    /**
+     * Two managers, two departments, one learner: the ambiguity is recorded.
+     *
+     * The placement is still decided the same way, by whichever manager is
+     * reached first. What changes is that the coin toss is no longer silent.
+     */
+    public function test_a_learner_claimed_by_two_departments_is_counted(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $learner = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        foreach (['Rotterdam', 'Utrecht'] as $department) {
+            $manager = $this->getDataGenerator()->create_user();
+            $this->set_field($manager->id, 'sector', 'Operations');
+            $this->set_field($manager->id, 'department', $department);
+            $this->getDataGenerator()->enrol_user($manager->id, $course->id);
+            $this->make_manager($manager->id, \context_course::instance($course->id));
+        }
+
+        manager_resolver::reset();
+
+        $this->assertSame([(int) $learner->id], manager_resolver::contested());
+    }
+
+    /**
+     * Two managers who agree are not an ambiguity.
+     *
+     * Counting them would make the warning fire on every ordinary site with a
+     * deputy, and a warning that always fires is one people stop reading.
+     */
+    public function test_two_managers_in_one_department_are_not_contested(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $learner = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        foreach ([1, 2] as $i) {
+            $manager = $this->getDataGenerator()->create_user();
+            $this->set_field($manager->id, 'sector', 'Operations');
+            $this->set_field($manager->id, 'department', 'Rotterdam');
+            $this->getDataGenerator()->enrol_user($manager->id, $course->id);
+            $this->make_manager($manager->id, \context_course::instance($course->id));
+        }
+
+        manager_resolver::reset();
+
+        $this->assertSame([], manager_resolver::contested());
+    }
+
+    /**
+     * A learner placed against their own field is counted.
+     *
+     * This is the closest signal there is to a manager who runs more than one
+     * department, which cannot be resolved from this data but can at least stop
+     * being invisible.
+     */
+    public function test_a_learner_placed_against_their_own_field_is_counted(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->set_field($manager->id, 'sector', 'Operations');
+        $this->set_field($manager->id, 'department', 'Rotterdam');
+        $this->set_field($learner->id, 'department', 'Utrecht');
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->make_manager($manager->id, \context_course::instance($course->id));
+
+        manager_resolver::reset();
+
+        $this->assertSame([(int) $learner->id], manager_resolver::overridden());
+    }
+
+    /**
+     * A learner with no department of their own was not overridden.
+     *
+     * Precedence gave them one they did not have. Nothing was overruled, and
+     * counting it would bury the real cases under the ordinary ones.
+     */
+    public function test_a_learner_with_no_department_is_not_an_override(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->set_field($manager->id, 'sector', 'Operations');
+        $this->set_field($manager->id, 'department', 'Rotterdam');
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->make_manager($manager->id, \context_course::instance($course->id));
+
+        manager_resolver::reset();
+
+        $this->assertSame([], manager_resolver::overridden());
+    }
+
+    /**
+     * The collector carries the counts, so they reach Report LMS at all.
+     *
+     * Every one of these was already detected and thrown away before this.
+     */
+    public function test_the_collector_emits_the_warning_counts(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->set_field($manager->id, 'sector', 'Operations');
+        $this->set_field($manager->id, 'department', 'Rotterdam');
+        $this->set_field($learner->id, 'department', 'Utrecht');
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->make_manager($manager->id, \context_course::instance($course->id));
+
+        manager_resolver::reset();
+        $warnings = org::collect()->warnings;
+
+        $this->assertSame(0, $warnings['unplaceable_managers']);
+        $this->assertSame(0, $warnings['contested_learners']);
+        $this->assertSame(1, $warnings['overridden_learners']);
+    }
 }

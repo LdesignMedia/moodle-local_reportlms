@@ -204,6 +204,21 @@ class org {
             'members' => $members,
             'managers' => $managers,
             'attrs' => $attrs,
+            /*
+             * What this tree is not sure about.
+             *
+             * Counts, not identities: who is affected is a question for a
+             * Moodle page under Moodle's access checks, the same rule the
+             * drill-through follows. Report LMS gets the number so somebody
+             * can see that the question exists at all.
+             *
+             * Every one of these was already known and thrown away.
+             */
+            'warnings' => [
+                'unplaceable_managers' => count(\local_reportlms\local\manager_resolver::unplaceable()),
+                'contested_learners' => count(\local_reportlms\local\manager_resolver::contested()),
+                'overridden_learners' => count(\local_reportlms\local\manager_resolver::overridden()),
+            ],
         ];
     }
 

@@ -64,6 +64,12 @@ class manager_resolver {
      */
     protected static $resolved = null;
 
+    /** @var array<int, \stdClass>|null Memoised, so the counts agree with the tree they came from. */
+    protected static $membership = null;
+
+    /** @var array<int, int> Learners two managers claimed for different departments. */
+    protected static $contested = [];
+
     /**
      * Every manager on this site, with what they manage.
      *
@@ -133,6 +139,9 @@ class manager_resolver {
      * @return void
      */
     public static function reset(): void {
+        self::$membership = null;
+        self::$contested = [];
+
         self::$resolved = null;
     }
 
@@ -143,7 +152,12 @@ class manager_resolver {
      *         {sector (value|null), department (value), managerid}.
      */
     public static function membership(): array {
+        if (self::$membership !== null) {
+            return self::$membership;
+        }
+
         $membership = [];
+        $contested = [];
 
         foreach (self::managers() as $manager) {
             // A manager with no department of their own cannot place anyone.
@@ -157,10 +171,20 @@ class manager_resolver {
             $sector = self::sector_of($manager->userid);
 
             foreach ($manager->participants as $participantid) {
-                // A manager never inherits from themselves, and the first
-                // manager wins when two of them share a participant, so the
-                // result does not depend on iteration order changing under us.
-                if ($participantid === $manager->userid || isset($membership[$participantid])) {
+                if ($participantid === $manager->userid) {
+                    continue;
+                }
+
+                // The first manager wins when two of them share a participant,
+                // so the result does not depend on iteration order changing
+                // under us. But a second claim naming a different department is
+                // a real ambiguity, and discarding it silently is how somebody
+                // ends up counted in a team they are not in. Record it.
+                if (isset($membership[$participantid])) {
+                    if ($membership[$participantid]->department !== $department) {
+                        $contested[$participantid] = true;
+                    }
+
                     continue;
                 }
 
@@ -177,7 +201,61 @@ class manager_resolver {
             }
         }
 
+        self::$membership = $membership;
+        self::$contested = array_keys($contested);
+
         return $membership;
+    }
+
+    /**
+     * Learners two managers claimed for different departments.
+     *
+     * The placement was a coin toss decided by iteration order. Nothing on the
+     * report says so, and the numbers add up either way, which is exactly what
+     * makes it worth counting: a plausible department full of the wrong people
+     * is harder to notice than an empty one.
+     *
+     * @return array<int, int> Learner user ids.
+     */
+    public static function contested(): array {
+        self::membership();
+
+        return self::$contested;
+    }
+
+    /**
+     * Learners placed somewhere other than where their own profile says.
+     *
+     * Precedence is deliberate: a managed learner takes their manager's
+     * department whatever their own field holds. This counts how often that
+     * actually overrode something, which is the closest signal we have to a
+     * manager who runs more than one department. That case cannot be resolved
+     * from this data, but it can at least stop being invisible.
+     *
+     * Only a disagreement counts. A learner whose own field is empty, or
+     * already agrees, is not being overridden.
+     *
+     * @return array<int, int> Learner user ids.
+     */
+    public static function overridden(): array {
+        $membership = self::membership();
+
+        if (!$membership) {
+            return [];
+        }
+
+        $own = self::departments_of(array_keys($membership));
+        $ids = [];
+
+        foreach ($membership as $userid => $placed) {
+            $value = $own[$userid][0] ?? '';
+
+            if ($value !== '' && $value !== $placed->department) {
+                $ids[] = $userid;
+            }
+        }
+
+        return $ids;
     }
 
     /**

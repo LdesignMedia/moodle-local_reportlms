@@ -242,7 +242,16 @@ class batch_builder {
             return pseudonym::node($level, $value);
         };
 
-        $section = ['org_state_hash' => 'h_' . $hash, 'nodes' => [], 'members' => [], 'managers' => [], 'attrs' => []];
+        $section = [
+            'org_state_hash' => 'h_' . $hash,
+            'nodes' => [],
+            'members' => [],
+            'managers' => [],
+            'attrs' => [],
+            // What this tree is not sure about. Counts only: who is affected
+            // is a question for a Moodle page under Moodle's access checks.
+            'warnings' => $org->warnings,
+        ];
         foreach ($org->nodes as $node) {
             $section['nodes'][] = [
                 'node_id' => $nodeid($node->key),
