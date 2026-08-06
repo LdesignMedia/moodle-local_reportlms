@@ -34,6 +34,17 @@ $string['connect:disconnectbutton'] = 'Disconnect';
 $string['connect:statuslabel'] = 'Status:';
 $string['connect:statusconnected'] = 'Connected';
 $string['connect:statusdisconnected'] = 'Not connected';
+// Cron health. Named for Moodle's own scheduled tasks rather than for this
+// plugin: the fault is not ours, and an administrator sent to our settings page
+// would find nothing wrong there.
+$string['cron:heading'] = 'Scheduled tasks:';
+$string['cron:never'] = 'never run on this site.';
+$string['cron:ago'] = 'last ran {$a} ago.';
+$string['cron:nevercron'] = 'Moodle\'s scheduled tasks have never run on this site, so nothing has been sent to Report LMS and nothing will be. Ask whoever manages the server to set up cron, then check Site administration > Server > Scheduled tasks.';
+$string['cron:cronstale'] = 'Moodle\'s scheduled tasks have not run for some hours, so the report is not being updated. Check Site administration > Server > Scheduled tasks.';
+$string['cron:taskdisabled'] = 'The Report LMS send task is switched off, so nothing is being sent. Enable it in Site administration > Server > Scheduled tasks.';
+$string['cron:tasknever'] = 'This site is connected but the Report LMS send task has never run, so no data has reached the report yet.';
+$string['cron:taskstale'] = 'The Report LMS send task has not run for some hours, so the report is showing older figures than this site has.';
 $string['connect:gotosetup'] = 'Go to setup';
 $string['connect:setupintro'] = 'Setup runs on the Report LMS page in this site. It shows which steps are done, what is left, and makes the connection when you are ready. This page is for changing the connection afterwards.';
 $string['block:settings'] = 'Report LMS settings';

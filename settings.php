@@ -57,6 +57,29 @@ if ($hassiteconfig) {
             'local-reportlms-status'
         );
 
+        /*
+         * Cron, next to the connection status and not hidden below it.
+         *
+         * The two answer different halves of "is this working": one says the
+         * keys are good, the other says anything is actually being sent. A site
+         * can pass the first and fail the second for its entire life.
+         */
+        $cronproblem = \local_reportlms\local\cron_health::message();
+
+        if ($cronproblem !== null) {
+            $status .= html_writer::div(
+                html_writer::span(get_string('cron:heading', 'local_reportlms'), 'local-reportlms-cron-label')
+                . html_writer::span($cronproblem, 'local-reportlms-cron-text'),
+                'local-reportlms-cronwarning'
+            );
+        } else {
+            $status .= html_writer::div(
+                get_string('cron:heading', 'local_reportlms') . ' '
+                . \local_reportlms\local\cron_health::describe_last_run(),
+                'local-reportlms-cronok'
+            );
+        }
+
         $details = [];
         if ($connected) {
             $environmentid = (string) get_config('local_reportlms', 'environmentid');
