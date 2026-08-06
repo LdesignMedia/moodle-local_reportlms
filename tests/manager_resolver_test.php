@@ -241,9 +241,15 @@ final class manager_resolver_test extends \advanced_testcase {
         $this->assertSame([(int) $one->id, (int) $two->id], $courseids);
     }
 
-    public function test_a_system_grant_reaches_every_course(): void {
-        // This is how an organisation-wide manager happens without anyone
-        // choosing viewall, so it needs to be true on purpose, not by accident.
+    /**
+     * A site-wide grant reaches every course, and places nobody.
+     *
+     * Reach and ownership are different claims. Holding the capability at
+     * system level says what somebody may see; it does not say that everyone
+     * on the site works for them. Reading a department off that person and
+     * applying it site-wide does not describe an organisation, it replaces one.
+     */
+    public function test_a_system_grant_reaches_every_course_but_places_nobody(): void {
         $one = $this->getDataGenerator()->create_course();
         $two = $this->getDataGenerator()->create_course();
 
@@ -257,10 +263,48 @@ final class manager_resolver_test extends \advanced_testcase {
 
         $this->make_manager($manager->id, \context_system::instance());
 
+        // The reach is unchanged: both courses, and therefore both learners.
+        $managers = manager_resolver::managers();
+        $this->assertCount(2, $managers[(int) $manager->id]->courseids);
+
+        // The placement is not theirs to make.
+        $this->assertSame([], manager_resolver::membership());
+    }
+
+    /**
+     * The manager who actually runs a team still places it.
+     *
+     * The case that made this a bug rather than a curiosity: on a live site a
+     * single system-level assignment put all 500 learners into that person's
+     * own department, and the four managers who really ran those teams placed
+     * nobody at all.
+     */
+    public function test_a_category_manager_still_places_when_a_site_wide_one_exists(): void {
+        $category = $this->getDataGenerator()->create_category();
+        $course = $this->getDataGenerator()->create_course(['category' => $category->id]);
+
+        $learner = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        $sitewide = $this->getDataGenerator()->create_user();
+        $this->set_field($sitewide->id, 'sector', 'Operations');
+        $this->set_field($sitewide->id, 'department', 'Rotterdam');
+        $this->make_manager($sitewide->id, \context_system::instance());
+
+        $team = $this->getDataGenerator()->create_user();
+        $this->set_field($team->id, 'sector', 'Finance');
+        $this->set_field($team->id, 'department', 'Accounting');
+        $this->make_manager($team->id, \context_coursecat::instance($category->id));
+
+        manager_resolver::reset();
         $membership = manager_resolver::membership();
 
-        $this->assertArrayHasKey($here->id, $membership);
-        $this->assertArrayHasKey($there->id, $membership);
+        $this->assertSame('Accounting', $membership[$learner->id]->department);
+        $this->assertSame('Finance', $membership[$learner->id]->sector);
+
+        // And it is not an ambiguity, because only one of them was ever
+        // making a claim about who this person works for.
+        $this->assertSame([], manager_resolver::contested());
     }
 
     public function test_a_learner_managed_twice_lands_in_one_department(): void {

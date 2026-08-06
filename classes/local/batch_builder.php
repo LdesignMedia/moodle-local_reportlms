@@ -248,9 +248,6 @@ class batch_builder {
             'members' => [],
             'managers' => [],
             'attrs' => [],
-            // What this tree is not sure about. Counts only: who is affected
-            // is a question for a Moodle page under Moodle's access checks.
-            'warnings' => $org->warnings,
         ];
         foreach ($org->nodes as $node) {
             $section['nodes'][] = [

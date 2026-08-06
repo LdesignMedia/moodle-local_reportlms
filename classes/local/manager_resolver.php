@@ -105,8 +105,14 @@ class manager_resolver {
                         'courseids' => [],
                         'departments' => [],
                         'participants' => [],
+                        // Whether this person's grant is bounded to part of the
+                        // site. See places() below: a site-wide grant says what
+                        // somebody may see, not who works for them.
+                        'bounded' => false,
                     ];
                 }
+
+
 
                 foreach ($courseids as $courseid) {
                     $managers[$uid]->courseids[$courseid] = $courseid;
@@ -116,6 +122,21 @@ class manager_resolver {
 
         if (!$managers) {
             return self::$resolved = [];
+        }
+
+        // Whose grant is actually bounded to part of the site.
+        //
+        // Deliberately not "was returned for a non-system context": asking
+        // get_users_by_capability at a category also returns whoever holds the
+        // capability at system level, because they hold it there too. That
+        // reads every site-wide manager as bounded and puts the whole site in
+        // their department, which is the bug this exists to stop.
+        //
+        // The only honest signal is where their role is actually assigned.
+        $bounded = self::bounded_managers(array_keys($managers));
+
+        foreach ($managers as $uid => $manager) {
+            $manager->bounded = isset($bounded[$uid]);
         }
 
         $departments = self::departments_of(array_keys($managers));
@@ -160,6 +181,23 @@ class manager_resolver {
         $contested = [];
 
         foreach (self::managers() as $manager) {
+            /*
+             * A site-wide grant does not place anybody.
+             *
+             * Holding the capability at system level covers every course, and
+             * therefore every learner. Reading a department off that person and
+             * applying it to the whole site does not describe an organisation,
+             * it replaces one: on a real site it put all 500 learners into the
+             * one department that manager happens to belong to, and the four
+             * managers who actually run those teams placed nobody.
+             *
+             * The grant still means what it always did for visibility. It just
+             * is not a statement about who works for whom.
+             */
+            if (!self::places($manager)) {
+                continue;
+            }
+
             // A manager with no department of their own cannot place anyone.
             // Counted rather than ignored, see unplaceable() below: a silently
             // empty department is the failure nobody notices.
@@ -270,12 +308,30 @@ class manager_resolver {
         $ids = [];
 
         foreach (self::managers() as $manager) {
-            if (!$manager->departments) {
+            // Somebody who was never going to place anybody is not a site
+            // configuration problem, so a site-wide viewer is not counted here.
+            if (self::places($manager) && !$manager->departments) {
                 $ids[] = $manager->userid;
             }
         }
 
         return $ids;
+    }
+
+    /**
+     * Whether this manager's grant says anything about who works for them.
+     *
+     * A grant at course or category level is a statement about a part of the
+     * organisation, so the people in it inherit that manager's department. A
+     * grant at system level is a statement about reach, so it inherits nothing:
+     * an auditor who may see every department does not thereby run one.
+     *
+     * @param \stdClass $manager
+     *
+     * @return bool
+     */
+    protected static function places(\stdClass $manager): bool {
+        return !empty($manager->bounded);
     }
 
     /**
@@ -293,6 +349,47 @@ class manager_resolver {
      *
      * @return array<int, \context>
      */
+    /**
+     * Which of these people hold the capability somewhere below system level.
+     *
+     * One query rather than a context walk per person: the answer is a property
+     * of their role assignments, not of the contexts we happened to ask about.
+     *
+     * @param array<int, int> $userids
+     *
+     * @return array<int, true> Keyed by user id, for isset().
+     */
+    protected static function bounded_managers(array $userids): array {
+        global $DB;
+
+        $roleids = array_keys(get_roles_with_capability(access::MANAGE, CAP_ALLOW));
+
+        if (!$roleids || !$userids) {
+            return [];
+        }
+
+        [$rolesql, $params] = $DB->get_in_or_equal($roleids, SQL_PARAMS_NAMED, 'r');
+        [$usersql, $userparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'u');
+        $params = array_merge($params, $userparams);
+        $params['coursecat'] = CONTEXT_COURSECAT;
+        $params['course'] = CONTEXT_COURSE;
+
+        $sql = "SELECT DISTINCT ra.userid
+                  FROM {role_assignments} ra
+                  JOIN {context} ctx ON ctx.id = ra.contextid
+                 WHERE ra.roleid {$rolesql}
+                   AND ra.userid {$usersql}
+                   AND ctx.contextlevel IN (:coursecat, :course)";
+
+        $bounded = [];
+
+        foreach ($DB->get_fieldset_sql($sql, $params) as $userid) {
+            $bounded[(int) $userid] = true;
+        }
+
+        return $bounded;
+    }
+
     protected static function capability_contexts(): array {
         global $DB;
 

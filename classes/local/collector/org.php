@@ -207,12 +207,10 @@ class org {
             /*
              * What this tree is not sure about.
              *
-             * Counts, not identities: who is affected is a question for a
-             * Moodle page under Moodle's access checks, the same rule the
-             * drill-through follows. Report LMS gets the number so somebody
-             * can see that the question exists at all.
-             *
-             * Every one of these was already known and thrown away.
+             * Kept on the object for the settings page, and deliberately not
+             * sent: every one of these is fixed by changing a profile field or
+             * a role assignment on this site, so a copy on the Report LMS side
+             * would be a number nobody there could act on.
              */
             'warnings' => [
                 'unplaceable_managers' => count(\local_reportlms\local\manager_resolver::unplaceable()),

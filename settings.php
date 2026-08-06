@@ -80,6 +80,45 @@ if ($hassiteconfig) {
             );
         }
 
+        /*
+         * What this site's own tree is not sure about.
+         *
+         * Here rather than on the Report LMS side, because here is where
+         * somebody can act: every one of these is fixed by changing a profile
+         * field or a role assignment on this site. A count shown anywhere else
+         * is a count nobody can do anything about.
+         *
+         * Only shown when there is something to say. A permanent row of zeroes
+         * trains people to stop reading it.
+         */
+        if ($connected) {
+            $counts = [
+                'unplaceable' => count(\local_reportlms\local\manager_resolver::unplaceable()),
+                'contested' => count(\local_reportlms\local\manager_resolver::contested()),
+                'overridden' => count(\local_reportlms\local\manager_resolver::overridden()),
+            ];
+
+            $lines = [];
+
+            foreach ($counts as $key => $count) {
+                if ($count > 0) {
+                    $lines[] = html_writer::tag(
+                        'li',
+                        get_string('warn:' . $key, 'local_reportlms', $count)
+                    );
+                }
+            }
+
+            if ($lines) {
+                $status .= html_writer::div(
+                    html_writer::span(get_string('warn:heading', 'local_reportlms'), 'local-reportlms-warn-label')
+                    . html_writer::tag('ul', implode('', $lines))
+                    . html_writer::tag('p', get_string('warn:footnote', 'local_reportlms'), ['class' => 'local-reportlms-warn-foot']),
+                    'local-reportlms-treewarning'
+                );
+            }
+        }
+
         $details = [];
         if ($connected) {
             $environmentid = (string) get_config('local_reportlms', 'environmentid');

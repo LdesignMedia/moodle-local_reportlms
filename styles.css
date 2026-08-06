@@ -168,3 +168,32 @@
     font-size: 0.9rem;
     margin-top: 0.6rem;
 }
+
+/* What the organisation tree is not sure about.
+
+   Amber, not red: none of these is broken, they are all "worth a look". The
+   cron warning above is red because a site that sends nothing is broken. */
+.local-reportlms-treewarning {
+    background: #fdf7ea;
+    border-left: 3px solid #b45309;
+    border-radius: 0 4px 4px 0;
+    margin-top: 0.75rem;
+    padding: 0.7rem 0.9rem;
+}
+
+.local-reportlms-warn-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+
+.local-reportlms-treewarning ul {
+    margin: 0 0 0.4rem;
+    padding-left: 1.2rem;
+}
+
+.local-reportlms-warn-foot {
+    color: #6a737b;
+    font-size: 0.85rem;
+    margin: 0;
+}

@@ -34,6 +34,16 @@ $string['connect:disconnectbutton'] = 'Disconnect';
 $string['connect:statuslabel'] = 'Status:';
 $string['connect:statusconnected'] = 'Connected';
 $string['connect:statusdisconnected'] = 'Not connected';
+// What the organisation tree is not sure about. Shown on this site because
+// this is where the fix is: a profile field or a role assignment, both of them
+// here. The same counts on the Report LMS side would be counts nobody could act
+// on, which is why they are not sent there.
+$string['warn:heading'] = 'Worth checking in your organisation structure:';
+$string['warn:unplaceable'] = '{$a} managers hold the Report LMS manage permission but have no department set on their own profile, so they place nobody.';
+$string['warn:contested'] = '{$a} people are managed by two managers in different departments. Each of them is counted under one of the two, and which one is not meaningful.';
+$string['warn:overridden'] = '{$a} people are counted under their manager\'s department rather than the one on their own profile. That is how the report is designed to work, but a large number here usually means a manager runs more than one department.';
+$string['warn:footnote'] = 'These counts are not sent to Report LMS. They are worked out on this site, from this site\'s own data.';
+
 // Cron health. Named for Moodle's own scheduled tasks rather than for this
 // plugin: the fault is not ours, and an administrator sent to our settings page
 // would find nothing wrong there.
