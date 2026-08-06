@@ -71,6 +71,29 @@ class pseudonym {
     }
 
     /**
+     * Which letter each level of the tree wears.
+     *
+     * Both used to be 'n', which meant a code in a log line, a payload or a
+     * ?node= parameter told you a node was involved but not which kind, and
+     * answering that needed the label map and the site's salt. A sector and a
+     * department behave differently in the roll-up, so telling them apart at a
+     * glance is worth one character.
+     *
+     * Only the prefix changes. The hash is still taken over "org:<level>:<value>",
+     * so an existing code keeps the same 32 hex characters and only its first
+     * letter moves.
+     *
+     * Anything unrecognised falls back to 'n', so a third level added later
+     * produces a valid code rather than a fatal.
+     *
+     * @var array<string, string>
+     */
+    protected const LEVEL_PREFIXES = [
+        'sector' => 's',
+        'department' => 'd',
+    ];
+
+    /**
      * An organisation node, from the profile field value at a level.
      *
      * @param string $level
@@ -78,7 +101,7 @@ class pseudonym {
      * @return string
      */
     public static function node(string $level, string $value): string {
-        return self::code('n', 'org', $level . ':' . $value);
+        return self::code(self::LEVEL_PREFIXES[$level] ?? 'n', 'org', $level . ':' . $value);
     }
 
     /**

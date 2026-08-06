@@ -48,6 +48,30 @@ use local_reportlms\local\userstate;
  */
 class push_batch extends \core\task\scheduled_task {
     /**
+     * The one refusal this site can do something about.
+     *
+     * Matched by code rather than by message, because the message is written
+     * for a human and may be translated or reworded.
+     *
+     * @var string
+     */
+    protected const REFUSED_UNACKNOWLEDGED = 'privacynotacknowledged';
+
+    /** @var api_client|null Set by tests; the task builds its own otherwise. */
+    protected $client = null;
+
+    /**
+     * Hand the task a client, for tests.
+     *
+     * @param api_client $client
+     *
+     * @return void
+     */
+    public function set_client(api_client $client): void {
+        $this->client = $client;
+    }
+
+    /**
      * Upper bound of learners taken per run.
      *
      * Bounds the memory and runtime of one cron slot. A backlog larger than
@@ -107,7 +131,8 @@ class push_batch extends \core\task\scheduled_task {
 
         $chunks = batch_builder::build($userids, time());
 
-        $client = new api_client(config::baseurl());
+        // Injectable so a test can hand back a refusal without a network.
+        $client = $this->client ?? new api_client(config::baseurl());
         $pushpath = config::pushpath();
         $apikey = (string) get_config('local_reportlms', 'apikey');
         $signingsecret = (string) get_config('local_reportlms', 'signingsecret');
@@ -126,6 +151,32 @@ class push_batch extends \core\task\scheduled_task {
                 $reply = $client->push($pushpath, $rawbody, $apikey, $signingsecret, $idempotencykey);
             } catch (\moodle_exception $e) {
                 mtrace("Report LMS push stopped at chunk {$i}: " . $e->getMessage());
+
+                /*
+                 * A refusal for want of the data statement is a decision, not
+                 * weather, and retrying it every fifteen minutes for months
+                 * changes nothing. Disconnect instead.
+                 *
+                 * That is not a punishment, it is the only thing that makes the
+                 * problem visible: a disconnected site shows the setup steps on
+                 * its report page, and reading the statement is step two. A
+                 * site left connected and refused shows a dashboard that never
+                 * fills and says nothing about why.
+                 *
+                 * What was already collected stays where it is. The salt is
+                 * kept too, so reconnecting resumes on the same coded
+                 * identifiers rather than starting a second history beside the
+                 * first.
+                 */
+                if ($e instanceof \local_reportlms\local\push_refused_exception
+                        && $e->reason === self::REFUSED_UNACKNOWLEDGED) {
+                    connect_manager::disconnect();
+                    mtrace('Report LMS refused this site until somebody reads the data statement.');
+                    mtrace('Disconnected. What was already sent is kept, and reconnecting resumes it.');
+
+                    return;
+                }
+
                 mtrace('Unconfirmed learners stay dirty and retry next run.');
 
                 return;

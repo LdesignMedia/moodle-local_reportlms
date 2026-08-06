@@ -186,7 +186,14 @@ class api_client {
             $message = is_array($decoded) && !empty($decoded['message'])
                 ? $decoded['message']
                 : 'HTTP ' . $httpcode;
-            throw new \moodle_exception('error:pushrejected', 'local_reportlms', '', $message);
+
+            // The reason travels with the failure, so the caller can tell a
+            // decision from weather. A timeout is retried; a refusal that will
+            // never change on its own is acted on.
+            throw new push_refused_exception(
+                is_array($decoded) && !empty($decoded['errorcode']) ? (string) $decoded['errorcode'] : '',
+                $message
+            );
         }
 
         return $decoded;
