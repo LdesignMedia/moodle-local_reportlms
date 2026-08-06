@@ -56,4 +56,22 @@ $observers = [
     // observer simply never fires.
     ['eventname' => '\mod_quiz\event\attempt_submitted', 'callback' => $callback],
     ['eventname' => '\mod_quiz\event\attempt_deleted', 'callback' => $callback],
+
+    /*
+     * Certificates, Moodle Workplace side.
+     *
+     * tool_certificate is the only certificate plugin either stack ships that
+     * raises an event when a learner is issued one, so these are the only ones
+     * there are to observe. Regeneration counts: it moves the expiry date, and
+     * an expiry date is half of what the dashboard reports.
+     *
+     * mod_customcert, the Moodle LMS side, raises nothing at all on issue. Its
+     * events cover templates and elements, which are authoring actions, not a
+     * learner receiving anything. So a customcert issue is picked up by the
+     * reconcile task rather than the moment it happens, and that is a property
+     * of the plugin rather than something this observer list can fix.
+     */
+    ['eventname' => '\tool_certificate\event\certificate_issued', 'callback' => $callback],
+    ['eventname' => '\tool_certificate\event\certificate_revoked', 'callback' => $callback],
+    ['eventname' => '\tool_certificate\event\certificate_regenerated', 'callback' => $callback],
 ];

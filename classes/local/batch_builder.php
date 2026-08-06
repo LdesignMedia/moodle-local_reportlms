@@ -28,6 +28,7 @@ namespace local_reportlms\local;
 
 use local_reportlms\local\collector\activity_completion;
 use local_reportlms\local\collector\attempts;
+use local_reportlms\local\collector\certificates;
 use local_reportlms\local\collector\completion;
 use local_reportlms\local\collector\dimensions;
 use local_reportlms\local\collector\enrolments;
@@ -67,7 +68,7 @@ class batch_builder {
         $peruser = array_fill_keys($userids, null);
         foreach ($userids as $uid) {
             $peruser[$uid] = ['enrolments' => [], 'completion' => [], 'attempts' => [],
-                'grades' => [], 'activity_completion' => []];
+                'grades' => [], 'activity_completion' => [], 'certificates' => []];
         }
 
         foreach (enrolments::collect($userids) as $row) {
@@ -102,6 +103,17 @@ class batch_builder {
                 'activity_ref' => pseudonym::activity($row->cmid),
                 'grade' => $row->grade,
                 'grade_max' => $row->grade_max,
+            ];
+        }
+        foreach (certificates::collect($userids) as $row) {
+            $peruser[$row->userid]['certificates'][] = [
+                'learner_pid' => pseudonym::learner($row->userid),
+                'course_ref' => pseudonym::course($row->courseid),
+                'issued_at' => self::iso($row->issuedat),
+                // Null where the certificate plugin has no expiry concept at
+                // all, which is every mod_customcert issue. Report LMS reads
+                // that as "does not expire" rather than "expired".
+                'expires_at' => $row->expiresat !== null ? self::iso($row->expiresat) : null,
             ];
         }
         foreach (activity_completion::collect($userids) as $row) {
