@@ -35,15 +35,24 @@ namespace local_reportlms\local\collector;
  * departments and functions stay coded; this is what makes the dashboard's
  * dropdowns readable without touching that rule.
  *
- * Full state, like the org tree: the catalogue is small (courses with
- * enrolments plus their reportable activities), and last-state-wins is the
- * only merge that cannot drift.
+ * Full state, like the org tree: the catalogue is small (courses the facts
+ * reference plus their reportable activities), and last-state-wins is the only
+ * merge that cannot drift.
+ *
+ * "Courses the facts reference" is the rule, and it is deliberately wider than
+ * "courses with an enrolment". A learner unenrolled after finishing keeps their
+ * course_completions row, so the completion collector reports a course nobody
+ * is enrolled in any more. Report LMS mints a dimension row for a course it is
+ * sent a fact about, and if the catalogue never names that course the row keeps
+ * its coded id forever: nothing revisits it, because the catalogue hash has no
+ * reason to move. That is what put a raw c_... code in a live dashboard.
  */
 class dimensions {
     /**
      * The full catalogue state.
      *
-     * Courses: every real course with at least one enrolment. Activities:
+     * Courses: every real course the facts can reference, which means one
+     * with an enrolment or a completion. Activities:
      * the course modules facts are reported on — those with completion
      * tracking, plus the main (completion-gating) activity, which is also
      * the one flagged summative, mirroring the attempts collector's rule.
@@ -63,11 +72,18 @@ class dimensions {
             "SELECT c.id, c.fullname, c.visible
                FROM {course} c
               WHERE c.id > 1
-                AND EXISTS (
-                    SELECT 1
-                      FROM {enrol} e
-                      JOIN {user_enrolments} ue ON ue.enrolid = e.id
-                     WHERE e.courseid = c.id
+                AND (
+                    EXISTS (
+                        SELECT 1
+                          FROM {enrol} e
+                          JOIN {user_enrolments} ue ON ue.enrolid = e.id
+                         WHERE e.courseid = c.id
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                          FROM {course_completions} cc
+                         WHERE cc.course = c.id
+                    )
                 )
            ORDER BY c.id"
         );
