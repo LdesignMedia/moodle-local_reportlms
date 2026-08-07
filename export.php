@@ -32,7 +32,10 @@ use local_reportlms\local\people;
 
 require_login();
 $context = context_system::instance();
-access::require_view($context);
+
+// No context: see view.php. The scope check below is what actually keeps a
+// manager to their own people.
+access::require_view();
 
 // A download of everyone's name and address in a scope is worth a token: it
 // stops a link in an email from pulling the list on an admin's behalf.

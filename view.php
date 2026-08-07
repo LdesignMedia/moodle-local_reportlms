@@ -34,9 +34,12 @@ use local_reportlms\local\launch;
 require_login();
 $context = context_system::instance();
 
-// Administrators only, for now. The same check guards the label resolver and
-// the people list this page drills into, so the four cannot drift apart.
-access::require_view($context);
+// Asked without a context, which means "anywhere on this site". Moodle's
+// manager role is normally assigned at a category or a course, so pinning this
+// to the system context turned away exactly the people the report is for. The
+// same check guards the label resolver, the people list and the export, so the
+// four cannot drift apart.
+access::require_view();
 
 $PAGE->set_context($context);
 $PAGE->set_url(new moodle_url('/local/reportlms/view.php'));

@@ -34,8 +34,9 @@ require_login();
 $context = context_system::instance();
 
 // Same check as the dashboard page and the label resolver, in one place, so
-// the three cannot drift apart.
-access::require_view($context);
+// the three cannot drift apart. No context: a manager assigned at a course or
+// a category holds this there and not at the system.
+access::require_view();
 
 // Coded, exactly as the dashboard held them. This page is the only thing on
 // either side that can turn them back into people.

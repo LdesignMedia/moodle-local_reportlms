@@ -51,6 +51,76 @@ final class access_test extends \advanced_testcase {
     }
 
     /**
+     * The bug this file exists to stop coming back.
+     *
+     * These capabilities default to the manager archetype, and Moodle's manager
+     * role is normally assigned at a category or a course rather than at the
+     * system. Asking for the capability at the system context therefore
+     * answered "no" for exactly the people the report was built for: a manager
+     * of one course, correctly identified as a manager by manager_resolver, was
+     * turned away at the door with "you do not currently have permissions".
+     */
+    public function test_a_manager_assigned_at_a_course_may_open_the_report(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        $roleid = $this->getDataGenerator()->create_role(['archetype' => 'manager']);
+        role_assign($roleid, $user->id, \context_course::instance($course->id)->id);
+
+        $this->setUser($user);
+
+        // Nothing at system level, which is the whole point.
+        $this->assertFalse(has_capability(access::VIEW, \context_system::instance()));
+
+        $this->assertTrue(access::can_view());
+        access::require_view();
+    }
+
+    public function test_a_manager_assigned_at_a_category_may_open_the_report(): void {
+        $category = $this->getDataGenerator()->create_category();
+        $user = $this->getDataGenerator()->create_user();
+
+        $roleid = $this->getDataGenerator()->create_role(['archetype' => 'manager']);
+        role_assign($roleid, $user->id, \context_coursecat::instance($category->id)->id);
+
+        $this->setUser($user);
+
+        $this->assertTrue(access::can_view());
+    }
+
+    /**
+     * Same reasoning one level up: a viewall holder assigned at a category was
+     * being minted a department-scoped token instead of an organisation one,
+     * so somebody granted the whole picture saw a slice of it.
+     */
+    public function test_viewall_is_found_wherever_it_is_granted(): void {
+        $category = $this->getDataGenerator()->create_category();
+        $user = $this->getDataGenerator()->create_user();
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEWALL, CAP_ALLOW, $roleid, \context_system::instance()->id);
+        role_assign($roleid, $user->id, \context_coursecat::instance($category->id)->id);
+
+        $this->setUser($user);
+
+        $this->assertFalse(has_capability(access::VIEWALL, \context_system::instance()));
+        $this->assertTrue(access::can_view_all());
+    }
+
+    /**
+     * Anywhere means anywhere they hold a role, not everywhere.
+     */
+    public function test_a_role_without_the_capability_still_opens_nothing(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($user->id, $course->id, 'student');
+
+        $this->setUser($user);
+
+        $this->assertFalse(access::can_view());
+    }
+
+    /**
      * A site administrator holds every capability without being granted any.
      *
      * Worth pinning: the capabilities deliberately ship with no admin entry,

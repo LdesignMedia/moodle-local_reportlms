@@ -75,9 +75,13 @@ class resolve_labels extends external_api {
     public static function execute(array $codes): array {
         $params = self::validate_parameters(self::execute_parameters(), ['codes' => $codes]);
 
+        // The context is validated at system level because that is where this
+        // service is called from, but the capability is asked for anywhere: a
+        // manager assigned at a course holds it there, and resolving a label
+        // they are already allowed to see is not a system-level act.
         $context = context_system::instance();
         self::validate_context($context);
-        access::require_view($context);
+        access::require_view();
 
         $wanted = array_slice(array_values(array_unique($params['codes'])), 0, self::MAX_CODES);
 
