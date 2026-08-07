@@ -149,6 +149,41 @@ final class dimensions_test extends \advanced_testcase {
         $this->assertSame([], array_diff($reported, $this->catalogued()));
     }
 
+    /**
+     * The other half of the same rule, from the other end.
+     *
+     * Deleting a course does not always take its course_completions rows with
+     * it. Three such orphans were sitting on one customer site, each one a
+     * dimension row Report LMS could never name because the course was gone.
+     * Nothing can fix that after the fact, so it must not be sent.
+     */
+    public function test_a_completion_for_a_deleted_course_is_not_reported(): void {
+        global $DB;
+
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($user->id, $course->id);
+
+        $DB->insert_record('course_completions', (object) [
+            'userid' => $user->id,
+            'course' => $course->id,
+            'timeenrolled' => time(),
+            'timestarted' => time(),
+            'timecompleted' => time(),
+        ]);
+
+        // The orphan: the course row goes, the completion row stays.
+        $DB->delete_records('course', ['id' => $course->id]);
+        $this->assertTrue($DB->record_exists('course_completions', ['course' => $course->id]));
+
+        $reported = array_map(
+            static fn($row) => $row->courseid,
+            completion::collect([(int) $user->id])
+        );
+
+        $this->assertNotContains((int) $course->id, $reported);
+    }
+
     public function test_the_catalogue_hash_moves_when_a_course_joins_it(): void {
         // The hash is what stops the block being resent every push, so a course
         // arriving has to move it or the new title never travels.

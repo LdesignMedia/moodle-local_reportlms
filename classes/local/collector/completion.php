@@ -59,9 +59,16 @@ class completion {
 
         [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
 
+        // The join to {course} is load-bearing, not decoration. Deleting a
+        // course does not always take its course_completions rows with it, and
+        // a completion for a course that no longer exists cannot be reported
+        // on: the catalogue cannot name it, so Report LMS would hold a row
+        // showing a raw coded id in the training picker forever. Whatever is
+        // sent has to be nameable.
         $sql = "SELECT cc.id, cc.userid, cc.course AS courseid, cc.timecompleted
                   FROM {course_completions} cc
                   JOIN {user} u ON u.id = cc.userid
+                  JOIN {course} c ON c.id = cc.course
                  WHERE u.deleted = 0
                    AND cc.userid {$insql}
               ORDER BY cc.userid, cc.course";
