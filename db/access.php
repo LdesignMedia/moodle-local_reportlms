@@ -36,10 +36,11 @@ defined('MOODLE_INTERNAL') || die();
  * Site administrators are absent on purpose: Moodle short-circuits every
  * capability check for them, so listing them would be decoration.
  *
- * Only the manager archetype is granted by default. editingteacher is left out
- * deliberately rather than forgotten: whether a teacher should see their own
- * course's people is still open, and a site that wants it can grant it from the
- * role editor without waiting for a release.
+ * The manager archetype is granted :view and :manage by default, and
+ * deliberately NOT :viewall. editingteacher is left out of all three rather
+ * than forgotten: whether a teacher should see their own course's people is
+ * still open, and a site that wants it can grant it from the role editor
+ * without waiting for a release.
  */
 $capabilities = [
 
@@ -81,13 +82,24 @@ $capabilities = [
      *
      * Named for what it does rather than for who holds it: it grants sight of
      * everything and control of nothing, following moodle/grade:viewall.
+     *
+     * No archetype default, and that is the important line in this file.
+     * Granting it to the manager archetype gave every category and course
+     * manager the whole organisation, which makes :manage and the entire
+     * scoping model beside it decorative. Seeing everybody is a deliberate
+     * grant somebody makes in the role editor, not something a person inherits
+     * by being made manager of one course.
+     *
+     * Only meaningful at system level, which is also how it is read: see
+     * access::can_view_all(). Held at a category it would have to mean "the
+     * whole organisation, from inside one corner of it", and resolving that
+     * ambiguity towards "everything" is the unsafe direction.
      */
     'local/reportlms:viewall' => [
         'riskbitmask' => RISK_PERSONAL,
         'captype' => 'read',
         'contextlevel' => CONTEXT_SYSTEM,
         'archetypes' => [
-            'manager' => CAP_ALLOW,
         ],
     ],
 ];

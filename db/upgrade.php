@@ -106,5 +106,45 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026080510, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026080613) {
+        /*
+         * Take :viewall back off the manager archetype.
+         *
+         * It shipped as a manager default, which meant every category and
+         * course manager could see the whole organisation, and the scoping the
+         * rest of the plugin does was decorative for them. Seeing everybody has
+         * to be a deliberate grant, not something inherited by being made
+         * manager of one course.
+         *
+         * Changing db/access.php alone does not do this: Moodle applies
+         * archetype defaults when a capability is first installed and never
+         * revisits them, so every site that already upgraded keeps the grant.
+         *
+         * Scoped to roles that still carry the manager archetype, and only
+         * where the permission is exactly the default this plugin set. A site
+         * that deliberately granted it to a custom HR or auditor role is
+         * untouched, and so is a manager role somebody explicitly set to
+         * prevent or prohibit.
+         */
+        $systemcontext = \context_system::instance();
+
+        foreach ($DB->get_records('role', ['archetype' => 'manager'], '', 'id') as $role) {
+            $existing = $DB->get_record('role_capabilities', [
+                'roleid' => $role->id,
+                'capability' => 'local/reportlms:viewall',
+                'contextid' => $systemcontext->id,
+            ]);
+
+            if ($existing && (int) $existing->permission === CAP_ALLOW) {
+                // Moodle's own API rather than a delete, so the capability
+                // caches are invalidated with it instead of serving the old
+                // answer until something else happens to bump them.
+                unassign_capability('local/reportlms:viewall', $role->id, $systemcontext->id);
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026080613, 'local', 'reportlms');
+    }
+
     return true;
 }

@@ -145,14 +145,21 @@ class access {
      * Site administrators do too, without holding anything: Moodle grants them
      * every capability, so the check below already answers true for them.
      *
-     * @param \context|null $context A specific context, or null for anywhere.
+     * @param \context|null $context Defaults to the system context, which is
+     *                               the only place this capability means what
+     *                               its name says.
      *
      * @return bool
      */
     public static function can_view_all(?\context $context = null): bool {
-        return $context !== null
-            ? has_capability(self::VIEWALL, $context)
-            : self::holds(self::VIEWALL);
+        // System context, not "anywhere", and the asymmetry with can_view() is
+        // deliberate. :view asks whether you may open the page at all, which a
+        // manager of one course legitimately may. :viewall means the whole
+        // organisation, and holding that inside one category would have to mean
+        // "everything, from inside one corner of it". Resolving that ambiguity
+        // towards everything is the unsafe direction, so it is only honoured
+        // where it unambiguously covers the site.
+        return has_capability(self::VIEWALL, $context ?? \context_system::instance());
     }
 
     /**

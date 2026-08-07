@@ -89,11 +89,36 @@ final class access_test extends \advanced_testcase {
     }
 
     /**
-     * Same reasoning one level up: a viewall holder assigned at a category was
-     * being minted a department-scoped token instead of an organisation one,
-     * so somebody granted the whole picture saw a slice of it.
+     * A manager does not see the whole organisation just for being a manager.
+     *
+     * :viewall shipped as a manager archetype default, which made every
+     * category and course manager an organisation-wide viewer and left the
+     * scoping the rest of the plugin does entirely decorative for them. Seeing
+     * everybody has to be a deliberate grant.
      */
-    public function test_viewall_is_found_wherever_it_is_granted(): void {
+    public function test_a_manager_does_not_get_the_whole_organisation(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        $roleid = $this->getDataGenerator()->create_role(['archetype' => 'manager']);
+        role_assign($roleid, $user->id, \context_course::instance($course->id)->id);
+
+        $this->setUser($user);
+
+        $this->assertTrue(access::can_view());
+        $this->assertFalse(access::can_view_all());
+    }
+
+    /**
+     * And the asymmetry between the two checks, stated on purpose.
+     *
+     * :view asks whether you may open the page, which a manager of one course
+     * legitimately may, so it is honoured wherever it is held. :viewall means
+     * the whole organisation, and held inside one category it would have to
+     * mean "everything, from inside one corner of it". That ambiguity is
+     * resolved towards less rather than more.
+     */
+    public function test_viewall_granted_only_inside_a_category_is_not_the_whole_organisation(): void {
         $category = $this->getDataGenerator()->create_category();
         $user = $this->getDataGenerator()->create_user();
 
@@ -103,7 +128,22 @@ final class access_test extends \advanced_testcase {
 
         $this->setUser($user);
 
-        $this->assertFalse(has_capability(access::VIEWALL, \context_system::instance()));
+        // They may open the report, because :viewall implies being allowed in.
+        $this->assertFalse(access::can_view_all());
+    }
+
+    /**
+     * Granted at system level it means exactly what it says.
+     */
+    public function test_viewall_at_system_level_is_the_whole_organisation(): void {
+        $user = $this->getDataGenerator()->create_user();
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEWALL, CAP_ALLOW, $roleid, \context_system::instance()->id);
+        role_assign($roleid, $user->id, \context_system::instance()->id);
+
+        $this->setUser($user);
+
         $this->assertTrue(access::can_view_all());
     }
 
