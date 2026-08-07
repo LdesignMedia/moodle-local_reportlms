@@ -228,6 +228,13 @@ if ($hassiteconfig) {
             ));
 
             $settings->add(new admin_setting_configcheckbox(
+                'local_reportlms/managerfallback',
+                get_string('settings:managerfallback', 'local_reportlms'),
+                get_string('settings:managerfallback_desc', 'local_reportlms'),
+                0
+            ));
+
+            $settings->add(new admin_setting_configcheckbox(
                 'local_reportlms/enabled',
                 get_string('settings:enabled', 'local_reportlms'),
                 get_string('settings:enabled_desc', 'local_reportlms'),

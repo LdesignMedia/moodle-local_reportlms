@@ -71,6 +71,17 @@ class manager_resolver {
     protected static $contested = [];
 
     /**
+     * Prefix for a node named after its manager rather than after a department.
+     *
+     * The manager's id, not their name: a person who marries and changes their
+     * surname must not take their whole team into a different node. The name is
+     * only ever the label, resolved in Moodle at display time.
+     *
+     * @var string
+     */
+    public const MANAGER_NODE = 'manager:';
+
+    /**
      * Every manager on this site, with what they manage.
      *
      * @return array<int, \stdClass> Keyed by manager user id:
@@ -198,14 +209,28 @@ class manager_resolver {
                 continue;
             }
 
-            // A manager with no department of their own cannot place anyone.
-            // Counted rather than ignored, see unplaceable() below: a silently
-            // empty department is the failure nobody notices.
+            /*
+             * A manager with no department of their own.
+             *
+             * By default they place nobody, and are counted into a warning:
+             * see unplaceable(). A silently empty department is the failure
+             * nobody notices.
+             *
+             * With the fallback on, their people go into a node named after
+             * them instead of vanishing from the tree. Off by default, because
+             * a group named after a person is not a department and sits in the
+             * picker beside ones that are: true in a small organisation,
+             * misleading in a large one.
+             */
             if (!$manager->departments) {
-                continue;
-            }
+                if (!self::fallback_enabled()) {
+                    continue;
+                }
 
-            $department = reset($manager->departments);
+                $department = self::MANAGER_NODE . $manager->userid;
+            } else {
+                $department = reset($manager->departments);
+            }
             $sector = self::sector_of($manager->userid);
 
             foreach ($manager->participants as $participantid) {
@@ -332,6 +357,36 @@ class manager_resolver {
      */
     protected static function places(\stdClass $manager): bool {
         return !empty($manager->bounded);
+    }
+
+    /**
+     * Whether this site names a node after a manager who has no department.
+     *
+     * @return bool
+     */
+    public static function fallback_enabled(): bool {
+        return (bool) get_config('local_reportlms', 'managerfallback');
+    }
+
+    /**
+     * Managers whose people are in a node named after them.
+     *
+     * @return array<int, int> Manager user ids.
+     */
+    public static function fallback_managers(): array {
+        if (!self::fallback_enabled()) {
+            return [];
+        }
+
+        $ids = [];
+
+        foreach (self::managers() as $manager) {
+            if (self::places($manager) && !$manager->departments) {
+                $ids[] = $manager->userid;
+            }
+        }
+
+        return $ids;
     }
 
     /**

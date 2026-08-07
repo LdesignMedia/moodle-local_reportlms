@@ -152,6 +152,30 @@ class label_map {
             'parent' => null,
         ];
 
+        /*
+         * Nodes named after a manager who has no department of their own.
+         *
+         * Labelled so nobody mistakes one for a department: it says whose team
+         * it is and that the department is missing, which is also the fix.
+         *
+         * The name is resolved here and never sent. Report LMS holds the coded
+         * id like any other node and cannot turn it back into a person.
+         */
+        foreach (manager_resolver::fallback_managers() as $userid) {
+            $user = \core_user::get_user($userid, 'id, firstname, lastname, firstnamephonetic, '
+                . 'lastnamephonetic, middlename, alternatename');
+
+            if (!$user) {
+                continue;
+            }
+
+            $map[pseudonym::node('department', manager_resolver::MANAGER_NODE . $userid)] = [
+                'label' => get_string('label:managerteam', 'local_reportlms', fullname($user)),
+                'kind' => 'department',
+                'parent' => null,
+            ];
+        }
+
         foreach (self::sector_department_pairs() as $pair) {
             $sectorcode = null;
 

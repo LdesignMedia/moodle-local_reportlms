@@ -38,6 +38,11 @@ $string['connect:statusdisconnected'] = 'Not connected';
 // this is where the fix is: a profile field or a role assignment, both of them
 // here. The same counts on the Report LMS side would be counts nobody could act
 // on, which is why they are not sent there.
+// Naming a node after its manager when they have no department of their own.
+$string['settings:managerfallback'] = 'Name a group after its manager when no department is set';
+$string['settings:managerfallback_desc'] = 'A manager with the Report LMS manage permission but no department on their own profile normally places nobody, and their people fall back to their own department or to Unassigned. Turn this on to put them in a group named after that manager instead, so they stay visible. A group named after a person is not a department, so leave this off unless that reads as the truth on your site.';
+$string['label:managerteam'] = '{$a} (no department set)';
+
 $string['warn:heading'] = 'Worth checking in your organisation structure:';
 $string['warn:unplaceable'] = '{$a} managers hold the Report LMS manage permission but have no department set on their own profile, so they place nobody.';
 $string['warn:contested'] = '{$a} people are managed by two managers in different departments. Each of them is counted under one of the two, and which one is not meaningful.';

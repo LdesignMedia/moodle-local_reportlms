@@ -191,6 +191,82 @@ final class manager_resolver_test extends \advanced_testcase {
         $this->assertSame('department:Utrecht', $bylearner[$learner->id]);
     }
 
+    public function test_the_fallback_names_a_node_after_the_manager(): void {
+        // Same setup as above, with the fallback turned on: the group stops
+        // scattering back to everybody's own field and becomes visible as one.
+        set_config('managerfallback', 1, 'local_reportlms');
+
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user(['firstname' => 'Tom', 'lastname' => 'Jansen']);
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->set_field($learner->id, 'department', 'Utrecht');
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->make_manager($manager->id, \context_course::instance($course->id));
+
+        $expected = manager_resolver::MANAGER_NODE . $manager->id;
+
+        $placed = manager_resolver::membership();
+        $this->assertSame($expected, $placed[$learner->id]->department);
+        $this->assertSame((int) $manager->id, $placed[$learner->id]->managerid);
+
+        // The manager's own field beat the learner's, exactly as a real
+        // department would have. The fallback changes the node's name, not
+        // the precedence rule.
+        $bylearner = [];
+        foreach (org::collect()->members as $member) {
+            $bylearner[$member->userid] = $member->nodekey;
+        }
+        $this->assertSame('department:' . $expected, $bylearner[$learner->id]);
+    }
+
+    public function test_the_fallback_node_is_labelled_with_the_manager_name(): void {
+        // A node named after a person has to say so on screen, or it sits in
+        // the picker looking like a department somebody set up.
+        set_config('managerfallback', 1, 'local_reportlms');
+
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user(['firstname' => 'Tom', 'lastname' => 'Jansen']);
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->make_manager($manager->id, \context_course::instance($course->id));
+
+        $code = \local_reportlms\local\pseudonym::node(
+            'department',
+            manager_resolver::MANAGER_NODE . $manager->id
+        );
+        $labels = \local_reportlms\local\label_map::all();
+
+        $this->assertArrayHasKey($code, $labels);
+        $this->assertSame('Tom Jansen (no department set)', $labels[$code]['label']);
+        $this->assertSame('department', $labels[$code]['kind']);
+    }
+
+    public function test_the_fallback_is_off_unless_the_site_turns_it_on(): void {
+        // Nobody gets a tree full of people's names by upgrading.
+        $this->assertFalse(manager_resolver::fallback_enabled());
+        $this->assertSame([], manager_resolver::fallback_managers());
+    }
+
+    public function test_a_manager_with_a_department_never_uses_the_fallback(): void {
+        // The fallback is for the empty case only. A manager who has a
+        // department keeps it, switch on or off.
+        set_config('managerfallback', 1, 'local_reportlms');
+
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->set_field($manager->id, 'department', 'Rotterdam');
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->make_manager($manager->id, \context_course::instance($course->id));
+
+        $this->assertSame('Rotterdam', manager_resolver::membership()[$learner->id]->department);
+        $this->assertSame([], manager_resolver::fallback_managers());
+    }
+
     public function test_a_learner_nobody_manages_keeps_their_own_department(): void {
         $learner = $this->getDataGenerator()->create_user();
         $this->set_field($learner->id, 'department', 'Utrecht');
