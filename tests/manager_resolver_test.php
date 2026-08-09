@@ -118,7 +118,7 @@ final class manager_resolver_test extends \advanced_testcase {
      */
     private function make_manager(int $userid, \context $context): void {
         $roleid = $this->getDataGenerator()->create_role();
-        assign_capability(access::MANAGE, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
         role_assign($roleid, $userid, $context->id);
         accesslib_clear_all_caches_for_unit_testing();
         manager_resolver::reset();

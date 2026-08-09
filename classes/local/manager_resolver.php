@@ -51,6 +51,16 @@ use local_reportlms\local\collector\org;
  * a change of shape.
  */
 class manager_resolver {
+    /*
+     * A manager is whoever holds local/reportlms:view on a course.
+     *
+     * It used to be :manage. The two capabilities had to be granted together to
+     * be useful, so they were one capability wearing two names, and :manage has
+     * since been given a job of its own: editing the mapping. Holding :view is
+     * now the whole statement, "these participants are yours and you may read
+     * their report".
+     */
+
     /**
      * Resolved managers for this request.
      *
@@ -95,7 +105,7 @@ class manager_resolver {
         $managers = [];
 
         foreach (self::capability_contexts() as $context) {
-            $holders = get_users_by_capability($context, access::MANAGE, 'u.id', '', '', '', '', '', false);
+            $holders = get_users_by_capability($context, access::VIEW, 'u.id', '', '', '', '', '', false);
 
             if (!$holders) {
                 continue;
@@ -417,7 +427,7 @@ class manager_resolver {
     protected static function bounded_managers(array $userids): array {
         global $DB;
 
-        $roleids = array_keys(get_roles_with_capability(access::MANAGE, CAP_ALLOW));
+        $roleids = array_keys(get_roles_with_capability(access::VIEW, CAP_ALLOW));
 
         if (!$roleids || !$userids) {
             return [];
@@ -448,7 +458,7 @@ class manager_resolver {
     protected static function capability_contexts(): array {
         global $DB;
 
-        $roleids = array_keys(get_roles_with_capability(access::MANAGE, CAP_ALLOW));
+        $roleids = array_keys(get_roles_with_capability(access::VIEW, CAP_ALLOW));
 
         if (!$roleids) {
             return [];

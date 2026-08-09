@@ -64,7 +64,8 @@ final class access_test extends \advanced_testcase {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_user();
 
-        $roleid = $this->getDataGenerator()->create_role(['archetype' => 'manager']);
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id);
         role_assign($roleid, $user->id, \context_course::instance($course->id)->id);
 
         $this->setUser($user);
@@ -80,7 +81,8 @@ final class access_test extends \advanced_testcase {
         $category = $this->getDataGenerator()->create_category();
         $user = $this->getDataGenerator()->create_user();
 
-        $roleid = $this->getDataGenerator()->create_role(['archetype' => 'manager']);
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id);
         role_assign($roleid, $user->id, \context_coursecat::instance($category->id)->id);
 
         $this->setUser($user);
@@ -100,7 +102,8 @@ final class access_test extends \advanced_testcase {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_user();
 
-        $roleid = $this->getDataGenerator()->create_role(['archetype' => 'manager']);
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id);
         role_assign($roleid, $user->id, \context_course::instance($course->id)->id);
 
         $this->setUser($user);
@@ -175,9 +178,15 @@ final class access_test extends \advanced_testcase {
     }
 
     /**
-     * The manager archetype carries all three by default.
+     * Moodle's own manager role grants nothing here, at any level.
+     *
+     * This test used to assert the opposite: "the manager archetype carries all
+     * three by default". It was rewritten rather than deleted, because that
+     * default was the problem. It meant the natural way to make somebody a
+     * Report LMS manager was to hand them Moodle's manager role, and that role
+     * carries 656 capabilities including moodle/user:delete.
      */
-    public function test_the_manager_role_can_view(): void {
+    public function test_moodles_manager_role_grants_nothing_at_system_level(): void {
         global $DB;
 
         $user = $this->getDataGenerator()->create_user();
@@ -186,7 +195,9 @@ final class access_test extends \advanced_testcase {
         role_assign($role->id, $user->id, \context_system::instance()->id);
         $this->setUser($user);
 
-        $this->assertTrue(access::can_view());
+        $this->assertFalse(access::can_view());
+        $this->assertFalse(access::can_view_all());
+        $this->assertFalse(access::can_manage());
     }
 
     /**
@@ -251,5 +262,65 @@ final class access_test extends \advanced_testcase {
         access::require_scope('');
 
         $this->assertTrue(access::can_view_all());
+    }
+
+    /**
+     * The archetype defaults are gone, and that is asserted rather than
+     * assumed. They came off because Moodle's manager role carries 656
+     * capabilities including moodle/user:delete, so defaulting to it told every
+     * customer that making somebody a Report LMS manager meant handing them the
+     * ability to delete the course and the people in it.
+     */
+    public function test_the_manager_archetype_grants_nothing_by_default(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        $roleid = $this->getDataGenerator()->create_role(['archetype' => 'manager']);
+        role_assign($roleid, $user->id, \context_course::instance($course->id)->id);
+
+        $this->setUser($user);
+
+        $this->assertFalse(access::can_view());
+        $this->assertFalse(access::can_view_all());
+        $this->assertFalse(access::can_manage());
+    }
+
+    /**
+     * :manage opens the editor and shows its holder nobody's numbers.
+     *
+     * Somebody who may state a fact about the organisation is not thereby
+     * entitled to read the consequences of it. That is what lets a training
+     * coordinator maintain the tree without being given sight of everybody's
+     * progress.
+     */
+    public function test_manage_opens_the_editor_and_no_data(): void {
+        $user = $this->getDataGenerator()->create_user();
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::MANAGE, CAP_ALLOW, $roleid, \context_system::instance()->id);
+        role_assign($roleid, $user->id, \context_system::instance()->id);
+
+        $this->setUser($user);
+
+        $this->assertTrue(access::can_manage());
+        $this->assertFalse(access::can_view());
+        $this->assertFalse(access::can_view_all());
+    }
+
+    /**
+     * And the other way round: a manager reads, and does not rewrite the tree.
+     */
+    public function test_a_manager_may_not_edit_the_mapping(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id);
+        role_assign($roleid, $user->id, \context_course::instance($course->id)->id);
+
+        $this->setUser($user);
+
+        $this->assertTrue(access::can_view());
+        $this->assertFalse(access::can_manage());
     }
 }

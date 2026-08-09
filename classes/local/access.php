@@ -37,12 +37,16 @@ namespace local_reportlms\local;
  * answers the first. What a viewer may then see is decided by
  * {@see manager_resolver}, carried in the launch token's scope, and enforced by
  * the SaaS on every query.
+ *
+ * :view answers both halves now: holding it on a course makes you that course's
+ * reporting manager and lets you in. :manage answers neither, and opens the
+ * editor instead. See db/access.php for why they were split that way.
  */
 class access {
-    /** @var string Opens the report at all. */
+    /** @var string Names the holder the reporting manager of their courses' participants, and opens the report. */
     public const VIEW = 'local/reportlms:view';
 
-    /** @var string Names the holder the direct manager of their courses' participants. */
+    /** @var string Opens the mapping editor. Shows the holder nobody's data. */
     public const MANAGE = 'local/reportlms:manage';
 
     /** @var string Lifts the scope to the whole organisation. */
@@ -137,6 +141,27 @@ class access {
         }
 
         return false;
+    }
+
+    /**
+     * Stop unless the current user may edit the organisation mapping.
+     *
+     * System context only: the editor edits the whole tree, so there is no
+     * smaller place this could sensibly be held.
+     *
+     * @return void
+     */
+    public static function require_manage(): void {
+        require_capability(self::MANAGE, \context_system::instance());
+    }
+
+    /**
+     * The same question, asked rather than enforced.
+     *
+     * @return bool
+     */
+    public static function can_manage(): bool {
+        return has_capability(self::MANAGE, \context_system::instance());
     }
 
     /**

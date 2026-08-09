@@ -146,5 +146,64 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026080613, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026081000) {
+        /*
+         * :view becomes the capability that makes somebody a manager, and
+         * :manage becomes the one that edits the mapping.
+         *
+         * Order is the whole of this step. Grant first, revoke second: a role
+         * that currently allows :manage belongs to somebody who is a manager
+         * today, and they must still be one when this finishes. Revoking first
+         * would take their access away for however long the rest of the upgrade
+         * runs, and a failure in between would leave it gone.
+         *
+         * Then :manage is removed from those same roles. Its old holders were
+         * managers, not mapping editors, and letting them silently become
+         * mapping editors is exactly the quiet widening this change exists to
+         * stop. Anyone who should edit the tree gets :manage granted on
+         * purpose, once, by somebody who meant it.
+         *
+         * Untouched on purpose: a role that already allows :view keeps it, and
+         * one that explicitly prevents or prohibits either capability keeps
+         * that too. This only ever adds an allow that mirrors an existing one.
+         */
+        $systemcontext = \context_system::instance();
+
+        $holders = $DB->get_records('role_capabilities', [
+            'capability' => 'local/reportlms:manage',
+            'permission' => CAP_ALLOW,
+        ]);
+
+        foreach ($holders as $row) {
+            $existing = $DB->get_record('role_capabilities', [
+                'roleid' => $row->roleid,
+                'capability' => 'local/reportlms:view',
+                'contextid' => $row->contextid,
+            ]);
+
+            // Never overwrite a deliberate prevent or prohibit.
+            if (!$existing) {
+                assign_capability(
+                    'local/reportlms:view',
+                    CAP_ALLOW,
+                    $row->roleid,
+                    $row->contextid
+                );
+            }
+        }
+
+        foreach ($holders as $row) {
+            unassign_capability('local/reportlms:manage', $row->roleid, $row->contextid);
+        }
+
+        if ($holders) {
+            mtrace('Report LMS: moved ' . count($holders) . ' role(s) from :manage to :view.');
+        }
+
+        unset($systemcontext);
+
+        upgrade_plugin_savepoint(true, 2026081000, 'local', 'reportlms');
+    }
+
     return true;
 }

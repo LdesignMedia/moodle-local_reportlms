@@ -26,55 +26,75 @@
 defined('MOODLE_INTERNAL') || die();
 
 /*
- * Three capabilities, and the split between them is the whole access model.
+ * Three capabilities, and each one now does exactly one job.
  *
- * :view decides whether you may open the report at all. :manage decides whose
- * numbers you see once you are in, by naming you the direct manager of the
- * people in the courses you hold it on. :viewall lifts that scope to the whole
- * organisation.
+ * :view    you are the reporting manager of the participants of these courses,
+ *          and you see their report.
+ * :manage  you may define who manages whom, in the mapping editor. It shows you
+ *          nobody's data by itself.
+ * :viewall you see the whole organisation and manage nobody. HR, auditors.
+ *
+ * :view used to mean only "may open the page", with :manage deciding whose
+ * numbers you saw. Two capabilities that had to be granted together were not
+ * two capabilities, they were one with a trap: granting :view alone put a
+ * manager in front of an empty dashboard with nothing on screen to explain why.
  *
  * Site administrators are absent on purpose: Moodle short-circuits every
  * capability check for them, so listing them would be decoration.
  *
- * The manager archetype is granted :view and :manage by default, and
- * deliberately NOT :viewall. editingteacher is left out of all three rather
- * than forgotten: whether a teacher should see their own course's people is
- * still open, and a site that wants it can grant it from the role editor
- * without waiting for a release.
+ * NO ARCHETYPE DEFAULTS, on any of the three, and that is the important line in
+ * this file. They used to default to the manager archetype, which quietly told
+ * every customer that the way to make somebody a Report LMS manager was to hand
+ * them Moodle's manager role. That role carries 656 capabilities, including
+ * moodle/user:delete and moodle/course:delete. Somebody whose job is "did my
+ * team finish their training" could delete the course and the people in it.
+ *
+ * Nothing is created to replace it either. There are two ways in: an
+ * administrator grants :view to a role of their own making, or somebody is
+ * named as a manager in the editor, which grants the same sight without any
+ * role assignment at all. See docs/plan-access-and-mapping.md.
  */
 $capabilities = [
 
-    // Open the report page, the people list and the export. Says nothing about
-    // whose data you then see; that is :manage and :viewall below.
-    'local/reportlms:view' => [
-        'captype' => 'read',
-        'contextlevel' => CONTEXT_SYSTEM,
-        'archetypes' => [
-            'manager' => CAP_ALLOW,
-        ],
-    ],
-
     /*
-     * Marks the holder as the direct manager of the participants of the courses
-     * this is held on, and nothing else. It opens no page of its own.
+     * Names the holder the reporting manager of the participants of the courses
+     * this is held on, and opens the report scoped to them.
      *
-     * Context inheritance is the point: granted in a category it covers every
-     * course beneath it, and granted at system level it reaches every course on
-     * the site and therefore every department, which is the same place
-     * :viewall arrives at. That is left alone rather than capped, because
-     * capping a system grant would contradict how contexts behave everywhere
-     * else in Moodle.
+     * CONTEXT_COURSE rather than CONTEXT_SYSTEM, so it is assignable at a
+     * course, a category or the system and Moodle's own inheritance does the
+     * rest. A category grant covers every course beneath it, which is the shape
+     * a real department manager actually has. Declared at system level it could
+     * only be granted site-wide, which is the one shape almost nobody wants.
      *
      * RISK_PERSONAL: holding this makes other people's training progress
      * visible, which is exactly the staff-monitoring surface.
      */
-    'local/reportlms:manage' => [
+    'local/reportlms:view' => [
         'riskbitmask' => RISK_PERSONAL,
         'captype' => 'read',
         'contextlevel' => CONTEXT_COURSE,
-        'archetypes' => [
-            'manager' => CAP_ALLOW,
-        ],
+        'archetypes' => [],
+    ],
+
+    /*
+     * Opens the mapping editor, and nothing else.
+     *
+     * This is the authority to say who manages whom. It shows the holder no
+     * learner's numbers: a person who may state a fact about the organisation
+     * is not thereby entitled to read the consequences of it, and keeping the
+     * two apart is what lets a training coordinator maintain the tree without
+     * being given sight of everybody's progress.
+     *
+     * CONTEXT_SYSTEM, because the editor edits the whole tree.
+     *
+     * RISK_PERSONAL: naming somebody a manager grants them sight of other
+     * people's progress, so this is the capability that hands that out.
+     */
+    'local/reportlms:manage' => [
+        'riskbitmask' => RISK_PERSONAL,
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => [],
     ],
 
     /*
