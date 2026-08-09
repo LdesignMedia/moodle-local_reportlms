@@ -26,6 +26,7 @@
 namespace local_reportlms;
 
 use local_reportlms\local\access;
+use local_reportlms\local\manager_resolver;
 
 /**
  * @covers \local_reportlms\local\access
@@ -34,6 +35,15 @@ final class access_test extends \advanced_testcase {
     protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
+
+        // The coding key. Every node code is an HMAC against it, so the tests
+        // that ask what a viewer may resolve cannot mint a code without one.
+        set_config('salt', 'salt-for-unit-tests', 'local_reportlms');
+
+        // resetAfterTest() rolls back the database and leaves static properties
+        // alone, so without this the second test in this class resolves the
+        // first test's managers against a database where they no longer exist.
+        manager_resolver::reset();
     }
 
     public function test_an_ordinary_user_may_not_open_the_report(): void {
@@ -322,5 +332,161 @@ final class access_test extends \advanced_testcase {
 
         $this->assertTrue(access::can_view());
         $this->assertFalse(access::can_manage());
+    }
+
+    /**
+     * A manager may name their own department, and not the one next door.
+     *
+     * The live gap this closes: the label service resolved any code for anybody
+     * who could open the report, so a manager of one department could ask it
+     * about every other department on the site and be told what each is called.
+     */
+    public function test_a_manager_may_not_resolve_another_departments_name(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->set_department($manager->id, 'Rotterdam');
+        $this->set_department($learner->id, 'Utrecht');
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
+        role_assign($roleid, $manager->id, \context_course::instance($course->id)->id);
+
+        $mine = \local_reportlms\local\pseudonym::node('department', 'Rotterdam');
+        $theirs = \local_reportlms\local\pseudonym::node('department', 'Elders');
+
+        $this->setUser($manager);
+
+        $visible = access::visible_codes([$mine, $theirs]);
+
+        $this->assertContains($mine, $visible);
+        $this->assertNotContains($theirs, $visible);
+    }
+
+    /**
+     * The sector above their department comes with it, because a picker that
+     * cannot name the parent is broken.
+     */
+    public function test_the_sector_above_their_own_node_resolves(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->set_department($manager->id, 'Rotterdam');
+        $this->set_sector($manager->id, 'Operations');
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
+        role_assign($roleid, $manager->id, \context_course::instance($course->id)->id);
+
+        $sector = \local_reportlms\local\pseudonym::node('sector', 'Operations');
+
+        $this->setUser($manager);
+
+        $this->assertContains($sector, access::visible_codes([$sector]));
+    }
+
+    /**
+     * An unscoped viewer keeps naming everything, which is what viewall means.
+     */
+    public function test_viewall_resolves_anything(): void {
+        $user = $this->getDataGenerator()->create_user();
+        $context = \context_system::instance();
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, $context->id, true);
+        assign_capability(access::VIEWALL, CAP_ALLOW, $roleid, $context->id, true);
+        role_assign($roleid, $user->id, $context->id);
+
+        $this->setUser($user);
+
+        $codes = [
+            \local_reportlms\local\pseudonym::node('department', 'Anywhere'),
+            \local_reportlms\local\pseudonym::node('department', 'Elsewhere'),
+        ];
+
+        $this->assertSame($codes, access::visible_codes($codes));
+    }
+
+    /**
+     * A viewer who manages nobody names nothing, rather than everything.
+     */
+    public function test_a_viewer_with_no_scope_resolves_nothing(): void {
+        $user = $this->getDataGenerator()->create_user();
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
+        role_assign($roleid, $user->id, \context_system::instance()->id);
+
+        $this->setUser($user);
+
+        $this->assertSame([], access::visible_codes([
+            \local_reportlms\local\pseudonym::node('department', 'Anywhere'),
+        ]));
+    }
+
+    /**
+     * @param int $userid
+     * @param string $value
+     */
+    private function set_department(int $userid, string $value): void {
+        $this->set_profile_field($userid, 'department', $value);
+    }
+
+    /**
+     * @param int $userid
+     * @param string $value
+     */
+    private function set_sector(int $userid, string $value): void {
+        $this->set_profile_field($userid, 'sector', $value);
+    }
+
+    /**
+     * @param int $userid
+     * @param string $level
+     * @param string $value
+     */
+    private function set_profile_field(int $userid, string $level, string $value): void {
+        global $DB;
+
+        $shortname = \local_reportlms\local\collector\org::fieldmap()[$level];
+        $field = $DB->get_record('user_info_field', ['shortname' => $shortname]);
+
+        if (!$field) {
+            // A full row, not a partial one. Moodle reads param1 and param2 for
+            // a text field and a half-built record resolves to nothing, which
+            // looks exactly like a user who has no department.
+            $categoryid = $DB->insert_record('user_info_category', (object) [
+                'name' => 'Report LMS ' . $shortname,
+                'sortorder' => 1,
+            ]);
+
+            $id = $DB->insert_record('user_info_field', (object) [
+                'shortname' => $shortname,
+                'name' => $shortname,
+                'categoryid' => $categoryid,
+                'datatype' => 'text',
+                'sortorder' => 1,
+                'required' => 0,
+                'locked' => 0,
+                'visible' => 2,
+                'forceunique' => 0,
+                'signup' => 0,
+                'param1' => 30,
+                'param2' => 2048,
+            ]);
+
+            $field = $DB->get_record('user_info_field', ['id' => $id]);
+        }
+
+        $DB->insert_record('user_info_data', (object) [
+            'userid' => $userid,
+            'fieldid' => $field->id,
+            'data' => $value,
+            'dataformat' => 0,
+        ]);
     }
 }

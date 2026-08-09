@@ -198,6 +198,50 @@ class launch {
     }
 
     /**
+     * The coded nodes this viewer may have named, scope plus its ancestors.
+     *
+     * Kept apart from {@see viewer_scope}, which is what rides the token and
+     * decides which cells the SaaS will serve. This is a wider and weaker
+     * thing: which codes the label service will translate. A manager is served
+     * their own department's numbers and no other, and is told the name of the
+     * sector above it, because a department drawn under an unnamed parent is a
+     * picker nobody can use.
+     *
+     * Derived from the manager record rather than by walking the label map,
+     * because the map holds the tree as it currently stands and a manager whose
+     * own department has no members yet is simply absent from it. A viewer must
+     * not lose the ability to name their own department because nobody has
+     * been put in it.
+     *
+     * @return array<int, string>|null Null for a viewer who manages nothing.
+     */
+    public static function viewer_nameable(): ?array {
+        global $USER;
+
+        $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
+
+        if (!$manager || !$manager->departments) {
+            return null;
+        }
+
+        $sector = self::sector_of($manager->userid);
+        $codes = [];
+
+        foreach ($manager->departments as $department) {
+            $codes[] = pseudonym::node(
+                'department',
+                ($sector !== null ? $sector . '/' : '') . $department
+            );
+        }
+
+        if ($sector !== null) {
+            $codes[] = pseudonym::node('sector', $sector);
+        }
+
+        return array_values(array_unique($codes));
+    }
+
+    /**
      * The coded org nodes a manager may see.
      *
      * Built with the same key rule the org collector uses, because the SaaS

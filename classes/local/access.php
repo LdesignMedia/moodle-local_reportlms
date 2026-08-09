@@ -188,6 +188,52 @@ class access {
     }
 
     /**
+     * Narrow a list of coded ids to the ones this viewer may have named.
+     *
+     * The label service turns codes into department names, and until now it
+     * turned any code into any name for anybody who could open the report. A
+     * manager of one department could ask it about every other department on
+     * the site and be told what they are called. Small, because a department
+     * name is not somebody's salary, and real, because the whole promise is
+     * that a manager sees their own people and nothing else.
+     *
+     * It matters more than it did. Once learner names resolve through the same
+     * service, "any code" stops meaning "any department" and starts meaning
+     * "any employee", so the filter has to exist before that arrives rather
+     * than alongside it.
+     *
+     * What a scoped viewer may name:
+     *
+     * - the nodes in their own scope
+     * - the sector above them, because a department drawn under an unnamed
+     *   parent is a picker nobody can use
+     * - functions, which are job titles rather than org units, are offered as
+     *   a filter to every viewer, and describe nobody in particular
+     *
+     * @param array<int, string> $codes
+     *
+     * @return array<int, string> The subset that may be resolved.
+     */
+    public static function visible_codes(array $codes): array {
+        if (self::can_view_all()) {
+            return $codes;
+        }
+
+        $nameable = launch::viewer_nameable();
+
+        if (!$nameable) {
+            return [];
+        }
+
+        $allowed = array_flip($nameable);
+        $map = label_map::all();
+
+        return array_values(array_filter($codes, static function (string $code) use ($allowed, $map): bool {
+            return isset($allowed[$code]) || (($map[$code]['kind'] ?? null) === 'function');
+        }));
+    }
+
+    /**
      * Stop unless the current user's scope covers this selection.
      *
      * The dashboard's filters are already narrowed and the SaaS refuses a cell

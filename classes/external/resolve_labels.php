@@ -26,18 +26,15 @@
 namespace local_reportlms\external;
 
 use context_system;
-use external_api;
-use external_function_parameters;
-use external_multiple_structure;
-use external_single_structure;
-use external_value;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
+use core_external\external_value;
 use local_reportlms\local\access;
 use local_reportlms\local\label_map;
 
 defined('MOODLE_INTERNAL') || die();
-
-global $CFG;
-require_once($CFG->libdir . '/externallib.php');
 
 /**
  * Resolve org node and function codes to the names this site holds for them.
@@ -84,6 +81,12 @@ class resolve_labels extends external_api {
         access::require_view();
 
         $wanted = array_slice(array_values(array_unique($params['codes'])), 0, self::MAX_CODES);
+
+        // Narrowed to what this viewer may have named. A code outside their
+        // scope is dropped rather than refused: the frame asks about whatever
+        // is on screen, and one unresolvable code should leave that code
+        // showing rather than fail the request and blank the page.
+        $wanted = access::visible_codes($wanted);
 
         $labels = [];
 
