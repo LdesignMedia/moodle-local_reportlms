@@ -101,9 +101,7 @@ if ($action !== '' && confirm_sesskey()) {
 
 $nodes = mapping::nodes();
 $membership = mapping::membership();
-// The menu form: id to display name, as strings. role_fix_names() with a
-// fourth argument of true returns exactly that, so nothing here has an ->id or
-// an ->localname to read.
+
 $roles = role_fix_names(get_all_roles(), $context, ROLENAME_ORIGINAL, true);
 
 echo $OUTPUT->header();
@@ -251,19 +249,10 @@ if ($nodes) {
 
     $roleoptions = [0 => get_string('manage:norole', 'local_reportlms')] + $roles;
 
-    echo html_writer::start_tag('form', ['method' => 'post', 'action' => $pageurl->out(false), 'class' => 'mb-4']);
-    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
-    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'addmanager']);
-    echo html_writer::select($unitoptions, 'nodeid', '', false, ['class' => 'form-select d-inline-block w-auto me-2']);
-    echo html_writer::empty_tag('input', [
-        'type' => 'number',
-        'name' => 'userid',
-        'placeholder' => get_string('manage:userid', 'local_reportlms'),
-        'class' => 'form-control d-inline-block w-auto me-2',
-    ]);
-    echo html_writer::select($roleoptions, 'roleid', 0, false, ['class' => 'form-select d-inline-block w-auto me-2']);
-    echo html_writer::tag('button', get_string('add'), ['type' => 'submit', 'class' => 'btn btn-primary']);
-    echo html_writer::end_tag('form');
+    (new \local_reportlms\form\name_manager($pageurl->out(false), [
+        'units' => $unitoptions,
+        'roles' => $roleoptions,
+    ]))->display();
 }
 
 // -------------------------------------------------------------- people ----
@@ -307,19 +296,7 @@ if ($nodes) {
         $unitoptions[$node->id] = $node->name;
     }
 
-    echo html_writer::start_tag('form', ['method' => 'post', 'action' => $pageurl->out(false)]);
-    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
-    echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'place']);
-    echo html_writer::empty_tag('input', [
-        'type' => 'number',
-        'name' => 'userid',
-        'required' => 'required',
-        'placeholder' => get_string('manage:userid', 'local_reportlms'),
-        'class' => 'form-control d-inline-block w-auto me-2',
-    ]);
-    echo html_writer::select($unitoptions, 'nodeid', '', false, ['class' => 'form-select d-inline-block w-auto me-2']);
-    echo html_writer::tag('button', get_string('add'), ['type' => 'submit', 'class' => 'btn btn-primary']);
-    echo html_writer::end_tag('form');
+    (new \local_reportlms\form\place_person($pageurl->out(false), ['units' => $unitoptions]))->display();
 }
 
 echo $OUTPUT->footer();
