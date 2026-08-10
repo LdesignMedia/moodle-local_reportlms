@@ -161,16 +161,25 @@ class launch {
         // the two cases are kept apart above.
         $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
 
+        $named = self::named_nodes();
+
         return [
             'sub' => pseudonym::learner((int) $USER->id),
             'role' => 'department',
-            'scope' => $manager ? self::scope_of($manager) : [],
-            // The courses they manage, so the SaaS can refuse a cell for a
-            // training they have nothing to do with.
+            'scope' => $manager ? self::scope_of($manager) : $named,
+            /*
+             * The courses they manage, so the SaaS can refuse a cell for a
+             * training they have nothing to do with.
+             *
+             * Absent for somebody named only in the editor. Naming a manager
+             * says which people are theirs, not which trainings, and sending an
+             * empty list would read as "no courses at all" and serve them
+             * nothing. Their unit is the boundary, and it is already in scope.
+             */
             'courses' => $manager ? array_map(
                 static fn(int $courseid): string => pseudonym::course($courseid),
                 $manager->courseids
-            ) : [],
+            ) : null,
         ];
     }
 
@@ -189,7 +198,11 @@ class launch {
         $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
 
         if (!$manager) {
-            return null;
+            // Named in the editor without holding any capability, which is the
+            // route most customers will use.
+            $named = self::named_nodes();
+
+            return $named ?: null;
         }
 
         $nodes = self::scope_of($manager);
@@ -218,10 +231,13 @@ class launch {
     public static function viewer_nameable(): ?array {
         global $USER;
 
+        $named = self::named_nodes();
         $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
 
         if (!$manager || !$manager->departments) {
-            return null;
+            // Named in the editor and nothing else: their units, and the
+            // sectors above them so the picker can draw the tree.
+            return $named ?: null;
         }
 
         $sector = self::sector_of($manager->userid);
@@ -236,6 +252,48 @@ class launch {
 
         if ($sector !== null) {
             $codes[] = pseudonym::node('sector', $sector);
+        }
+
+        return array_values(array_unique(array_merge($codes, $named)));
+    }
+
+    /**
+     * The coded units this viewer was named the manager of, plus their parents.
+     *
+     * Kept apart from the profile-derived scope because the two arrive by
+     * different routes and either can be empty: somebody may be named in the
+     * editor without holding any capability, and somebody may hold :view on a
+     * course without appearing in the editor at all.
+     *
+     * @return array<int, string>
+     */
+    protected static function named_nodes(): array {
+        global $USER;
+
+        if (!isloggedin() || isguestuser()) {
+            return [];
+        }
+
+        $nodes = mapping::nodes();
+        $codes = [];
+
+        foreach (mapping::managed_nodes((int) $USER->id) as $nodeid) {
+            $key = mapping::nodekey($nodeid);
+
+            if ($key === null) {
+                continue;
+            }
+
+            [$level, $value] = explode(':', $key, 2);
+            $codes[] = pseudonym::node($level, $value);
+
+            // The sector above it, so a department is drawn under a named
+            // parent rather than under a hash.
+            $parentid = $nodes[$nodeid]->parentid ?? null;
+
+            if ($parentid !== null && isset($nodes[$parentid])) {
+                $codes[] = pseudonym::node('sector', $nodes[$parentid]->name);
+            }
         }
 
         return array_values(array_unique($codes));
@@ -254,16 +312,18 @@ class launch {
      * @return array<int, string>
      */
     protected static function scope_of(\stdClass $manager): array {
+        $named = self::named_nodes();
+
         if (!$manager->departments) {
-            return [];
+            return $named;
         }
 
         $department = reset($manager->departments);
         $sector = self::sector_of($manager->userid);
 
-        return [
+        return array_values(array_unique(array_merge([
             pseudonym::node('department', ($sector !== null ? $sector . '/' : '') . $department),
-        ];
+        ], $named)));
     }
 
     /**

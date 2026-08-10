@@ -26,7 +26,24 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'Report LMS';
-$string['privacy:metadata'] = 'The Report LMS plugin stores no personal data. It holds only the site connection settings.';
+$string['privacy:metadata:userstate'] = 'Which learners have changes not yet accepted by Report LMS, so an unchanged person is not sent again.';
+$string['privacy:metadata:userstate:userid'] = 'The learner this row tracks.';
+$string['privacy:metadata:userstate:timechanged'] = 'When a change was last noticed.';
+$string['privacy:metadata:userstate:timepushed'] = 'When Report LMS last confirmed this learner.';
+$string['privacy:metadata:member'] = 'Which part of the organisation somebody was placed in by hand.';
+$string['privacy:metadata:member:userid'] = 'The person placed.';
+$string['privacy:metadata:member:nodeid'] = 'The unit they were placed in.';
+$string['privacy:metadata:member:source'] = 'Whether a person typed this in or it was worked out automatically.';
+$string['privacy:metadata:manager'] = 'Who was named as the manager of a part of the organisation.';
+$string['privacy:metadata:manager:userid'] = 'The person named.';
+$string['privacy:metadata:manager:nodeid'] = 'The unit they manage.';
+$string['privacy:metadata:reportlms'] = 'Training results are sent to Report LMS. No name, e-mail address or free text is ever sent: people, courses, activities and organisation units are replaced with coded identifiers before they leave this site, using a key that stays here. Names are shown on the dashboard by this site answering the browser directly, never by Report LMS holding them.';
+$string['privacy:metadata:reportlms:learner_pid'] = 'A coded identifier standing for one learner.';
+$string['privacy:metadata:reportlms:course_ref'] = 'A coded identifier standing for one course.';
+$string['privacy:metadata:reportlms:status'] = 'Whether a course was completed, is in progress, or has not been started.';
+$string['privacy:metadata:reportlms:grade'] = 'The grade on the main test of the course, as a percentage.';
+$string['privacy:metadata:reportlms:attempts'] = 'How many attempts were taken at that test.';
+$string['privacy:metadata:reportlms:node_id'] = 'A coded identifier standing for a sector or department.';
 
 // Connect flow.
 $string['connect:button'] = 'Connect to Report LMS';
@@ -42,6 +59,37 @@ $string['connect:statusdisconnected'] = 'Not connected';
 $string['settings:managerfallback'] = 'Name a group after its manager when no department is set';
 $string['settings:managerfallback_desc'] = 'A manager with the Report LMS manage permission but no department on their own profile normally places nobody, and their people fall back to their own department or to Unassigned. Turn this on to put them in a group named after that manager instead, so they stay visible. A group named after a person is not a department, so leave this off unless that reads as the truth on your site.';
 $string['label:managerteam'] = '{$a} (no department set)';
+
+// The mapping editor, where somebody types the organisation in by hand.
+$string['manage:open'] = 'Open the organisation editor';
+$string['manage:title'] = 'Report LMS: organisation';
+$string['manage:intro'] = 'The company tree is worked out from profile fields and course participation. Where that gets it wrong, or where your profile fields do not describe your organisation at all, type it in here. Anything set here wins over what is worked out automatically.';
+$string['manage:units'] = 'Units';
+$string['manage:unit'] = 'Unit';
+$string['manage:unitname'] = 'Name';
+$string['manage:kind'] = 'Level';
+$string['manage:kind:sector'] = 'Sector';
+$string['manage:kind:department'] = 'Department';
+$string['manage:parent'] = 'Sector above it';
+$string['manage:nosector'] = 'No sector above it';
+$string['manage:people'] = 'People';
+$string['manage:nounits'] = 'No units have been typed in. The tree is entirely worked out from profile fields.';
+$string['manage:managers'] = 'Managers';
+$string['manage:managers_help'] = 'Naming somebody here gives them the report for that unit. No role assignment and no capability to grant. Naming a role instead means everybody holding it manages the unit, which saves editing this list every time somebody joins or leaves.';
+$string['manage:manager'] = 'Manager';
+$string['manage:route'] = 'How';
+$string['manage:route:named'] = 'Named here';
+$string['manage:route:capability'] = 'Holds the capability';
+$string['manage:everyoneholding'] = 'Everyone holding {$a}';
+$string['manage:goneuser'] = 'A user who no longer exists';
+$string['manage:nomanagers'] = 'Nobody manages anything yet, so nobody but an administrator sees a report.';
+$string['manage:norole'] = 'One person, not a role';
+$string['manage:userid'] = 'User id';
+$string['manage:placed'] = 'People placed by hand';
+$string['manage:placed_help'] = 'These people stay where you put them. Their profile field is ignored, so a later HR upload cannot move them. Release somebody to hand them back to the automatic tree, which may not put them back where they were.';
+$string['manage:person'] = 'Person';
+$string['manage:release'] = 'Back to automatic';
+$string['manage:noplaced'] = 'Nobody has been placed by hand.';
 
 $string['warn:heading'] = 'Worth checking in your organisation structure:';
 $string['warn:unplaceable'] = '{$a} managers hold the Report LMS manage permission but have no department set on their own profile, so they place nobody.';

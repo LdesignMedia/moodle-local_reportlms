@@ -123,6 +123,26 @@ class access {
             return true;
         }
 
+        /*
+         * Named in the mapping editor, which is the other way in.
+         *
+         * Being a manager is data rather than a permission: somebody said "Tom
+         * runs Sloterdijk Groep E" in the editor, and that statement is what
+         * opens the report for Tom. No role assignment, nothing for the
+         * customer to wire up, and no capability for a training coordinator to
+         * learn about.
+         *
+         * Only :view. Naming somebody a manager says whose numbers they see,
+         * not that they may rewrite the organisation, and :manage is the
+         * capability that hands the second one out.
+         */
+        if ($capability === self::VIEW
+                && isloggedin()
+                && !isguestuser()
+                && mapping::managed_nodes((int) $USER->id) !== []) {
+            return true;
+        }
+
         if (!isloggedin() || isguestuser()) {
             return false;
         }

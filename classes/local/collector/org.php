@@ -26,6 +26,8 @@
 
 namespace local_reportlms\local\collector;
 
+use local_reportlms\local\mapping;
+
 /**
  * The org section: the company tree, memberships and learner attributes.
  *
@@ -107,6 +109,35 @@ class org {
      *         managers empty for now
      *         attrs    list of {userid, auth, active, function (value|null)}
      */
+    /**
+     * Declare a hand-built node, and the sector above it if there is one.
+     *
+     * @param string $key As {@see mapping::nodekey} produced it.
+     * @param array<string, \stdClass> $nodes Tree so far, added to by reference.
+     *
+     * @return \stdClass
+     */
+    protected static function manual_node(string $key, array &$nodes): \stdClass {
+        if (strpos($key, 'sector:') === 0) {
+            return (object) ['key' => $key, 'parent' => null, 'kind' => 'sector'];
+        }
+
+        $value = substr($key, strlen('department:'));
+        $slash = strpos($value, '/');
+
+        if ($slash === false) {
+            return (object) ['key' => $key, 'parent' => null, 'kind' => 'department'];
+        }
+
+        $sectorkey = 'sector:' . substr($value, 0, $slash);
+
+        if (!isset($nodes[$sectorkey])) {
+            $nodes[$sectorkey] = (object) ['key' => $sectorkey, 'parent' => null, 'kind' => 'sector'];
+        }
+
+        return (object) ['key' => $key, 'parent' => $sectorkey, 'kind' => 'department'];
+    }
+
     public static function collect(): \stdClass {
         global $DB;
 
@@ -121,6 +152,9 @@ class org {
              LEFT JOIN {user_info_field} f ON f.id = d.fieldid AND f.shortname {$fieldsql}
                  WHERE u.deleted = 0 AND u.id > 2
               ORDER BY u.id";
+
+        // Read once: the loop asks about every user on the site.
+        $manual = mapping::membership();
 
         $users = [];
         foreach ($DB->get_recordset_sql($sql, $fieldparams) as $row) {
@@ -178,8 +212,26 @@ class org {
                 }
             }
 
-            // Membership: the most specific node the person maps to.
-            $nodekey = $deptkey ?? $sectorkey ?? self::UNASSIGNED;
+            /*
+             * Membership, in order of authority.
+             *
+             * A row somebody typed in the mapping editor beats everything: it
+             * is a statement of fact about the organisation, where a profile
+             * field is a guess derived from an HR export. Then the manager's
+             * department, then the person's own, then Unassigned.
+             *
+             * The manual node is added to the tree here rather than assumed to
+             * exist, because a hand-built unit with one member and no profile
+             * field anywhere would otherwise be a membership pointing at a node
+             * nobody declared.
+             */
+            $manualkey = isset($manual[$uid]) ? mapping::nodekey((int) $manual[$uid]) : null;
+
+            if ($manualkey !== null && !isset($nodes[$manualkey])) {
+                $nodes[$manualkey] = self::manual_node($manualkey, $nodes);
+            }
+
+            $nodekey = $manualkey ?? $deptkey ?? $sectorkey ?? self::UNASSIGNED;
             $members[] = (object) ['userid' => $uid, 'nodekey' => $nodekey];
 
             // A manager manages the node their own department resolves to, so

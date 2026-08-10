@@ -227,6 +227,19 @@ if ($hassiteconfig) {
                 PARAM_PATH
             ));
 
+            // The editor lives on its own page rather than in settings: it
+            // edits data, not configuration, and its own capability decides who
+            // may open it.
+            $settings->add(new admin_setting_description(
+                'local_reportlms/manageorg',
+                get_string('manage:title', 'local_reportlms'),
+                html_writer::link(
+                    new moodle_url('/local/reportlms/view/manage.php'),
+                    get_string('manage:open', 'local_reportlms'),
+                    ['class' => 'btn btn-secondary']
+                )
+            ));
+
             $settings->add(new admin_setting_configcheckbox(
                 'local_reportlms/managerfallback',
                 get_string('settings:managerfallback', 'local_reportlms'),

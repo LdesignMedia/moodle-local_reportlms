@@ -205,5 +205,30 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026081000, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026081006) {
+        /*
+         * The hand-built organisation: units, who is in them, who runs them.
+         *
+         * install.xml only runs on a fresh install, so an upgrading site needs
+         * the tables created here as well. Guarded on each one existing rather
+         * than on the version alone, because a site that installed at exactly
+         * this version already has them.
+         */
+        $dbman = $DB->get_manager();
+
+        foreach (['local_reportlms_node', 'local_reportlms_member', 'local_reportlms_manager'] as $tablename) {
+            $table = new xmldb_table($tablename);
+
+            if (!$dbman->table_exists($table)) {
+                $dbman->install_one_table_from_xmldb_file(
+                    __DIR__ . '/install.xml',
+                    $tablename
+                );
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026081006, 'local', 'reportlms');
+    }
+
     return true;
 }
