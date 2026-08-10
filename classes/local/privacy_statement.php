@@ -125,6 +125,51 @@ class privacy_statement {
     }
 
     /**
+     * Tell Report LMS what this site already recorded, if it has not managed to.
+     *
+     * The gap this closes, and the setup steps walk everybody straight into it.
+     * Step two is read the statement, step three is connect, so the ordinary
+     * order is to acknowledge on a site with no API key. {@see report} has
+     * nobody to tell at that point and returns false, and nothing ever tried
+     * again: the site connected, pushed happily, and its report page stayed on
+     * the setup steps forever, because that page asks whether Report LMS knows
+     * rather than whether this site recorded it.
+     *
+     * Safe to call whenever a connection exists or has just been made. It does
+     * nothing on a site that never acknowledged, and nothing on one already
+     * synced.
+     *
+     * @return bool Whether Report LMS now knows.
+     */
+    public static function sync(): bool {
+        if (!self::acknowledged()) {
+            return false;
+        }
+
+        if ((int) get_config('local_reportlms', self::SYNCED) > 0) {
+            return true;
+        }
+
+        return self::report(self::acknowledged_at());
+    }
+
+    /**
+     * Record that Report LMS accepted a batch carrying the acknowledgement.
+     *
+     * The push envelope carries privacy_acknowledged_at, and Report LMS refuses
+     * a batch from a site that has not read the statement. So an accepted batch
+     * is proof it knows, and better proof than the acknowledge endpoint, which
+     * can fail on its own while the pushes keep working.
+     *
+     * @return void
+     */
+    public static function accepted_in_push(): void {
+        if (self::acknowledged() && (int) get_config('local_reportlms', self::SYNCED) === 0) {
+            set_config(self::SYNCED, 1, 'local_reportlms');
+        }
+    }
+
+    /**
      * Tell Report LMS, on its own endpoint.
      *
      * Not carried on the next push: the push is precisely what this unblocks,

@@ -184,6 +184,10 @@ class push_batch extends \core\task\scheduled_task {
 
             userstate::clear($chunk->userids);
 
+            // Report LMS refuses a batch from a site that has not read the
+            // statement, so an accepted one is proof it knows.
+            \local_reportlms\local\privacy_statement::accepted_in_push();
+
             // The first chunk carried the org tree; remember what the SaaS
             // now holds so unchanged trees are omitted from later pushes.
             if (isset($chunk->payload['org'])) {

@@ -127,6 +127,12 @@ class connect_manager {
             set_config('saltepoch', 1, 'local_reportlms');
         }
 
+        // Now that there is an API key, tell Report LMS about a statement that
+        // was read before there was anybody to tell. The setup steps put
+        // reading it at step two and connecting at step three, so this is the
+        // ordinary order rather than an edge case.
+        privacy_statement::sync();
+
         // The first push after connect is a full backfill, per the contract.
         // Flag every reportable learner now; the scheduled push task works
         // through them in chunks. This also covers a reconnect: if the
