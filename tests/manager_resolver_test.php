@@ -445,61 +445,6 @@ final class manager_resolver_test extends \advanced_testcase {
         $this->assertNotSame($before, org::state_hash(org::collect()));
     }
 
-    public function test_a_manager_may_drill_into_their_own_node_only(): void {
-        // The drill-through arrives as a plain URL, so editing the node in the
-        // address bar is the way round every filter. This is where that stops.
-        $course = $this->getDataGenerator()->create_course();
-        $manager = $this->getDataGenerator()->create_user();
-        $learner = $this->getDataGenerator()->create_user();
-
-        $this->set_field($manager->id, 'department', 'Rotterdam');
-        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
-        $this->make_manager($manager->id, \context_course::instance($course->id));
-
-        $this->setUser($manager);
-
-        $mine = \local_reportlms\local\pseudonym::node('department', 'Rotterdam');
-        $theirs = \local_reportlms\local\pseudonym::node('department', 'Utrecht');
-
-        // Their own node is fine, and asserting no exception is the point.
-        access::require_scope($mine);
-        $this->assertTrue(true);
-
-        $this->expectException(\moodle_exception::class);
-        access::require_scope($theirs);
-    }
-
-    public function test_an_unfiltered_drill_through_is_refused_for_a_manager(): void {
-        // No node at all would list every department on the site.
-        $course = $this->getDataGenerator()->create_course();
-        $manager = $this->getDataGenerator()->create_user();
-
-        $this->set_field($manager->id, 'department', 'Rotterdam');
-        $this->getDataGenerator()->enrol_user(
-            $this->getDataGenerator()->create_user()->id, $course->id);
-        $this->make_manager($manager->id, \context_course::instance($course->id));
-
-        $this->setUser($manager);
-
-        $this->expectException(\moodle_exception::class);
-        access::require_scope('');
-    }
-
-    public function test_viewall_drills_anywhere(): void {
-        $viewer = $this->getDataGenerator()->create_user();
-        $roleid = $this->getDataGenerator()->create_role();
-        assign_capability(access::VIEWALL, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
-        role_assign($roleid, $viewer->id, \context_system::instance()->id);
-        accesslib_clear_all_caches_for_unit_testing();
-
-        $this->setUser($viewer);
-
-        // Including with no node, which is the whole organisation.
-        access::require_scope('');
-        access::require_scope(\local_reportlms\local\pseudonym::node('department', 'Utrecht'));
-        $this->assertTrue(true);
-    }
-
     public function test_an_inherited_department_keeps_its_managers_sector(): void {
         // The bug this pins: inheriting the department but keeping your own
         // sector builds a node key that no real person carries, so label_map

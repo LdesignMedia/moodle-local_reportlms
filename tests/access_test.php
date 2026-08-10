@@ -232,49 +232,6 @@ final class access_test extends \advanced_testcase {
     }
 
     /**
-     * A viewer with no scope at all may drill into nothing.
-     *
-     * The drill-through arrives as a plain URL, so this is the only thing
-     * standing between somebody editing the address bar and another
-     * department's people, which is the one place the real names live.
-     */
-    public function test_a_viewer_with_no_scope_is_refused(): void {
-        $user = $this->getDataGenerator()->create_user();
-        $context = \context_system::instance();
-
-        $roleid = $this->getDataGenerator()->create_role();
-        assign_capability(access::VIEW, CAP_ALLOW, $roleid, $context->id, true);
-        role_assign($roleid, $user->id, $context->id);
-
-        $this->setUser($user);
-
-        $this->expectException(\moodle_exception::class);
-        access::require_scope('n_something');
-    }
-
-    /**
-     * :viewall drills anywhere, including with no node named.
-     */
-    public function test_viewall_may_drill_anywhere(): void {
-        $user = $this->getDataGenerator()->create_user();
-        $context = \context_system::instance();
-
-        $roleid = $this->getDataGenerator()->create_role();
-        assign_capability(access::VIEW, CAP_ALLOW, $roleid, $context->id, true);
-        assign_capability(access::VIEWALL, CAP_ALLOW, $roleid, $context->id, true);
-        role_assign($roleid, $user->id, $context->id);
-
-        $this->setUser($user);
-
-        // No exception is the assertion: an unscoped viewer has nothing to be
-        // refused for.
-        access::require_scope('n_anything_at_all');
-        access::require_scope('');
-
-        $this->assertTrue(access::can_view_all());
-    }
-
-    /**
      * The archetype defaults are gone, and that is asserted rather than
      * assumed. They came off because Moodle's manager role carries 656
      * capabilities including moodle/user:delete, so defaulting to it told every

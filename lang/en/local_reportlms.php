@@ -98,22 +98,6 @@ $string['label:unassigned'] = 'Unassigned';
 $string['cachedef_labels'] = 'Coded identifier to label map for the embedded dashboard';
 
 // The people behind a figure, and the export of them.
-$string['people:title'] = 'Report LMS: who is not finished';
-$string['people:notcompleted'] = 'Not yet completed';
-$string['people:scope'] = 'Showing: {$a}';
-$string['people:everyone'] = 'the whole organisation';
-$string['people:none'] = 'Nobody in this selection has an unfinished training.';
-$string['people:backtoreport'] = 'Back to the report';
-$string['people:export'] = 'Download as CSV';
-$string['people:truncated'] = 'Only the first {$a} rows are shown. Narrow the selection to see the rest.';
-$string['people:unresolved'] = 'Part of this selection no longer matches anything on this site, so the list below may be wider than the figure you clicked. It usually means a department, job title or course was renamed since the report was last updated.';
-$string['people:col:name'] = 'Name';
-$string['people:col:email'] = 'E-mail';
-$string['people:col:course'] = 'Training';
-$string['people:col:enrolled'] = 'Enrolled since';
-$string['people:col:status'] = 'Status';
-$string['people:status:notstarted'] = 'Not started';
-$string['people:status:inprogress'] = 'In progress';
 
 // Dashboard block.
 $string['block:title'] = 'Report LMS';
@@ -130,7 +114,6 @@ $string['task:reconcile'] = 'Report LMS: find learners changed outside the norma
 
 // Errors.
 $string['error:nohtmlblock'] = 'The HTML block is not available on this site, so the Dashboard block cannot be created.';
-$string['error:outsidescope'] = 'That part of the organisation is not yours to see.';
 $string['error:nosalt'] = 'This site has no Report LMS coding key yet. Reconnect from the Report LMS settings.';
 $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';

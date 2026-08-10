@@ -86,7 +86,6 @@ if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
     $PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
         config::origin(),
         '.local-reportlms-frame',
-        (new moodle_url('/local/reportlms/people.php'))->out(false),
     ]);
 
     echo $OUTPUT->footer();
@@ -181,7 +180,6 @@ echo html_writer::tag('iframe', '', [
 $PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
     config::origin(),
     '.local-reportlms-frame',
-    (new moodle_url('/local/reportlms/people.php'))->out(false),
 ]);
 
 echo $OUTPUT->footer();

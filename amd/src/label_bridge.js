@@ -40,8 +40,6 @@ const RESOLVE = 'reportlms:resolve';
 const LABELS = 'reportlms:labels';
 
 /** Message the frame sends to drill through to the people behind a number. */
-const DRILLDOWN = 'reportlms:drilldown';
-
 /**
  * Message the getting-started frame sends once the site is licensed and
  * connected. The frame cannot reload the page around it; only this side can.
@@ -158,34 +156,12 @@ const connect = () => {
 };
 
 /**
- * Send the visitor to the people behind a figure they clicked.
- *
- * The filters are codes, which this site can read and Report LMS cannot, so the
- * list of people is assembled here from local data and never leaves.
- *
- * @param {string} peopleurl
- * @param {Object} filters
- */
-const drilldown = (peopleurl, filters) => {
-    const url = new URL(peopleurl, window.location.origin);
-
-    ['node', 'course', 'fn'].forEach((key) => {
-        if (typeof filters[key] === 'string' && filters[key] !== '') {
-            url.searchParams.set(key, filters[key]);
-        }
-    });
-
-    window.location.assign(url.toString());
-};
-
-/**
  * Start listening.
  *
  * @param {string} origin Report LMS origin, scheme and host only.
  * @param {string} frameselector
- * @param {string} peopleurl Where a drill through lands.
  */
-export const init = (origin, frameselector, peopleurl) => {
+export const init = (origin, frameselector) => {
     const frame = document.querySelector(frameselector);
 
     // The welcome flag is spent the moment the frame is built with it. Take it
@@ -208,11 +184,6 @@ export const init = (origin, frameselector, peopleurl) => {
         const message = event.data;
 
         if (!message || typeof message !== 'object') {
-            return;
-        }
-
-        if (message.type === DRILLDOWN) {
-            drilldown(peopleurl, message.filters || {});
             return;
         }
 

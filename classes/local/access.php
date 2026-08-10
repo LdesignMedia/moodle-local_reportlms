@@ -232,36 +232,4 @@ class access {
             return isset($allowed[$code]) || (($map[$code]['kind'] ?? null) === 'function');
         }));
     }
-
-    /**
-     * Stop unless the current user's scope covers this selection.
-     *
-     * The dashboard's filters are already narrowed and the SaaS refuses a cell
-     * outside the scope, but the drill-through arrives here as a plain URL. A
-     * manager who edits the node in the address bar would otherwise read
-     * another department's people straight out of Moodle, which is the one
-     * place the names actually live.
-     *
-     * @param string $nodecode Coded org node, empty for no node filter.
-     *
-     * @return void
-     */
-    public static function require_scope(string $nodecode): void {
-        if (self::can_view_all()) {
-            return;
-        }
-
-        $viewer = launch::viewer_scope();
-
-        // No scope at all: a viewer who manages nothing has nothing to drill
-        // into, whatever the URL says.
-        if (!$viewer) {
-            throw new \moodle_exception('error:outsidescope', 'local_reportlms');
-        }
-
-        // An unfiltered list would be every department this site has.
-        if ($nodecode === '' || !in_array($nodecode, $viewer, true)) {
-            throw new \moodle_exception('error:outsidescope', 'local_reportlms');
-        }
-    }
 }
