@@ -38,6 +38,24 @@ $functions = [
         'capabilities' => 'local/reportlms:view',
     ],
 
+    /*
+     * Names for the coded learner ids on screen, and only for the people the
+     * caller already manages.
+     *
+     * Guarded by :view like the label service, but the real boundary is not
+     * this line. It is the candidate set the resolver builds from the viewer's
+     * own participants: a code for anybody else is not in it and no name comes
+     * back. See local\learner_names.
+     */
+    'local_reportlms_resolve_learners' => [
+        'classname' => 'local_reportlms\external\resolve_learners',
+        'methodname' => 'execute',
+        'description' => 'Resolve coded learner ids to the names this site holds for them.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'local/reportlms:view',
+    ],
+
     // Also AJAX only. It writes a site setting, so it is guarded by the
     // capability that lets somebody change site settings in the first place.
     'local_reportlms_acknowledge_privacy' => [
