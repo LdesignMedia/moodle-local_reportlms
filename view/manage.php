@@ -101,6 +101,9 @@ if ($action !== '' && confirm_sesskey()) {
 
 $nodes = mapping::nodes();
 $membership = mapping::membership();
+// The menu form: id to display name, as strings. role_fix_names() with a
+// fourth argument of true returns exactly that, so nothing here has an ->id or
+// an ->localname to read.
 $roles = role_fix_names(get_all_roles(), $context, ROLENAME_ORIGINAL, true);
 
 echo $OUTPUT->header();
@@ -202,7 +205,7 @@ $table->head = [
 
 foreach (mapping::managers() as $row) {
     if ($row->roleid) {
-        $who = get_string('manage:everyoneholding', 'local_reportlms', $roles[$row->roleid]->localname ?? $row->roleid);
+        $who = get_string('manage:everyoneholding', 'local_reportlms', $roles[$row->roleid] ?? $row->roleid);
     } else {
         $user = core_user::get_user($row->userid);
         $who = $user ? fullname($user) : get_string('manage:goneuser', 'local_reportlms');
@@ -246,11 +249,7 @@ if ($nodes) {
         $unitoptions[$node->id] = $node->name;
     }
 
-    $roleoptions = [0 => get_string('manage:norole', 'local_reportlms')];
-
-    foreach ($roles as $role) {
-        $roleoptions[$role->id] = $role->localname;
-    }
+    $roleoptions = [0 => get_string('manage:norole', 'local_reportlms')] + $roles;
 
     echo html_writer::start_tag('form', ['method' => 'post', 'action' => $pageurl->out(false), 'class' => 'mb-4']);
     echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
