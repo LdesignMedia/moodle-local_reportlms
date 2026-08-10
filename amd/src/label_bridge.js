@@ -54,6 +54,13 @@ const CONNECTED = 'reportlms:connected';
  * Report LMS: it names a person, which is precisely what the statement being
  * acknowledged says never leaves.
  */
+const LEARNERS = 'reportlms:learners';
+
+/**
+ * The names for those learners, going back.
+ */
+const LEARNER_NAMES = 'reportlms:learner-names';
+
 const ACKNOWLEDGE = 'reportlms:acknowledge';
 
 /** Message this page sends back once that is stored. */
@@ -118,6 +125,23 @@ const acknowledge = () => {
     return Ajax.call([{
         methodname: 'local_reportlms_acknowledge_privacy',
         args: {},
+    }])[0];
+};
+
+/**
+ * Put names to coded learners.
+ *
+ * Which of them are answered is decided in Moodle against the people this
+ * viewer manages, not here. Asking about somebody else's learner is not an
+ * error, it simply comes back without them.
+ *
+ * @param {Array<string>} codes
+ * @returns {Promise<Object>}
+ */
+const learners = (codes) => {
+    return Ajax.call([{
+        methodname: 'local_reportlms_resolve_learners',
+        args: {codes: codes},
     }])[0];
 };
 
@@ -258,6 +282,40 @@ export const init = (origin, frameselector, peopleurl) => {
             // Setup finished while somebody was watching the steps. Reload, and
             // the dashboard is simply there, with nothing to press.
             window.location.reload();
+            return;
+        }
+
+        if (message.type === LEARNERS && Array.isArray(message.codes)) {
+            const wanted = message.codes.filter((code) => typeof code === 'string');
+
+            learners(wanted).then((response) => {
+                const names = {};
+
+                response.learners.forEach((entry) => {
+                    names[entry.code] = entry.name;
+                });
+
+                // Targeted at the frame's origin, never '*'. These are people's
+                // names: a wildcard would hand them to whatever happens to be
+                // framing this page.
+                event.source.postMessage({
+                    type: LEARNER_NAMES,
+                    requestId: message.requestId,
+                    names: names,
+                }, origin);
+
+                return true;
+            }).catch(() => {
+                // Answer with nothing rather than not answering. The caller is
+                // waiting on a timeout, and a list showing coded ids is worth
+                // more than one that never finishes loading.
+                event.source.postMessage({
+                    type: LEARNER_NAMES,
+                    requestId: message.requestId,
+                    names: {},
+                }, origin);
+            });
+
             return;
         }
 
