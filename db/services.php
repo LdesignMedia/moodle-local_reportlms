@@ -56,24 +56,23 @@ $functions = [
         'capabilities' => 'local/reportlms:view',
     ],
 
-    // Also AJAX only. It writes a site setting, so it is guarded by the
-    // capability that lets somebody change site settings in the first place.
-    'local_reportlms_acknowledge_privacy' => [
-        'classname' => 'local_reportlms\external\acknowledge_privacy',
-        'methodname' => 'execute',
-        'description' => 'Record that an administrator has read what leaves this site.',
-        'type' => 'write',
-        'ajax' => true,
-        'capabilities' => 'moodle/site:config',
-    ],
+    /*
+     * There is no separate service for recording the data statement.
+     *
+     * There was, and it could not work in the order the setup steps ask for:
+     * reading was step two, connecting step three, and reporting the reading
+     * needed the API key that step three mints. So the reading is recorded by
+     * the connect call below, which is the one deliberate act by the one person
+     * whose reading of it counts.
+     */
 
-    // Also AJAX only. The setup steps run in a frame served by Report LMS and
+    // AJAX only. The setup steps run in a frame served by Report LMS and
     // cannot be handed a sesskey, so they ask this page to do it and Moodle's
     // own AJAX endpoint supplies the token from the administrator's session.
     'local_reportlms_connect' => [
         'classname' => 'local_reportlms\external\connect',
         'methodname' => 'execute',
-        'description' => 'Connect this site to Report LMS.',
+        'description' => 'Connect this site to Report LMS, recording that the caller read the data statement.',
         'type' => 'write',
         'ajax' => true,
         'capabilities' => 'moodle/site:config',

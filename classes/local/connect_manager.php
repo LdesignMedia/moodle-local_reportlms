@@ -87,7 +87,7 @@ class connect_manager {
 
         try {
             $client = $this->client ?? new api_client(config::baseurl());
-            $data = $client->connect($CFG->wwwroot, $token);
+            $data = $client->connect($CFG->wwwroot, $token, privacy_statement::acknowledged_at());
         } finally {
             // The token is single use whatever happened. Leaving it live would
             // keep a public endpoint serving a value for no reason.
@@ -127,11 +127,11 @@ class connect_manager {
             set_config('saltepoch', 1, 'local_reportlms');
         }
 
-        // Now that there is an API key, tell Report LMS about a statement that
-        // was read before there was anybody to tell. The setup steps put
-        // reading it at step two and connecting at step three, so this is the
-        // ordinary order rather than an edge case.
-        privacy_statement::sync();
+        // The payload above carried the reading, so Report LMS already has it
+        // and there is nothing left to report. This used to be a second HTTP
+        // call made right here, needing the key that had just arrived, which
+        // was one round trip to say something the first one could have carried.
+        privacy_statement::sent_with_connect();
 
         // The first push after connect is a full backfill, per the contract.
         // Flag every reportable learner now; the scheduled push task works

@@ -47,9 +47,6 @@ class config {
     /** @var string Where the plugin asks to be connected. */
     public const CONNECT_PATH = '/api/v1/connect';
 
-    /** @var string Where a site reports that somebody has read the data statement. */
-    public const ACKNOWLEDGE_PATH = '/api/v1/privacy-acknowledgement';
-
     /** @var string Where the SaaS serves the embedded dashboard. */
     public const DEFAULT_EMBED_PATH = '/embed';
 
@@ -94,25 +91,34 @@ class config {
     }
 
     /**
-     * Where to send somebody whose site is not connected yet.
-     *
-     * Carries this site's address so the page can tell which steps are already
-     * done, and the language so the steps are not in English on a Dutch site.
-     *
-     * @return string
-     */
-    /**
      * Whether somebody here has read what leaves this site.
      *
      * @return bool
      */
     public static function privacy_acknowledged(): bool {
-        // What Report LMS knows, not merely what this site recorded: it is
-        // the refusal on that side that the report waits on.
-        return privacy_statement::confirmed();
+        /*
+         * This site's own record, not what Report LMS has confirmed knowing.
+         *
+         * It used to be the latter, and that was a trap. Confirmation needs an
+         * API key, an API key needs a connection, and a connection is the step
+         * this gate stands in front of. A site that had read the statement and
+         * not yet connected could therefore never satisfy it, and sat on the
+         * setup steps forever with the reading already recorded on disk.
+         *
+         * The connect payload carries the date now, so telling Report LMS is
+         * not a separate thing that can fail on its own. What it knows still
+         * decides whether a push is accepted, which is the question that
+         * belongs on that side.
+         */
+        return privacy_statement::acknowledged();
     }
 
     /**
+     * Where to send somebody whose site is not connected yet.
+     *
+     * Carries this site's address so the page can tell which steps are already
+     * done, and the language so the steps are not in English on a Dutch site.
+     *
      * @return string
      */
     public static function start_url(): string {
@@ -128,7 +134,7 @@ class config {
             'connected' => connect_manager::is_connected() ? 1 : 0,
             // Whether somebody here has read what leaves this site. Held on
             // this side, so the steps have to be told.
-            'acknowledged' => privacy_statement::confirmed() ? 1 : 0,
+            'acknowledged' => privacy_statement::acknowledged() ? 1 : 0,
         ], '', '&');
     }
 
@@ -154,5 +160,4 @@ class config {
     public static function pushendpoint(): string {
         return self::baseurl() . self::pushpath();
     }
-
 }

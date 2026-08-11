@@ -86,6 +86,7 @@ if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
     $PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
         config::origin(),
         '.local-reportlms-frame',
+        (int) get_config('local_reportlms', 'version'),
     ]);
 
     echo $OUTPUT->footer();
@@ -180,6 +181,7 @@ echo html_writer::tag('iframe', '', [
 $PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
     config::origin(),
     '.local-reportlms-frame',
+    (int) get_config('local_reportlms', 'version'),
 ]);
 
 echo $OUTPUT->footer();

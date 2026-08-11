@@ -46,12 +46,7 @@ const LABELS = 'reportlms:labels';
  */
 const CONNECTED = 'reportlms:connected';
 
-/**
- * Message the getting-started frame sends when an administrator confirms they
- * have read what leaves this site. The record is kept here rather than at
- * Report LMS: it names a person, which is precisely what the statement being
- * acknowledged says never leaves.
- */
+/** Message the frame sends to ask for the names behind coded learner ids. */
 const LEARNERS = 'reportlms:learners';
 
 /**
@@ -59,10 +54,22 @@ const LEARNERS = 'reportlms:learners';
  */
 const LEARNER_NAMES = 'reportlms:learner-names';
 
-const ACKNOWLEDGE = 'reportlms:acknowledge';
+/**
+ * Message the frame sends to find out whether anybody is listening.
+ *
+ * Everything else in here is a request that can only fail by silence, because a
+ * page with no script on it answers nothing at all. The frame cannot tell that
+ * apart from a slow reply, so it used to guess, and its guess was that the
+ * plugin needed updating. That was wrong more often than it was right: the
+ * commonest cause is a browser holding an old copy of this very file.
+ *
+ * So the frame asks first, and what comes back names the version. Silence then
+ * means something specific and the frame can say so.
+ */
+const HELLO = 'reportlms:hello';
 
-/** Message this page sends back once that is stored. */
-const ACKNOWLEDGED = 'reportlms:acknowledged';
+/** The answer, carrying what this page can actually do. */
+const READY = 'reportlms:ready';
 
 /**
  * Message the getting-started frame sends when an administrator presses
@@ -115,18 +122,6 @@ const resolve = (codes) => {
 };
 
 /**
- * Record the reading against this site.
- *
- * @returns {Promise<Object>}
- */
-const acknowledge = () => {
-    return Ajax.call([{
-        methodname: 'local_reportlms_acknowledge_privacy',
-        args: {},
-    }])[0];
-};
-
-/**
  * Put names to coded learners.
  *
  * Which of them are answered is decided in Moodle against the people this
@@ -160,8 +155,9 @@ const connect = () => {
  *
  * @param {string} origin Report LMS origin, scheme and host only.
  * @param {string} frameselector
+ * @param {number} pluginversion This plugin's version, so the frame can say which one is running.
  */
-export const init = (origin, frameselector) => {
+export const init = (origin, frameselector, pluginversion) => {
     const frame = document.querySelector(frameselector);
 
     // The welcome flag is spent the moment the frame is built with it. Take it
@@ -187,34 +183,14 @@ export const init = (origin, frameselector) => {
             return;
         }
 
-        if (message.type === ACKNOWLEDGE) {
-            acknowledge().then((result) => {
-                if (result.connected) {
-                    // Reading it was the last thing in the way, so the steps
-                    // have nothing left to say. This happens on a site that
-                    // connected before the statement existed.
-                    window.location.reload();
-
-                    return true;
-                }
-
-                // Targeted at the frame's origin, never '*'.
-                event.source.postMessage({type: ACKNOWLEDGED, ok: true}, origin);
-
-                return true;
-            }).catch((error) => {
-                // Tell the frame it failed, so it can leave the step open
-                // rather than showing a tick for something nothing recorded.
-                //
-                // Carry the reason across. Swallowing it left the frame with
-                // nothing to say and nothing to log, which is how a broken web
-                // service turns into a button that simply never finishes.
-                event.source.postMessage({
-                    type: ACKNOWLEDGED,
-                    ok: false,
-                    error: String((error && (error.message || error.errorcode)) || error),
-                }, origin);
-            });
+        if (message.type === HELLO) {
+            // Answered synchronously and with no round trip to Moodle: the
+            // question is whether this script is here, and the answer is that
+            // it just replied.
+            event.source.postMessage({
+                type: READY,
+                pluginVersion: pluginversion,
+            }, origin);
 
             return;
         }

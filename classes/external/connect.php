@@ -31,6 +31,7 @@ use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_reportlms\local\connect_manager;
+use local_reportlms\local\privacy_statement;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -63,11 +64,33 @@ class connect extends external_api {
      * @return array
      */
     public static function execute(): array {
+        global $USER;
+
         self::validate_parameters(self::execute_parameters(), []);
 
         $context = context_system::instance();
         self::validate_context($context);
         require_capability('moodle/site:config', $context);
+
+        /*
+         * Connecting is the act that carries the reading with it.
+         *
+         * It used to be a step of its own, recorded here and then reported to
+         * Report LMS on a second call that needed an API key. On a site that
+         * had not connected yet there was no key, so nothing could be reported,
+         * so the step never completed, so the site could never reach the button
+         * that would have minted the key. The order the setup steps ask for was
+         * the one order that could not work.
+         *
+         * Recorded before the attempt rather than after it. A connection that
+         * fails on a licence still leaves the site holding a true record of who
+         * read what, and the next attempt carries it.
+         *
+         * The capability above is the same one the recording always required:
+         * the person who may connect the site is the person whose reading of
+         * this is worth anything.
+         */
+        privacy_statement::record((int) $USER->id);
 
         try {
             (new connect_manager())->connect();

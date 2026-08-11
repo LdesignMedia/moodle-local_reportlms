@@ -31,7 +31,7 @@ defined('MOODLE_INTERNAL') || die();
  * The site's record of having read the data statement.
  *
  * One home for the whole idea, because it is read from four places that would
- * otherwise each know how it is stored: the web service the frame calls, the
+ * otherwise each know how it is stored: the connect call that records it, the
  * report page that decides whether to show the steps, the batch the push
  * builds, and the settings page.
  *
@@ -84,11 +84,11 @@ class privacy_statement {
     /**
      * Whether Report LMS knows.
      *
-     * This, and not {@see acknowledged}, is what decides whether the report is
-     * shown. Report LMS refuses data from a site it does not know has read the
-     * statement, so a site whose answer never arrived would otherwise sit in
-     * front of a report that is never going to fill, with nothing on screen
-     * saying why.
+     * Not what decides whether the report is shown. It was, and that was a
+     * trap: knowing needs a connection, and the gate stood in front of the
+     * connection. {@see acknowledged} answers the question the setup steps are
+     * really asking, and this one answers whether a push can be expected to be
+     * accepted.
      *
      * @return bool
      */
@@ -97,7 +97,7 @@ class privacy_statement {
     }
 
     /**
-     * Record that this user has read it, and tell Report LMS.
+     * Record that this user has read it.
      *
      * The first reading stands. Re-recording on every visit would turn a dated
      * record into a timestamp of the last time somebody opened the page, which
@@ -114,43 +114,39 @@ class privacy_statement {
             set_config(self::USERID, $userid, 'local_reportlms');
         }
 
-        // Reported every time, not only the first. Report LMS keeps the
-        // earliest date it is given, so a repeat is harmless, and it makes this
-        // self-healing: a site whose first report was lost, or that read the
-        // statement before this reporting existed, catches up the next time
-        // anyone confirms rather than staying refused forever.
-        self::report(self::acknowledged_at());
-
+        /*
+         * Nothing is sent from here.
+         *
+         * There used to be an HTTP call on this line, and it could not work in
+         * the order it was asked for: it needed an API key, and this runs
+         * before the site has one. The date travels inside the connect request
+         * instead, and every push envelope carries it after that, so there are
+         * two standing ways for Report LMS to learn it and neither is a call
+         * that only exists to say one number.
+         */
         return self::acknowledged_at();
     }
 
     /**
-     * Tell Report LMS what this site already recorded, if it has not managed to.
+     * Record that the connect call carried the date, so Report LMS has it.
      *
-     * The gap this closes, and the setup steps walk everybody straight into it.
-     * Step two is read the statement, step three is connect, so the ordinary
-     * order is to acknowledge on a site with no API key. {@see report} has
-     * nobody to tell at that point and returns false, and nothing ever tried
-     * again: the site connected, pushed happily, and its report page stayed on
-     * the setup steps forever, because that page asks whether Report LMS knows
-     * rather than whether this site recorded it.
+     * This replaced a second HTTP round trip that ran straight after every
+     * connect. That call needed the API key the connection had just returned,
+     * which is the whole reason the date now travels inside the connection
+     * instead: the endpoint could never be reached before there was a key, and
+     * the setup steps ask for the reading first.
      *
-     * Safe to call whenever a connection exists or has just been made. It does
-     * nothing on a site that never acknowledged, and nothing on one already
-     * synced.
+     * The claim is safe even if it were somehow wrong. Every push envelope
+     * carries the date as well, and Report LMS refuses a batch from a site it
+     * does not know has read the statement, so a wrongly set flag costs a
+     * refusal that the push path already knows how to recover from.
      *
-     * @return bool Whether Report LMS now knows.
+     * @return void
      */
-    public static function sync(): bool {
-        if (!self::acknowledged()) {
-            return false;
+    public static function sent_with_connect(): void {
+        if (self::acknowledged()) {
+            set_config(self::SYNCED, 1, 'local_reportlms');
         }
-
-        if ((int) get_config('local_reportlms', self::SYNCED) > 0) {
-            return true;
-        }
-
-        return self::report(self::acknowledged_at());
     }
 
     /**
@@ -166,48 +162,6 @@ class privacy_statement {
     public static function accepted_in_push(): void {
         if (self::acknowledged() && (int) get_config('local_reportlms', self::SYNCED) === 0) {
             set_config(self::SYNCED, 1, 'local_reportlms');
-        }
-    }
-
-    /**
-     * Tell Report LMS, on its own endpoint.
-     *
-     * Not carried on the next push: the push is precisely what this unblocks,
-     * since Report LMS refuses batches from a site that has not read the
-     * statement. Delivering the fact on the refused message would leave the
-     * site waiting a full cron cycle after somebody had already done the one
-     * thing being asked of them.
-     *
-     * Never fatal. The reading is recorded locally either way and the push
-     * payload carries it as a fallback, so a Report LMS that is briefly
-     * unreachable delays the report rather than losing the answer.
-     *
-     * @param int $acknowledgedat
-     *
-     * @return bool Whether Report LMS was told.
-     */
-    protected static function report(int $acknowledgedat): bool {
-        $apikey = trim((string) get_config('local_reportlms', 'apikey'));
-
-        if ($apikey === '') {
-            // Not connected yet, so there is nobody to tell. The connect itself
-            // is what carries the state across in that order.
-            return false;
-        }
-
-        try {
-            (new api_client(config::baseurl()))->acknowledge_privacy($acknowledgedat, $apikey);
-            set_config(self::SYNCED, 1, 'local_reportlms');
-
-            return true;
-        } catch (\Throwable $exception) {
-            debugging(
-                'local_reportlms: could not report the data statement acknowledgement: '
-                    . $exception->getMessage(),
-                DEBUG_DEVELOPER
-            );
-
-            return false;
         }
     }
 }

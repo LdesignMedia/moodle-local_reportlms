@@ -49,10 +49,11 @@ class api_client {
      *
      * @param string $siteurl This site's wwwroot.
      * @param string $verificationtoken The token verify.php is currently serving.
+     * @param int $acknowledgedat When somebody here read the data statement, or 0.
      * @return array environment_id, api_key, signing_secret, push_path, expires_at, tier.
      * @throws \moodle_exception When Report LMS refuses the connection.
      */
-    public function connect(string $siteurl, string $verificationtoken): array {
+    public function connect(string $siteurl, string $verificationtoken, int $acknowledgedat = 0): array {
         $data = $this->post(config::CONNECT_PATH, [
             'site_url' => $siteurl,
             'verification_token' => $verificationtoken,
@@ -66,6 +67,20 @@ class api_client {
             // installed.
             'plugin_version' => (int) get_config('local_reportlms', 'version'),
             'platform_version' => (string) get_config('', 'release'),
+            /*
+             * The reading rides the connection.
+             *
+             * Report LMS refuses data from a site it does not know has read the
+             * statement, and the only other way to tell it needs an API key.
+             * This is the call that mints that key, so reporting it separately
+             * beforehand was impossible and reporting it afterwards left a
+             * window in which a push could be refused for something the
+             * administrator had already done.
+             *
+             * Omitted rather than sent as zero when nothing was read, so the
+             * field means "this is when it happened" and never "it did not".
+             */
+            'privacy_acknowledged_at' => $acknowledgedat > 0 ? $acknowledgedat : null,
         ]);
 
         foreach (['environment_id', 'api_key', 'signing_secret', 'launch_secret'] as $required) {
@@ -75,61 +90,6 @@ class api_client {
         }
 
         return $data;
-    }
-
-    /**
-     * Tell Report LMS that somebody here has read what leaves this site.
-     *
-     * Sent the moment it is recorded rather than on the next push, because the
-     * push is what this unblocks: Report LMS refuses batches from a site that
-     * has not read the statement, so carrying the answer on a refused message
-     * would leave the site waiting a whole cron cycle after somebody had
-     * already done the one thing being asked of them.
-     *
-     * A timestamp and a version. Who read it never leaves this site.
-     *
-     * @param int $acknowledgedat
-     * @param string $apikey
-     *
-     * @throws \moodle_exception
-     *
-     * @return array
-     */
-    public function acknowledge_privacy(int $acknowledgedat, string $apikey): array {
-        global $CFG;
-        require_once($CFG->libdir . '/filelib.php');
-
-        $body = json_encode([
-            'acknowledged_at' => $acknowledgedat,
-            'plugin_version' => (int) get_config('local_reportlms', 'version'),
-        ]);
-
-        // Same rationale as post(): the admin-configured first-party endpoint
-        // must not be rejected by the cURL SSRF blocklist.
-        $curl = new \curl(['ignoresecurity' => true]);
-        $curl->setHeader([
-            'Content-Type: application/json',
-            'Accept: application/json',
-            'Authorization: Bearer ' . $apikey,
-        ]);
-
-        $response = $curl->post($this->baseurl . config::ACKNOWLEDGE_PATH, $body, [
-            'CURLOPT_TIMEOUT' => 15,
-            'CURLOPT_CONNECTTIMEOUT' => 5,
-        ]);
-
-        if ($curl->get_errno()) {
-            throw new \moodle_exception('error:connectrejected', 'local_reportlms', '', $curl->error);
-        }
-
-        $info = $curl->get_info();
-        $httpcode = (int) ($info['http_code'] ?? 0);
-
-        if ($httpcode < 200 || $httpcode >= 300) {
-            throw new \moodle_exception('error:connectrejected', 'local_reportlms', '', 'HTTP ' . $httpcode);
-        }
-
-        return (array) json_decode((string) $response, true);
     }
 
     /**
