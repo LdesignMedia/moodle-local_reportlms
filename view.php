@@ -118,6 +118,7 @@ if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
         config::origin(),
         '.local-reportlms-frame',
         (int) get_config('local_reportlms', 'version'),
+        config::PLATFORM,
     ]);
 
     echo $OUTPUT->footer();
@@ -193,6 +194,7 @@ $PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
     config::origin(),
     '.local-reportlms-frame',
     (int) get_config('local_reportlms', 'version'),
+    config::PLATFORM,
 ]);
 
 echo $OUTPUT->footer();
