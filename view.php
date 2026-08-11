@@ -114,7 +114,7 @@ if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
     // The frame polls until the site is licensed and connected, then asks this
     // page to reload, which is the moment the dashboard appears without anyone
     // being told to press anything.
-    $PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
+    $PAGE->requires->js_call_amd('local_reportlms/bridge_loader', 'init', [
         config::origin(),
         '.local-reportlms-frame',
         (int) get_config('local_reportlms', 'version'),
@@ -190,7 +190,7 @@ echo html_writer::end_div();
 // The frame asks this page to name the codes it is drawing, and to send the
 // visitor to the people behind a figure they clicked. Both answers are built
 // here, from this site's own data.
-$PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
+$PAGE->requires->js_call_amd('local_reportlms/bridge_loader', 'init', [
     config::origin(),
     '.local-reportlms-frame',
     (int) get_config('local_reportlms', 'version'),

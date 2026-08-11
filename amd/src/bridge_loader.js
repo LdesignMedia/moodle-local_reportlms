@@ -43,7 +43,7 @@
  * us straight back to needing a plugin update for every fix, which is the thing
  * this exists to stop. The trade is stated plainly in the data statement.
  *
- * @module     local_reportlms/label_bridge
+ * @module     local_reportlms/bridge_loader
  * @copyright  2026 Luuk Verhoeven, ldesignmedia.nl <info@ldesignmedia.nl>
  * @author     Hamza Tamyachte
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later

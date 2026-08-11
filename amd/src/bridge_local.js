@@ -19,7 +19,7 @@
  * Report LMS serves the bridge it wants the page to run, so a fix reaches every
  * customer without any of them installing anything. This copy is what runs when
  * that script does not arrive: a blocked host, an outage, a policy that will not
- * load third-party script. See {@link module:local_reportlms/label_bridge}.
+ * load third-party script. See {@link module:local_reportlms/bridge_loader}.
  *
  * It is deliberately a frozen fallback, not a second implementation kept in
  * lockstep. It was correct on the day it shipped and it stays here so the report
