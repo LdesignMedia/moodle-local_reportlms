@@ -50,9 +50,19 @@ class name_manager extends \moodleform {
 
         $mform->addElement('select', 'nodeid', get_string('manage:unit', 'local_reportlms'), $units);
 
+        /*
+         * manageruserid, not userid.
+         *
+         * The person form further down this page has an autocomplete too, and
+         * Moodle names the rendered element after the field. Two fields called
+         * userid on one page meant two elements with id="id_userid", and
+         * enhanceField resolves by id: it found this one twice and enhanced the
+         * other never, so the person picker rendered as a bare empty select and
+         * looked to everybody like a missing dropdown.
+         */
         $mform->addElement(
             'autocomplete',
-            'userid',
+            'manageruserid',
             get_string('manage:person', 'local_reportlms'),
             [],
             [

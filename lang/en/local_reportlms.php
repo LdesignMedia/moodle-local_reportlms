@@ -90,6 +90,8 @@ $string['manage:placed_help'] = 'These people stay where you put them. Their pro
 $string['manage:person'] = 'Person';
 $string['manage:release'] = 'Back to automatic';
 $string['manage:noplaced'] = 'Nobody has been placed by hand.';
+$string['manage:needunitformanager'] = 'Name a unit above first. A manager manages something, so there is nothing to name one against yet.';
+$string['manage:needunitforperson'] = 'Name a unit above first. Placing somebody by hand means placing them into a unit, and none exist yet.';
 
 $string['warn:heading'] = 'Worth checking in your organisation structure:';
 $string['warn:unplaceable'] = '{$a} managers hold the Report LMS manage permission but have no department set on their own profile, so they place nobody.';

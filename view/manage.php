@@ -44,7 +44,16 @@ $pageurl = new moodle_url('/local/reportlms/view/manage.php');
 
 $PAGE->set_context($context);
 $PAGE->set_url($pageurl);
-$PAGE->set_pagelayout('admin');
+/*
+ * A standard page, not the settings layout.
+ *
+ * 'admin' drags in the site administration tab strip, General, Users, Learning,
+ * Grades and the rest, across the top of a page that is none of those things.
+ * This is where a training coordinator says who runs which department, and most
+ * of the people who hold :manage cannot open a single one of those tabs. A row
+ * of doors that refuse you is worse than no row at all.
+ */
+$PAGE->set_pagelayout('standard');
 $PAGE->set_title(get_string('manage:title', 'local_reportlms'));
 $PAGE->set_heading('');
 
@@ -86,7 +95,7 @@ if ($action !== '' && confirm_sesskey()) {
 
             mapping::add_manager(
                 required_param('nodeid', PARAM_INT),
-                $roleid > 0 ? null : (optional_param('userid', 0, PARAM_INT) ?: null),
+                $roleid > 0 ? null : (optional_param('manageruserid', 0, PARAM_INT) ?: null),
                 $roleid ?: null
             );
             break;
@@ -253,6 +262,21 @@ if ($nodes) {
         'units' => $unitoptions,
         'roles' => $roleoptions,
     ]))->display();
+} else {
+    /*
+     * Say why there is no form here.
+     *
+     * There used to be nothing: a heading, a line saying nobody manages
+     * anything, and then blank page where the controls belong. A control that
+     * is absent for a good reason looks exactly like one that is broken, and
+     * the reader has no way to tell which. This is the same fault the report
+     * page had when it showed zeros with no explanation.
+     */
+    echo html_writer::tag(
+        'p',
+        get_string('manage:needunitformanager', 'local_reportlms'),
+        ['class' => 'alert alert-info']
+    );
 }
 
 // -------------------------------------------------------------- people ----
@@ -297,6 +321,14 @@ if ($nodes) {
     }
 
     (new \local_reportlms\form\place_person($pageurl->out(false), ['units' => $unitoptions]))->display();
+} else {
+    // Same reasoning as the manager form above: an absent control that explains
+    // itself is a step, and one that does not is a bug report.
+    echo html_writer::tag(
+        'p',
+        get_string('manage:needunitforperson', 'local_reportlms'),
+        ['class' => 'alert alert-info']
+    );
 }
 
 echo $OUTPUT->footer();
