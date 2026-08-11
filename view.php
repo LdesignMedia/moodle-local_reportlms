@@ -43,61 +43,21 @@ access::require_view();
 
 $PAGE->set_context($context);
 $PAGE->set_url(new moodle_url('/local/reportlms/view.php'));
-$PAGE->set_pagelayout('report');
+// Embedded, so the page reads as a full-screen app: no Moodle nav, blocks or
+// footer, only the slim strip below. The page stays load-bearing (token mint,
+// name bridge, capability check); it just becomes invisible. AMD still lands:
+// embedded renders standard_end_of_body_html.
+$PAGE->set_pagelayout('embedded');
+$PAGE->add_body_class('local-reportlms-fullpage');
 $PAGE->set_title(get_string('dashboard:title', 'local_reportlms'));
 // No Moodle heading: the page draws its own branded one below, and both would
 // say the same thing twice in a row.
 $PAGE->set_heading('');
 
-echo $OUTPUT->header();
-
-// The steps stay up until this site is both connected and has confirmed
-// reading what leaves it. Report LMS refuses data from a site that has not, so
-// showing the dashboard first would show a report that is never going to fill.
-if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
-    // The four steps, in the frame the dashboard would occupy. A notice saying
-    // "not connected" told somebody what was wrong and nothing about what to do
-    // next, which on a site nobody has set up yet is the only useful thing to
-    // say.
-    // Just the branded heading. There was a button here to the settings page,
-    // which was the wrong way round: the steps below are the setup, and sending
-    // somebody to settings first offered them a shortcut past the very thing
-    // they had come to read.
-    echo html_writer::div(
-        html_writer::tag('h1', branding::lockup(40), ['class' => 'local-reportlms-heading']),
-        'local-reportlms-header'
-    );
-
-    echo html_writer::tag('iframe', '', [
-        'src' => config::start_url(),
-        'title' => get_string('dashboard:title', 'local_reportlms'),
-        'class' => 'local-reportlms-frame',
-        'style' => 'width:100%;min-height:70vh;border:0;border-radius:12px;',
-        // No top-navigation permission: connecting happens through the
-        // bridge below rather than by sending the page somewhere, so the frame
-        // has no reason to be able to move the page around it.
-        'sandbox' => 'allow-scripts allow-same-origin allow-popups',
-        'referrerpolicy' => 'no-referrer',
-    ]);
-
-    // The frame polls until the site is licensed and connected, then asks this
-    // page to reload, which is the moment the dashboard appears without anyone
-    // being told to press anything.
-    $PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
-        config::origin(),
-        '.local-reportlms-frame',
-        (int) get_config('local_reportlms', 'version'),
-    ]);
-
-    echo $OUTPUT->footer();
-    exit;
-}
-
-// Back to the page the visitor actually came from, when that is a page on
-// this site (get_local_referer never returns a foreign host, so this cannot
-// redirect off-site). Never this page itself, or the button would go nowhere
-// after a refresh. Bookmarks and direct links have no referer and fall back
-// to wherever this site sends people.
+// Back to the page the visitor came from, when that is on this site
+// (get_local_referer never returns a foreign host). Never this page itself, or
+// the button would go nowhere after a refresh. Built before the branches
+// split: with Moodle's navigation gone, this is the only exit either one has.
 $referer = get_local_referer(false);
 if ($referer && strpos($referer, '/local/reportlms/view.php') === false) {
     $backurl = new moodle_url($referer);
@@ -110,6 +70,58 @@ if ($referer && strpos($referer, '/local/reportlms/view.php') === false) {
     } else {
         $backurl = new moodle_url('/');
     }
+}
+
+$backbutton = html_writer::link(
+    $backurl,
+    get_string('dashboard:back', 'local_reportlms'),
+    ['class' => 'btn btn-secondary']
+);
+
+echo $OUTPUT->header();
+
+// The steps stay up until this site is both connected and has confirmed
+// reading what leaves it. Report LMS refuses data from a site that has not, so
+// showing the dashboard first would show a report that is never going to fill.
+if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
+    // The four steps, in the frame the dashboard would occupy. A notice saying
+    // "not connected" told somebody what was wrong and nothing about what to do
+    // next, which on a site nobody has set up yet is the only useful thing to
+    // say.
+    // The branded heading and the way out. No settings cog on purpose: the
+    // steps below are the setup, and a settings link would be a shortcut past
+    // the statement they came to read.
+    // No role="main": the embedded layout's own wrapper is the main landmark.
+    echo html_writer::start_div('local-reportlms-page');
+    echo html_writer::div(
+        html_writer::tag('h1', branding::lockup(40), ['class' => 'local-reportlms-heading'])
+        . html_writer::div($backbutton, 'local-reportlms-actions'),
+        'local-reportlms-header'
+    );
+
+    echo html_writer::tag('iframe', '', [
+        'src' => config::start_url(),
+        'title' => get_string('dashboard:title', 'local_reportlms'),
+        'class' => 'local-reportlms-frame',
+        // No top-navigation permission: connecting happens through the
+        // bridge below rather than by sending the page somewhere, so the frame
+        // has no reason to be able to move the page around it.
+        'sandbox' => 'allow-scripts allow-same-origin allow-popups',
+        'referrerpolicy' => 'no-referrer',
+    ]);
+    echo html_writer::end_div();
+
+    // The frame polls until the site is licensed and connected, then asks this
+    // page to reload, which is the moment the dashboard appears without anyone
+    // being told to press anything.
+    $PAGE->requires->js_call_amd('local_reportlms/label_bridge', 'init', [
+        config::origin(),
+        '.local-reportlms-frame',
+        (int) get_config('local_reportlms', 'version'),
+    ]);
+
+    echo $OUTPUT->footer();
+    exit;
 }
 
 $actions = '';
@@ -126,12 +138,10 @@ if (has_capability('moodle/site:config', $context)) {
     );
 }
 
-$actions .= html_writer::link(
-    $backurl,
-    get_string('dashboard:back', 'local_reportlms'),
-    ['class' => 'btn btn-secondary']
-);
+$actions .= $backbutton;
 
+// No role="main": the embedded layout's own wrapper is the main landmark.
+echo html_writer::start_div('local-reportlms-page');
 echo html_writer::div(
     // The lockup is the page heading, so it is marked up as one rather than
     // sitting next to an empty h1.
@@ -165,7 +175,6 @@ echo html_writer::tag('iframe', '', [
     'src' => launch::embed_url(optional_param('welcome', 0, PARAM_BOOL)),
     'title' => get_string('dashboard:title', 'local_reportlms'),
     'class' => 'local-reportlms-frame',
-    'style' => 'width:100%;min-height:80vh;border:0;border-radius:12px;',
     'loading' => 'lazy',
     // allow-scripts and allow-same-origin together are what let the frame talk
     // to this page at all. That channel is how the report gets its department
@@ -174,6 +183,8 @@ echo html_writer::tag('iframe', '', [
     'sandbox' => 'allow-scripts allow-same-origin allow-popups allow-downloads',
     'referrerpolicy' => 'no-referrer',
 ]);
+
+echo html_writer::end_div();
 
 // The frame asks this page to name the codes it is drawing, and to send the
 // visitor to the people behind a figure they clicked. Both answers are built

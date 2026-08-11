@@ -99,6 +99,55 @@
     margin-bottom: 1rem;
 }
 
+/* Full-page mode: the strip and the frame are the whole visible page. The
+   flex chain runs from body down through Moodle's own wrappers on purpose: a
+   fixed height would push the frame below the fold whenever anything prepends
+   a banner to <body>; as a flex item, a banner just costs the frame that
+   much height. */
+body.local-reportlms-fullpage {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+}
+
+/* The last selector is Boost's anonymous wrapper around the main content;
+   role="main" is the only handle it has. */
+body.local-reportlms-fullpage #page,
+body.local-reportlms-fullpage .embedded-main,
+body.local-reportlms-fullpage .embedded-main > [role="main"] {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    margin: 0;
+    min-height: 0;
+    padding: 0;
+}
+
+.local-reportlms-page {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
+body.local-reportlms-fullpage .local-reportlms-header {
+    margin: 0;
+    padding: 0.75rem 1rem;
+}
+
+body.local-reportlms-fullpage .local-reportlms-stale {
+    margin: 0 1rem 0.75rem;
+}
+
+/* No border and no radius: the frame meets the viewport edges. */
+.local-reportlms-frame {
+    border: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+}
+
 /* The front page block: mark beside the sentence, button underneath. */
 .local-reportlms-block .local-reportlms-lockup {
     align-items: flex-start;
