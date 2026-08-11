@@ -133,6 +133,9 @@
     z-index: 1;
 }
 
+/* Who actually SEES the cog (and the block) is decided per viewer by
+   block_visibility::css(), injected into the page head — not here. This file
+   only positions and paints what that rule leaves visible. */
 .local-reportlms-cog {
     color: inherit;
     line-height: 1;

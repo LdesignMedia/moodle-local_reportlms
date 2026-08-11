@@ -65,7 +65,10 @@ class dashboard_block {
     protected const SIGNATURE = '/local/reportlms/view.php';
 
     /** @var array<int, string> The only page types we ever place a block on. */
-    protected const PAGE_TYPES = ['site-index', 'my-index'];
+    // Public because block_visibility gates its every-page callback on it:
+    // these are the only pages the block can exist on, so they are the only
+    // pages worth computing visibility CSS for.
+    public const PAGE_TYPES = ['site-index', 'my-index'];
 
     /**
      * Whether our block is currently in place.
@@ -468,10 +471,11 @@ class dashboard_block {
      * into the card's top corner by styles.css, because a block body cannot
      * write into the header its theme draws around it.
      *
-     * Note that a block body is one stored string shown to every viewer, so it
-     * cannot be hidden from people who lack moodle/site:config; it is drawn as
-     * a bare icon for that reason, and the settings page refuses anyone who
-     * should not be there. Gating it properly needs a real block plugin.
+     * Note that a block body is one stored string shown to every viewer, so
+     * nothing here can branch per person. Per-viewer visibility is CSS from
+     * block_visibility::css(), and the cog points at admin.php, which routes
+     * each viewer to the admin surface they may actually open. Gating it
+     * properly still needs a real block plugin, which is parked.
      *
      * @return string
      */
@@ -479,7 +483,7 @@ class dashboard_block {
         global $OUTPUT;
 
         $url = new \moodle_url('/local/reportlms/view.php');
-        $settingsurl = new \moodle_url('/admin/settings.php', ['section' => 'local_reportlms']);
+        $settingsurl = new \moodle_url('/local/reportlms/admin.php');
 
         $blurb = \html_writer::div(
             branding::mark(36)

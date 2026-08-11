@@ -230,5 +230,14 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026081006, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026081103) {
+        // The cog now points at admin.php, which routes each viewer to the
+        // admin surface they may open. Stored markup, so a refresh — the same
+        // step the two markup changes above needed.
+        \local_reportlms\local\dashboard_block::refresh();
+
+        upgrade_plugin_savepoint(true, 2026081103, 'local', 'reportlms');
+    }
+
     return true;
 }

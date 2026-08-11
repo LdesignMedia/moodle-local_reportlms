@@ -188,6 +188,29 @@ class access {
     }
 
     /**
+     * The admin surface this viewer may open, or null for none.
+     *
+     * The block's cog routes through this, and so does the visibility rule
+     * that decides who sees the cog at all — one function, so the icon is
+     * only ever shown to somebody its target will admit. Site administrators
+     * get the plugin settings; a :manage holder cannot open admin settings,
+     * so their surface is the mapping editor.
+     *
+     * @return \moodle_url|null
+     */
+    public static function admin_destination(): ?\moodle_url {
+        if (has_capability('moodle/site:config', \context_system::instance())) {
+            return new \moodle_url('/admin/settings.php', ['section' => 'local_reportlms']);
+        }
+
+        if (self::can_manage()) {
+            return new \moodle_url('/local/reportlms/view/manage.php');
+        }
+
+        return null;
+    }
+
+    /**
      * Whether this viewer may configure the site-wide dashboard deck.
      *
      * Site administrators may, without holding anything: Moodle grants them

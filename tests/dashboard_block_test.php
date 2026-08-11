@@ -153,4 +153,32 @@ final class dashboard_block_test extends \advanced_testcase {
         dashboard_block::ensure();
         $this->assertFalse(dashboard_block::exists());
     }
+
+    /**
+     * The cog routes through admin.php, never straight at the settings page
+     * a :manage holder cannot open.
+     */
+    public function test_the_cog_points_at_the_routing_page(): void {
+        dashboard_block::add();
+
+        $instances = dashboard_block::instances();
+        $instance = reset($instances);
+        $text = unserialize(base64_decode($instance->configdata))->text;
+
+        $this->assertStringContainsString('/local/reportlms/admin.php', $text);
+        $this->assertStringNotContainsString('/admin/settings.php', $text);
+    }
+
+    /**
+     * The cog URL change must not have moved the block's identity: exists(),
+     * adopt() and dedupe() all hang off the view.php link and the stored
+     * signature, and a refresh over current markup is a no-op.
+     */
+    public function test_the_new_markup_is_still_recognised_as_ours(): void {
+        dashboard_block::add();
+
+        $this->assertSame(0, dashboard_block::refresh());
+        $this->assertCount(1, dashboard_block::instances());
+        $this->assertTrue(dashboard_block::exists());
+    }
 }
