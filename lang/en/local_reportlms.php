@@ -94,6 +94,7 @@ $string['manage:removenaming'] = 'Remove naming';
 $string['manage:placeperson'] = 'Add 1 person';
 $string['manage:placepeople'] = 'Add {$a} people';
 $string['manage:placepeople_help'] = 'The people its managers manage, who are not in this unit yet. Adding them here means their own profile field stops moving them; each of them can be released again afterwards.';
+$string['manage:placeconfirm'] = 'Add {$a->count} people to {$a->unit}?<br /><br />They are placed by hand, which means their own profile field stops moving them and they stay in this unit until somebody releases them. Check the number: a manager who is an ordinary participant on a site-wide course brings everybody on it.';
 $string['manage:placedpeople'] = 'Added {$a} people to the unit.';
 $string['manage:fix'] = 'Fix';
 $string['manage:fix_help'] = 'Write this down here, so who manages whom is stated rather than inherited from a role.';

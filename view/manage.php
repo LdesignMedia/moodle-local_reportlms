@@ -120,7 +120,45 @@ if ($action !== '' && confirm_sesskey()) {
             break;
 
         case 'placepeople':
-            $placed = mapping::place_managed_people(required_param('nodeid', PARAM_INT));
+            /*
+             * Confirmed first, because this one is hard to walk back.
+             *
+             * Placing a learner by hand is what stops auto-detect ever moving
+             * them again. Measured on a real site the day this was written: one
+             * unit offered three people and another offered 1,467, because that
+             * manager is an ordinary participant on an all-staff course. The
+             * second is one click away from freezing almost every learner on
+             * the site, and nothing about the button said so.
+             *
+             * The count is in the question, so the number is read before it is
+             * agreed to rather than after.
+             */
+            $confirmnodeid = required_param('nodeid', PARAM_INT);
+
+            if (!optional_param('confirm', 0, PARAM_BOOL)) {
+                $count = count(mapping::placeable_for($confirmnodeid));
+                $unit = mapping::nodes()[$confirmnodeid] ?? null;
+
+                echo $OUTPUT->header();
+                echo $OUTPUT->confirm(
+                    get_string('manage:placeconfirm', 'local_reportlms', (object) [
+                        'count' => $count,
+                        'unit' => $unit ? format_string($unit->name) : '',
+                    ]),
+                    new moodle_url($pageurl, [
+                        'action' => 'placepeople',
+                        'nodeid' => $confirmnodeid,
+                        'confirm' => 1,
+                        'sesskey' => sesskey(),
+                    ]),
+                    $pageurl
+                );
+                echo $OUTPUT->footer();
+
+                exit;
+            }
+
+            $placed = mapping::place_managed_people($confirmnodeid);
             redirect(
                 $pageurl,
                 get_string('manage:placedpeople', 'local_reportlms', $placed),
