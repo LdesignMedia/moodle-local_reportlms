@@ -107,6 +107,11 @@ class launch {
              */
             'cron_last_run_at' => cron_health::cron_last_run(),
             'push_task_last_run_at' => cron_health::push_last_run(),
+            // Whether this viewer may configure the site-wide card deck. Always
+            // present, never omitted: the SaaS defaults an absent claim to
+            // false for older plugins, and an explicit false keeps that default
+            // from doing the deciding.
+            'configure' => access::can_configure(),
             'iat' => $now,
             'exp' => $now + self::TTL,
             // One-time id. A launch URL ends up in browser history, in referrer

@@ -140,6 +140,7 @@ $string['dashboard:settings'] = 'Report LMS settings';
 $string['reportlms:view'] = 'Open the Report LMS dashboard';
 $string['reportlms:manage'] = 'Manage the training of a course\'s participants';
 $string['reportlms:viewall'] = 'See the whole organisation in Report LMS';
+$string['reportlms:configure'] = 'Choose which cards the Report LMS dashboard shows';
 
 // Labels resolved locally for the embedded dashboard.
 $string['label:unassigned'] = 'Unassigned';

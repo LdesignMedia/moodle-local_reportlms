@@ -52,6 +52,9 @@ class access {
     /** @var string Lifts the scope to the whole organisation. */
     public const VIEWALL = 'local/reportlms:viewall';
 
+    /** @var string May decide which dashboard cards this whole site shows. */
+    public const CONFIGURE = 'local/reportlms:configure';
+
     /**
      * Stop unless the current user may see the report.
      *
@@ -182,6 +185,20 @@ class access {
      */
     public static function can_manage(): bool {
         return has_capability(self::MANAGE, \context_system::instance());
+    }
+
+    /**
+     * Whether this viewer may configure the site-wide dashboard deck.
+     *
+     * Site administrators may, without holding anything: Moodle grants them
+     * every capability. System context only, like :manage — the deck belongs
+     * to the whole site, so authority over it granted "inside one category"
+     * would not mean anything.
+     *
+     * @return bool
+     */
+    public static function can_configure(): bool {
+        return has_capability(self::CONFIGURE, \context_system::instance());
     }
 
     /**

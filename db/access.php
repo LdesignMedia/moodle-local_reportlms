@@ -122,4 +122,24 @@ $capabilities = [
         'archetypes' => [
         ],
     ],
+
+    /*
+     * May decide which dashboard cards this site shows — to everybody.
+     *
+     * The deck is site configuration, not a personal preference, so this is a
+     * write capability at system context. Like :manage, a grant made at a
+     * category is deliberately not honoured: authority over the whole site's
+     * dashboard held "inside one corner of it" would be the same ambiguity
+     * :viewall's comment resolves, in the same unsafe direction.
+     *
+     * No riskbitmask, and that absence is deliberate: this exposes nobody's
+     * data (RISK_PERSONAL would be false) and changes no Moodle configuration
+     * (RISK_CONFIG would claim a risk it does not carry). Site administrators
+     * hold it implicitly, as everywhere.
+     */
+    'local/reportlms:configure' => [
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => [],
+    ],
 ];
