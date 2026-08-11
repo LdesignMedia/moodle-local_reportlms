@@ -262,6 +262,32 @@ $table->head = [
  * own, so it cannot be merged with any individual without saying something
  * untrue about who is in it.
  */
+/*
+ * A person's name, linking to their profile.
+ *
+ * Every name in this editor answers a question somebody is about to ask about
+ * that person: which department are they really in, is this the Paul I meant,
+ * did they ever log in. Printing the name and making them go and search for it
+ * is the sort of small friction that turns a two-minute correction into a
+ * five-minute one.
+ *
+ * Falls back to plain text for somebody the site no longer has, since a link to
+ * a deleted profile is a dead end dressed as an answer.
+ *
+ * A closure rather than a function: this is a page script, and a named function
+ * declared here would sit in the global namespace for the rest of the request.
+ */
+$personlink = static function ($user, string $fallback): string {
+    if (!$user) {
+        return $fallback;
+    }
+
+    return html_writer::link(
+        new moodle_url('/user/profile.php', ['id' => $user->id]),
+        fullname($user)
+    );
+};
+
 $nodesbyname = [];
 
 foreach ($nodes as $node) {
@@ -288,7 +314,7 @@ foreach (mapping::managers() as $row) {
     $user = core_user::get_user($row->userid);
 
     $register['u:' . $row->userid . ':' . $row->nodeid] = (object) [
-        'who' => $user ? fullname($user) : get_string('manage:goneuser', 'local_reportlms'),
+        'who' => $personlink($user, get_string('manage:goneuser', 'local_reportlms')),
         'unit' => isset($nodes[$row->nodeid]) ? $nodes[$row->nodeid]->name : '-',
         'nodeid' => (int) $row->nodeid,
         'userid' => (int) $row->userid,
@@ -313,7 +339,7 @@ foreach (manager_resolver::managers() as $manager) {
     }
 
     $user = core_user::get_user($manager->userid);
-    $who = $user ? fullname($user) : (string) $manager->userid;
+    $who = $personlink($user, (string) $manager->userid);
     $departments = array_filter(array_map('trim', $manager->departments), 'strlen');
 
     if (!$departments) {
@@ -543,7 +569,7 @@ if (!$membership) {
         ]);
 
         $table->data[] = [
-            $user ? fullname($user) : $userid,
+            $personlink($user, (string) $userid),
             isset($nodes[$nodeid]) ? s($nodes[$nodeid]->name) : '-',
             html_writer::link($release, get_string('manage:release', 'local_reportlms')),
         ];
