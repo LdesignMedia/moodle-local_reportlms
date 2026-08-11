@@ -24,20 +24,27 @@
  * What this file does is fetch that conversation rather than contain it. Report
  * LMS serves the bridge, so a fault in it is fixed for every customer at once
  * instead of waiting for each of them to install a new plugin. The reason that
- * matters was expensive to learn: a site ran a four-day-old copy of this script
+ * matters was expensive to learn: a site ran a four-day-old copy of the bridge
  * for days, through two plugin upgrades, because a caching rule on its own web
  * server pinned the file for a year. Nothing we shipped could reach it.
- *
- * Three properties are kept deliberately.
  *
  * **Moodle stays the transport.** The served script is handed a `call` function
  * and never builds a request itself, so the sesskey that guards every change
  * stays inside code the customer installed. It cannot be read out of here.
  *
- * **The site keeps a copy.** {@link module:local_reportlms/bridge_local} runs
- * when the served one does not arrive, so a blocked host or an outage costs the
- * page nothing. The report degrades to what the customer installed rather than
- * to a dashboard of hashes.
+ * **There is no local copy of the bridge, deliberately.** One shipped with the
+ * first version of this and it was reasoning that did not survive being
+ * finished: it was written to cover Report LMS being unreachable, and in that
+ * case the frame never loads either, so there is no dashboard for a bridge to
+ * talk to and nothing for it to answer. What it really covered was a policy or
+ * an extension that allows the frame but blocks the script, and for that a
+ * second copy quietly drifting out of step with the served one is worse than
+ * saying plainly that the script did not load. Which is what happens now: a
+ * bridge that never arrives never answers the frame's opening message, and the
+ * frame says so.
+ *
+ * A site can still be connected with no script at all. `connect.php` is the
+ * plain, scriptless way to do it.
  *
  * **The served script is not pinned to a hash.** Subresource integrity would put
  * us straight back to needing a plugin update for every fix, which is the thing
@@ -50,7 +57,6 @@
  */
 
 import Ajax from 'core/ajax';
-import * as local from './bridge_local';
 
 /**
  * Where Report LMS serves the bridge for this kind of LMS.
@@ -65,15 +71,6 @@ import * as local from './bridge_local';
  * @returns {string}
  */
 const bridgePath = (platform) => '/bridge/' + platform + '/v1.js';
-
-/**
- * How long to wait for the served bridge before running our own.
- *
- * The page is useful without it and useless while it waits, so this is short.
- * A slow answer that lands later is ignored: whichever bridge starts first is
- * the one that runs, and two of them listening would answer every message twice.
- */
-const LOAD_TIMEOUT_MS = 5000;
 
 /**
  * Fetch and run the bridge Report LMS serves.
@@ -94,13 +91,12 @@ const loadRemote = (src) => {
         script.onload = () => resolve();
         script.onerror = () => reject(new Error('bridge did not load'));
 
-        window.setTimeout(() => reject(new Error('bridge timed out')), LOAD_TIMEOUT_MS);
         document.head.appendChild(script);
     });
 };
 
 /**
- * Start listening, with whichever bridge is available.
+ * Hand this page's side of the conversation to the bridge Report LMS serves.
  *
  * @param {string} origin Report LMS origin, scheme and host only.
  * @param {string} frameselector
@@ -108,46 +104,40 @@ const loadRemote = (src) => {
  * @param {string} platform Which bridge to ask for, as config::PLATFORM names it.
  */
 export const init = (origin, frameselector, pluginversion, platform) => {
-    const options = {
-        origin: origin,
-        frame: document.querySelector(frameselector),
-        pluginVersion: pluginversion,
-        // The whole of this page's authority, handed over as one narrow
-        // function. It can only reach the services db/services.php declares
-        // ajax, and only as whoever is logged in.
-        call: (methodname, args) => Ajax.call([{methodname: methodname, args: args}])[0],
-    };
-
-    let started = false;
-
-    const start = (bridge) => {
-        if (started) {
-            return;
-        }
-
-        started = true;
-        bridge.init(options);
-    };
-
     if (origin === '') {
         // No configured Report LMS, so there is nothing to fetch and nothing to
-        // talk to. Run ours so the page behaves the same as it always did.
-        start(local);
-
+        // talk to.
         return;
     }
 
     loadRemote(origin + bridgePath(platform))
         .then(() => {
-            const served = window.reportlms && window.reportlms.bridge;
+            const bridge = window.reportlms && window.reportlms.bridge;
 
-            // Loaded but did not register: something answered on that path that
-            // was not the bridge. Ours is the honest thing to run.
-            start(served && typeof served.init === 'function' ? served : local);
+            if (!bridge || typeof bridge.init !== 'function') {
+                // Something answered on that path and it was not the bridge.
+                // Staying silent is right: the frame's opening message goes
+                // unanswered and it tells the reader the script did not load,
+                // which is true and actionable.
+                return false;
+            }
+
+            bridge.init({
+                origin: origin,
+                frame: document.querySelector(frameselector),
+                pluginVersion: pluginversion,
+                // The whole of this page's authority, handed over as one narrow
+                // function. It can only reach the services db/services.php
+                // declares ajax, and only as whoever is logged in.
+                call: (methodname, args) => Ajax.call([{methodname: methodname, args: args}])[0],
+            });
 
             return true;
         })
         .catch(() => {
-            start(local);
+            // Blocked, offline, or refused by a content policy. Nothing to do
+            // and nothing to pretend: the frame asks whether anybody is
+            // listening, hears nothing, and says so.
+            return false;
         });
 };
