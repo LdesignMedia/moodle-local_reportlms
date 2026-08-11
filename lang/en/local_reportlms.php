@@ -121,6 +121,7 @@ $string['connect:keyexpires'] = 'Licence and key expire on {$a}';
 $string['connect:lastpush'] = 'Last data sent {$a}';
 
 // Advanced settings.
+$string['settings:advancedbutton'] = 'Advanced settings';
 $string['settings:advancedheading'] = 'Advanced connection settings';
 $string['settings:advancedwarning'] = 'These settings are managed by the connect process. Change them only if Report LMS support asks you to.';
 $string['settings:baseurl'] = 'Report LMS URL';

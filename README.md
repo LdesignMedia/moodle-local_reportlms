@@ -49,11 +49,13 @@ a completely new population and orphan every fact already stored.
 
 ## Settings
 
-The settings page shows only the connection status and the Connect, Reconnect and Disconnect
-buttons. The API key, the signing secret and the salt are written by the connect flow and are never
-rendered, so they cannot be hand-edited into a broken state.
+The settings page shows the connection status, the Disconnect button and the front page block
+button; connecting happens from the report page, where the setup sequence lives. The API key, the
+signing secret and the salt are written by the connect flow and are never rendered, so they cannot
+be hand-edited into a broken state.
 
-The Report LMS URL and push path live behind advanced mode, which is URL only:
+The Report LMS URL and push path live behind advanced mode, reached from the Advanced settings
+button (shown to holders of `local/reportlms:manage`) or directly:
 
 ```
 /admin/settings.php?section=local_reportlms&mode=advanced

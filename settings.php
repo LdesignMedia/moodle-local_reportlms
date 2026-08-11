@@ -30,10 +30,14 @@ if ($hassiteconfig) {
     $ADMIN->add('localplugins', $settings);
 
     if ($ADMIN->fulltree) {
-        // Advanced mode is deliberately URL only, so an end user never sees the
-        // connection internals: /admin/settings.php?section=local_reportlms&mode=advanced.
-        // The settings form posts back without the mode parameter, so the marker
-        // setting added below re-flags advanced mode on the save request.
+        // Advanced mode hides the connection internals from the ordinary view:
+        // /admin/settings.php?section=local_reportlms&mode=advanced, reached by
+        // URL or by the Advanced settings button below. The button shows for
+        // site-config holders who additionally hold :manage — everyone who can
+        // open this page already passed $hassiteconfig, so the capability is a
+        // narrowing, not the gate. The settings form posts back without the
+        // mode parameter, so the marker setting added below re-flags advanced
+        // mode on the save request.
         $advanced = optional_param('mode', '', PARAM_ALPHA) === 'advanced'
             || optional_param('reportlmsadv', 0, PARAM_BOOL);
 
@@ -182,6 +186,22 @@ if ($hassiteconfig) {
                 $hasblock
                     ? get_string('block:removebutton', 'local_reportlms')
                     : get_string('block:addbutton', 'local_reportlms'),
+                ['class' => 'btn btn-secondary']
+            );
+        }
+
+        // Whether connected or not: the advanced section holds the base URL,
+        // which is exactly what a site may need to change before connecting.
+        // Absent on the advanced page itself and on its save postback, so the
+        // button never renders inside the form it opens.
+        if (!$advanced && \local_reportlms\local\access::can_manage()) {
+            $advancedurl = new moodle_url('/admin/settings.php', [
+                'section' => 'local_reportlms',
+                'mode' => 'advanced',
+            ]);
+            $buttons .= ' ' . html_writer::link(
+                $advancedurl,
+                get_string('settings:advancedbutton', 'local_reportlms'),
                 ['class' => 'btn btn-secondary']
             );
         }
