@@ -257,3 +257,88 @@ body.local-reportlms-fullpage .local-reportlms-stale {
 .local-reportlms-stale {
     margin-bottom: 1rem;
 }
+
+/*
+ * Buttons on the Report LMS pages.
+ *
+ * The cog and Back sat in Moodle's own grey beside a branded lockup, which read
+ * as the theme's furniture rather than as part of the product.
+ *
+ * Scoped to a body class rather than applied per link, because two of the
+ * buttons on the mapping editor are drawn by moodleform and there is no place
+ * to hand them a class. Restyling what the page contains catches those as well,
+ * and the body class keeps it off every other page on the site.
+ *
+ * Layered on top of Bootstrap rather than replacing it, so Moodle keeps giving
+ * these focus rings, disabled states and the right hit area, and this file only
+ * says what colour they are.
+ *
+ * The brand is a custom property because the surrounding theme can be dark.
+ * Everything else in this file leans on currentColor for that reason; a button
+ * cannot, since its whole job is to be findable, so the one value that has to be
+ * stated is stated once and restated for a dark theme.
+ */
+body.local-reportlms-branded {
+    --local-reportlms-brand: #ea580c;
+    --local-reportlms-brand-ink: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+    body.local-reportlms-branded {
+        --local-reportlms-brand: #fb923c;
+        --local-reportlms-brand-ink: #1a1d22;
+    }
+}
+
+/* Filled marks the action a form is there to perform. */
+body.local-reportlms-branded .btn-primary,
+body.local-reportlms-branded input[type="submit"].btn {
+    background: var(--local-reportlms-brand);
+    border: 1px solid var(--local-reportlms-brand);
+    border-radius: 0.5rem;
+    color: var(--local-reportlms-brand-ink);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+}
+
+body.local-reportlms-branded .btn-primary:hover,
+body.local-reportlms-branded .btn-primary:focus,
+body.local-reportlms-branded input[type="submit"].btn:hover,
+body.local-reportlms-branded input[type="submit"].btn:focus {
+    background: var(--local-reportlms-brand);
+    border-color: var(--local-reportlms-brand);
+    color: var(--local-reportlms-brand-ink);
+    filter: brightness(0.93);
+}
+
+/* Outline for everything that is a way out rather than a way on. */
+body.local-reportlms-branded .btn-secondary,
+body.local-reportlms-branded .local-reportlms-btn {
+    background: transparent;
+    border: 1px solid var(--local-reportlms-brand);
+    border-radius: 0.5rem;
+    color: var(--local-reportlms-brand);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+}
+
+body.local-reportlms-branded .btn-secondary:hover,
+body.local-reportlms-branded .btn-secondary:focus,
+body.local-reportlms-branded .local-reportlms-btn:hover,
+body.local-reportlms-branded .local-reportlms-btn:focus {
+    background: var(--local-reportlms-brand);
+    border-color: var(--local-reportlms-brand);
+    color: var(--local-reportlms-brand-ink);
+}
+
+/* The cog is an icon on its own, so it wants to be square rather than a pill
+   with a glyph rattling around inside it. */
+body.local-reportlms-branded .local-reportlms-btn-icon {
+    padding: 0.35rem 0.5rem;
+}
+
+body.local-reportlms-branded .local-reportlms-btn-icon .icon {
+    margin: 0;
+}

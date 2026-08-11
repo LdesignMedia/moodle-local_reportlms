@@ -345,6 +345,144 @@ class mapping {
     }
 
     /**
+     * Move a naming to a different unit.
+     *
+     * Separate from removing and re-adding, because the two are not the same
+     * act. A correction should not read in the log as somebody losing their
+     * managers and somebody else gaining them a second later.
+     *
+     * @param int $id
+     * @param int $nodeid
+     *
+     * @return void
+     */
+    public static function move_manager(int $id, int $nodeid): void {
+        global $DB, $USER;
+
+        $row = $DB->get_record('local_reportlms_manager', ['id' => $id]);
+
+        if (!$row || (int) $row->nodeid === $nodeid) {
+            return;
+        }
+
+        // The same person against the same unit twice is not a stronger
+        // statement, it is a duplicate row. Moving onto one collapses into it.
+        $duplicate = $DB->get_record('local_reportlms_manager', [
+            'nodeid' => $nodeid,
+            'userid' => $row->userid,
+            'roleid' => $row->roleid,
+        ]);
+
+        if ($duplicate) {
+            $DB->delete_records('local_reportlms_manager', ['id' => $id]);
+            self::reset();
+
+            return;
+        }
+
+        $DB->update_record('local_reportlms_manager', (object) [
+            'id' => $id,
+            'nodeid' => $nodeid,
+            'timemodified' => time(),
+            'usermodified' => (int) $USER->id,
+        ]);
+
+        self::reset();
+    }
+
+    /**
+     * Turn the departments the detected managers run into units, once.
+     *
+     * Auto-detect already reads those departments off profile fields, so this
+     * invents nothing. What it does is make them editable: a unit that exists as
+     * a row can be renamed, re-parented and named a manager against, and one
+     * that exists only as a profile-field value cannot.
+     *
+     * Units and namings only, never memberships. Placing people by hand is what
+     * stops auto-detect moving them again, so doing it wholesale here would mean
+     * one click quietly froze every learner's department and the next HR upload
+     * would never move anybody. Placing somebody stays a deliberate act, one
+     * person at a time.
+     *
+     * Names already used are left alone rather than duplicated, so running this
+     * on a site that has typed in some of its tree by hand adds only what is
+     * missing.
+     *
+     * @return int How many units were created.
+     */
+    public static function import_manager_departments(): int {
+        $existing = [];
+
+        foreach (self::nodes() as $node) {
+            $existing[\core_text::strtolower(trim($node->name))] = (int) $node->id;
+        }
+
+        $created = 0;
+
+        foreach (manager_resolver::managers() as $manager) {
+            if (is_siteadmin($manager->userid)) {
+                // An administrator holds every capability everywhere, so they
+                // are detected as managing whatever they can see. That is not a
+                // fact about the organisation and it should not become a unit.
+                continue;
+            }
+
+            foreach ($manager->departments as $department) {
+                $name = trim((string) $department);
+
+                if ($name === '') {
+                    continue;
+                }
+
+                $key = \core_text::strtolower($name);
+
+                if (!isset($existing[$key])) {
+                    $existing[$key] = self::save_node($name, 'department');
+                    $created++;
+                }
+
+                self::add_manager($existing[$key], (int) $manager->userid, null);
+            }
+        }
+
+        return $created;
+    }
+
+    /**
+     * Whether there is anything for {@see import_manager_departments} to do.
+     *
+     * Drives whether the offer is on screen at all. It stops being true the
+     * moment it has been taken, so the link disappears by itself rather than
+     * needing a flag to remember that somebody pressed it, and a site that never
+     * presses it is never nagged twice about the same thing.
+     *
+     * @return bool
+     */
+    public static function has_departments_to_import(): bool {
+        $existing = [];
+
+        foreach (self::nodes() as $node) {
+            $existing[\core_text::strtolower(trim($node->name))] = true;
+        }
+
+        foreach (manager_resolver::managers() as $manager) {
+            if (is_siteadmin($manager->userid)) {
+                continue;
+            }
+
+            foreach ($manager->departments as $department) {
+                $name = trim((string) $department);
+
+                if ($name !== '' && !isset($existing[\core_text::strtolower($name)])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param int $id
      *
      * @return void

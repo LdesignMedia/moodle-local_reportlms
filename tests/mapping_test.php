@@ -240,6 +240,37 @@ final class mapping_test extends \advanced_testcase {
      *
      * @return string|null
      */
+    /**
+     * A manager the capability route finds, running the given department.
+     *
+     * Built the way manager_resolver actually looks: somebody holding :view in a
+     * course context, with a department on their own profile, and a participant
+     * in that course for them to manage. Anything less is not detected at all
+     * and the test would pass for the wrong reason.
+     *
+     * @param string $department
+     *
+     * @return \stdClass The manager.
+     */
+    private function a_manager_of(string $department): \stdClass {
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+
+        $this->set_department($manager->id, $department);
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id);
+        role_assign($roleid, $manager->id, \context_course::instance($course->id)->id);
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        manager_resolver::reset();
+        mapping::reset();
+
+        return $manager;
+    }
+
     private function node_of(int $userid): ?string {
         mapping::reset();
         manager_resolver::reset();
@@ -305,5 +336,122 @@ final class mapping_test extends \advanced_testcase {
         ]);
 
         return $DB->get_record('user_info_field', ['id' => $id]);
+    }
+
+    /**
+     * Moving a naming is one act, not a removal and an addition.
+     */
+    public function test_a_naming_can_be_moved_to_another_unit(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $user = $this->getDataGenerator()->create_user();
+        $from = mapping::save_node('Sales', 'department');
+        $to = mapping::save_node('Support', 'department');
+
+        mapping::add_manager($from, (int) $user->id, null);
+        $rows = mapping::managers();
+        $row = reset($rows);
+
+        mapping::move_manager((int) $row->id, $to);
+
+        $after = mapping::managers();
+        $moved = reset($after);
+
+        $this->assertCount(1, $after);
+        $this->assertSame($to, (int) $moved->nodeid);
+    }
+
+    /**
+     * Moving onto a unit somebody already manages collapses into it.
+     *
+     * The same person against the same unit twice is not a stronger statement,
+     * it is a duplicate row, and the register exists to be read.
+     */
+    public function test_moving_onto_an_existing_naming_does_not_duplicate_it(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $user = $this->getDataGenerator()->create_user();
+        $from = mapping::save_node('Sales', 'department');
+        $to = mapping::save_node('Support', 'department');
+
+        mapping::add_manager($from, (int) $user->id, null);
+        mapping::add_manager($to, (int) $user->id, null);
+
+        $rows = mapping::managers();
+        $first = reset($rows);
+
+        mapping::move_manager((int) $first->id, $to);
+
+        $this->assertCount(1, mapping::managers());
+    }
+
+    /**
+     * The import turns the departments detected managers run into units.
+     *
+     * Units and namings only. Placing a learner by hand is what stops
+     * auto-detect moving them again, so doing it wholesale here would freeze
+     * every department against the next HR upload.
+     */
+    public function test_importing_creates_units_and_namings_but_not_memberships(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $this->a_manager_of('Rotterdam');
+
+        $this->assertTrue(mapping::has_departments_to_import());
+        $this->assertSame(1, mapping::import_manager_departments());
+
+        $names = array_map(static fn($node) => $node->name, mapping::nodes());
+        $this->assertContains('Rotterdam', $names);
+        $this->assertCount(1, mapping::managers());
+        $this->assertSame([], mapping::membership(), 'Nobody should be placed by hand.');
+    }
+
+    /**
+     * A department that is already a unit is not added twice.
+     */
+    public function test_importing_leaves_units_that_already_exist_alone(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $this->a_manager_of('Rotterdam');
+        mapping::save_node('Rotterdam', 'department');
+
+        $this->assertSame(0, mapping::import_manager_departments());
+        $this->assertCount(1, mapping::nodes());
+    }
+
+    /**
+     * The offer stops being made once it has been taken.
+     *
+     * No flag remembers that somebody pressed it. The condition is "there is
+     * something left to import", so accepting removes the reason to ask and a
+     * site that never wants it is never asked twice about the same department.
+     */
+    public function test_the_offer_disappears_once_taken(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $this->a_manager_of('Rotterdam');
+        mapping::import_manager_departments();
+
+        $this->assertFalse(mapping::has_departments_to_import());
+    }
+
+    /**
+     * An administrator is not a manager and their reach is not a department.
+     *
+     * They hold every capability everywhere, so the detector finds them running
+     * whatever they can see. Turning that into units would invent an
+     * organisation out of an access level.
+     */
+    public function test_an_administrator_contributes_no_units(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $this->assertFalse(mapping::has_departments_to_import());
+        $this->assertSame(0, mapping::import_manager_departments());
     }
 }

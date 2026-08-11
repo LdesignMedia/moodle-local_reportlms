@@ -90,6 +90,11 @@ $string['manage:placed_help'] = 'These people stay where you put them. Their pro
 $string['manage:person'] = 'Person';
 $string['manage:release'] = 'Back to automatic';
 $string['manage:noplaced'] = 'Nobody has been placed by hand.';
+$string['manage:removenaming'] = 'Remove naming';
+$string['manage:namehere'] = 'Name here';
+$string['manage:importoffer'] = 'Some managers run a department that is not a unit yet. Their departments can be added as units and each manager named against theirs, so you can rename them, put them under a sector, or hand one to somebody else. Nobody is placed into a unit by this: learners keep following the profile fields.';
+$string['manage:importaction'] = 'Add these departments as units';
+$string['manage:imported'] = 'Added {$a} units from the departments the managers run.';
 $string['manage:needunitformanager'] = 'Name a unit above first. A manager manages something, so there is nothing to name one against yet.';
 $string['manage:needunitforperson'] = 'Name a unit above first. Placing somebody by hand means placing them into a unit, and none exist yet.';
 

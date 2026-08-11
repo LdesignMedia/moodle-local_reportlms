@@ -49,6 +49,7 @@ $PAGE->set_url(new moodle_url('/local/reportlms/view.php'));
 // embedded renders standard_end_of_body_html.
 $PAGE->set_pagelayout('embedded');
 $PAGE->add_body_class('local-reportlms-fullpage');
+$PAGE->add_body_class('local-reportlms-branded');
 $PAGE->set_title(get_string('dashboard:title', 'local_reportlms'));
 // No Moodle heading: the page draws its own branded one below, and both would
 // say the same thing twice in a row.
@@ -75,7 +76,7 @@ if ($referer && strpos($referer, '/local/reportlms/view.php') === false) {
 $backbutton = html_writer::link(
     $backurl,
     get_string('dashboard:back', 'local_reportlms'),
-    ['class' => 'btn btn-secondary']
+    ['class' => 'btn local-reportlms-btn']
 );
 
 echo $OUTPUT->header();
@@ -135,7 +136,10 @@ if (has_capability('moodle/site:config', $context)) {
         // i/settings, not t/cog: not every theme ships the latter, and a
         // missing pix renders as a broken image rather than as nothing.
         $OUTPUT->pix_icon('i/settings', get_string('dashboard:settings', 'local_reportlms')),
-        ['class' => 'btn btn-secondary', 'title' => get_string('dashboard:settings', 'local_reportlms')]
+        [
+            'class' => 'btn local-reportlms-btn local-reportlms-btn-icon',
+            'title' => get_string('dashboard:settings', 'local_reportlms'),
+        ]
     );
 }
 

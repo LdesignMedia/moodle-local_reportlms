@@ -54,6 +54,7 @@ $PAGE->set_url($pageurl);
  * of doors that refuse you is worse than no row at all.
  */
 $PAGE->set_pagelayout('standard');
+$PAGE->add_body_class('local-reportlms-branded');
 $PAGE->set_title(get_string('manage:title', 'local_reportlms'));
 $PAGE->set_heading('');
 
@@ -97,6 +98,34 @@ if ($action !== '' && confirm_sesskey()) {
                 required_param('nodeid', PARAM_INT),
                 $roleid > 0 ? null : (optional_param('manageruserid', 0, PARAM_INT) ?: null),
                 $roleid ?: null
+            );
+            break;
+
+        case 'movemanager':
+            mapping::move_manager(
+                required_param('id', PARAM_INT),
+                required_param('nodeid', PARAM_INT)
+            );
+            break;
+
+        case 'namehere':
+            // Promoting somebody the capability already found into somebody the
+            // register states outright. Same act as the form below, reached from
+            // the row that made it obvious.
+            mapping::add_manager(
+                required_param('nodeid', PARAM_INT),
+                required_param('userid', PARAM_INT),
+                null
+            );
+            break;
+
+        case 'importunits':
+            $created = mapping::import_manager_departments();
+            redirect(
+                $pageurl,
+                get_string('manage:imported', 'local_reportlms', $created),
+                null,
+                \core\output\notification::NOTIFY_SUCCESS
             );
             break;
 
@@ -191,6 +220,17 @@ echo html_writer::end_tag('form');
 
 // ------------------------------------------------------------- managers ----
 
+/*
+ * The units, as a picker's options. Built once here because three things below
+ * need them: the manager form, the person form, and the in-place unit editor on
+ * a register row.
+ */
+$unitoptions = [];
+
+foreach ($nodes as $node) {
+    $unitoptions[$node->id] = $node->name;
+}
+
 echo html_writer::tag('h3', get_string('manage:managers', 'local_reportlms'));
 echo html_writer::tag('p', get_string('manage:managers_help', 'local_reportlms'), ['class' => 'text-muted']);
 
@@ -210,36 +250,178 @@ $table->head = [
     '',
 ];
 
+/*
+ * One row per person per unit, whichever way they got there.
+ *
+ * Somebody named here who also holds the capability used to appear twice, once
+ * per route, which reads as two managers and invites somebody to remove "the
+ * duplicate". They are one person with one job and two reasons, so the routes
+ * belong in one cell.
+ *
+ * Roles stay on their own rows. A role names a set of people that changes on its
+ * own, so it cannot be merged with any individual without saying something
+ * untrue about who is in it.
+ */
+$nodesbyname = [];
+
+foreach ($nodes as $node) {
+    $nodesbyname[core_text::strtolower(trim($node->name))] = $node;
+}
+
+$register = [];
+$editid = optional_param('edit', 0, PARAM_INT);
+
 foreach (mapping::managers() as $row) {
     if ($row->roleid) {
-        $who = get_string('manage:everyoneholding', 'local_reportlms', $roles[$row->roleid] ?? $row->roleid);
-    } else {
-        $user = core_user::get_user($row->userid);
-        $who = $user ? fullname($user) : get_string('manage:goneuser', 'local_reportlms');
+        $register['role:' . $row->id] = (object) [
+            'who' => get_string('manage:everyoneholding', 'local_reportlms', $roles[$row->roleid] ?? $row->roleid),
+            'unit' => isset($nodes[$row->nodeid]) ? $nodes[$row->nodeid]->name : '-',
+            'nodeid' => (int) $row->nodeid,
+            'userid' => 0,
+            'mappingid' => (int) $row->id,
+            'capability' => false,
+        ];
+
+        continue;
     }
 
-    $remove = new moodle_url($pageurl, [
-        'action' => 'removemanager',
-        'id' => $row->id,
-        'sesskey' => sesskey(),
-    ]);
+    $user = core_user::get_user($row->userid);
 
-    $table->data[] = [
-        $who,
-        isset($nodes[$row->nodeid]) ? s($nodes[$row->nodeid]->name) : '-',
-        get_string('manage:route:named', 'local_reportlms'),
-        html_writer::link($remove, get_string('remove'), ['class' => 'text-danger']),
+    $register['u:' . $row->userid . ':' . $row->nodeid] = (object) [
+        'who' => $user ? fullname($user) : get_string('manage:goneuser', 'local_reportlms'),
+        'unit' => isset($nodes[$row->nodeid]) ? $nodes[$row->nodeid]->name : '-',
+        'nodeid' => (int) $row->nodeid,
+        'userid' => (int) $row->userid,
+        'mappingid' => (int) $row->id,
+        'capability' => false,
     ];
 }
 
 foreach (manager_resolver::managers() as $manager) {
+    /*
+     * Administrators are not managers, they are administrators.
+     *
+     * They hold every capability everywhere, so the detector finds them running
+     * whatever they can see, which is everything. Listing that says nothing
+     * about the organisation and buries the people the register is actually for.
+     *
+     * Filtered here rather than in the resolver: that list also decides who sees
+     * whose numbers, and this screen is not the place to change that.
+     */
+    if (is_siteadmin($manager->userid)) {
+        continue;
+    }
+
     $user = core_user::get_user($manager->userid);
+    $who = $user ? fullname($user) : (string) $manager->userid;
+    $departments = array_filter(array_map('trim', $manager->departments), 'strlen');
+
+    if (!$departments) {
+        $key = 'u:' . $manager->userid . ':none';
+        $register[$key] = $register[$key] ?? (object) [
+            'who' => $who,
+            'unit' => '-',
+            'nodeid' => 0,
+            'userid' => (int) $manager->userid,
+            'mappingid' => 0,
+            'capability' => false,
+        ];
+        $register[$key]->capability = true;
+
+        continue;
+    }
+
+    foreach ($departments as $department) {
+        $node = $nodesbyname[core_text::strtolower($department)] ?? null;
+        $key = 'u:' . $manager->userid . ':' . ($node ? $node->id : 'name:' . core_text::strtolower($department));
+
+        $register[$key] = $register[$key] ?? (object) [
+            'who' => $who,
+            'unit' => $node ? $node->name : $department,
+            'nodeid' => $node ? (int) $node->id : 0,
+            'userid' => (int) $manager->userid,
+            'mappingid' => 0,
+            'capability' => false,
+        ];
+        $register[$key]->capability = true;
+    }
+}
+
+foreach ($register as $entry) {
+    $routes = [];
+
+    if ($entry->mappingid) {
+        $routes[] = get_string('manage:route:named', 'local_reportlms');
+    }
+
+    if ($entry->capability) {
+        $routes[] = get_string('manage:route:capability', 'local_reportlms');
+    }
+
+    $actions = [];
+
+    if ($entry->mappingid) {
+        $actions[] = html_writer::link(
+            new moodle_url($pageurl, ['edit' => $entry->mappingid]),
+            get_string('edit')
+        );
+        /*
+         * Remove takes away the naming and nothing else.
+         *
+         * A capability is a role assignment in Moodle, and this editor does not
+         * edit roles: being a manager is data here precisely so that it can be
+         * stated and withdrawn without touching them. So a person who also holds
+         * the capability stays in this table afterwards, with one route left,
+         * and the button says which one it is taking so that looks deliberate
+         * rather than broken.
+         */
+        $actions[] = html_writer::link(
+            new moodle_url($pageurl, [
+                'action' => 'removemanager',
+                'id' => $entry->mappingid,
+                'sesskey' => sesskey(),
+            ]),
+            $entry->capability
+                ? get_string('manage:removenaming', 'local_reportlms')
+                : get_string('remove'),
+            ['class' => 'text-danger']
+        );
+    } else if ($entry->userid && $entry->nodeid) {
+        // Detected, and the unit it points at exists, so it can be written down.
+        $actions[] = html_writer::link(
+            new moodle_url($pageurl, [
+                'action' => 'namehere',
+                'userid' => $entry->userid,
+                'nodeid' => $entry->nodeid,
+                'sesskey' => sesskey(),
+            ]),
+            get_string('manage:namehere', 'local_reportlms')
+        );
+    }
+
+    if ($editid && $editid === $entry->mappingid && $unitoptions) {
+        // The unit cell becomes the editor, in place. A correction is a small
+        // act and does not deserve a second screen to get lost on.
+        $cell = html_writer::start_tag('form', ['method' => 'get', 'action' => $pageurl->out_omit_querystring(), 'class' => 'd-flex gap-2'])
+            . html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'movemanager'])
+            . html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'id', 'value' => $entry->mappingid])
+            . html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()])
+            . html_writer::select($unitoptions, 'nodeid', $entry->nodeid, false, ['class' => 'custom-select'])
+            . html_writer::empty_tag('input', [
+                'type' => 'submit',
+                'class' => 'btn btn-primary',
+                'value' => get_string('savechanges'),
+            ])
+            . html_writer::end_tag('form');
+    } else {
+        $cell = s($entry->unit);
+    }
 
     $table->data[] = [
-        $user ? fullname($user) : $manager->userid,
-        $manager->departments ? s(reset($manager->departments)) : '-',
-        get_string('manage:route:capability', 'local_reportlms'),
-        '',
+        $entry->who,
+        $cell,
+        implode(', ', $routes),
+        implode(' &nbsp; ', $actions),
     ];
 }
 
@@ -249,13 +431,32 @@ if (!$table->data) {
     echo html_writer::table($table);
 }
 
+/*
+ * The offer to turn detected departments into units, made once.
+ *
+ * Auto-detect already reads these off profile fields, so nothing here is new
+ * information. What it changes is that a department becomes a row somebody can
+ * rename, re-parent and name a manager against, instead of a value that only
+ * exists inside a profile field.
+ *
+ * There is no flag remembering whether it was taken. The offer is shown when
+ * there is something left to import and hidden when there is not, so accepting
+ * it removes the reason to show it and a site that never wants it is never asked
+ * a second time about the same department.
+ */
+if (mapping::has_departments_to_import()) {
+    $importurl = new moodle_url($pageurl, ['action' => 'importunits', 'sesskey' => sesskey()]);
+
+    echo html_writer::div(
+        html_writer::tag('p', get_string('manage:importoffer', 'local_reportlms'))
+        . html_writer::link($importurl, get_string('manage:importaction', 'local_reportlms'), [
+            'class' => 'btn btn-primary',
+        ]),
+        'alert alert-info'
+    );
+}
+
 if ($nodes) {
-    $unitoptions = [];
-
-    foreach ($nodes as $node) {
-        $unitoptions[$node->id] = $node->name;
-    }
-
     $roleoptions = [0 => get_string('manage:norole', 'local_reportlms')] + $roles;
 
     (new \local_reportlms\form\name_manager($pageurl->out(false), [
@@ -314,12 +515,6 @@ if (!$membership) {
 }
 
 if ($nodes) {
-    $unitoptions = [];
-
-    foreach ($nodes as $node) {
-        $unitoptions[$node->id] = $node->name;
-    }
-
     (new \local_reportlms\form\place_person($pageurl->out(false), ['units' => $unitoptions]))->display();
 } else {
     // Same reasoning as the manager form above: an absent control that explains
