@@ -345,6 +345,121 @@ class mapping {
     }
 
     /**
+     * Everybody who manages anything on this site.
+     *
+     * Both routes, because both make somebody a manager: named on the mapping
+     * page, or holding the capability on a course. Used to keep them out of the
+     * headcounts, since a manager standing in their own team's figures makes a
+     * department of nine read as ten and puts the person reading the report into
+     * the list of people they are reading about.
+     *
+     * @return array<int, bool> Keyed by user id, for cheap lookups.
+     */
+    public static function manager_userids(): array {
+        $ids = [];
+
+        foreach (self::managers() as $row) {
+            if ($row->userid) {
+                $ids[(int) $row->userid] = true;
+            }
+        }
+
+        foreach (manager_resolver::managers() as $manager) {
+            $ids[(int) $manager->userid] = true;
+        }
+
+        return $ids;
+    }
+
+    /**
+     * The people a unit's managers manage, who are not in it yet.
+     *
+     * Auto-detect reads a learner's own department field, so anybody whose
+     * profile is blank or wrong lands nowhere near the person who actually runs
+     * their training. Their manager knows: they are the participants of the
+     * courses that manager holds the capability on. This is that list, minus
+     * the ones already placed here, so the offer says exactly what pressing it
+     * would change and vanishes once there is nothing left to add.
+     *
+     * Only named managers count. Somebody detected by capability alone has not
+     * been stated to run this unit by anybody, and their course participants
+     * are not this unit's people until they have.
+     *
+     * @param int $nodeid
+     *
+     * @return array<int, int> User ids.
+     */
+    public static function placeable_for(int $nodeid): array {
+        $managers = [];
+
+        foreach (self::managers() as $row) {
+            if ((int) $row->nodeid === $nodeid && $row->userid) {
+                $managers[(int) $row->userid] = true;
+            }
+        }
+
+        if (!$managers) {
+            return [];
+        }
+
+        $already = array_flip(self::members_of($nodeid));
+        $ismanager = self::manager_userids();
+        $candidates = [];
+
+        foreach (manager_resolver::managers() as $manager) {
+            if (!isset($managers[(int) $manager->userid])) {
+                continue;
+            }
+
+            foreach ($manager->participants as $participantid) {
+                $participantid = (int) $participantid;
+
+                /*
+                 * No manager is one of their own unit's people.
+                 *
+                 * They are enrolled on the courses they run, so every one of
+                 * them turns up in their own participant list, and so does any
+                 * colleague who manages alongside them. Counting them would
+                 * make a department of nine read as ten and put the person
+                 * reading the report into the list they are reading.
+                 */
+                if (isset($ismanager[$participantid]) || isset($already[$participantid])) {
+                    continue;
+                }
+
+                $candidates[$participantid] = $participantid;
+            }
+        }
+
+        return array_values($candidates);
+    }
+
+    /**
+     * Put a unit's managers' people into it, by hand.
+     *
+     * Deliberately not part of {@see import_manager_departments}, which creates
+     * units and namings and touches nobody's membership. Placing a learner is
+     * what stops auto-detect ever moving them again, so it is offered one unit
+     * at a time, with the number on the button, rather than happening to
+     * everybody at once because somebody accepted a different offer.
+     *
+     * Reversible: each of them gets a Release beside their name afterwards.
+     *
+     * @param int $nodeid
+     *
+     * @return int How many were placed.
+     */
+    public static function place_managed_people(int $nodeid): int {
+        $userids = self::placeable_for($nodeid);
+
+        foreach ($userids as $userid) {
+            self::place($userid, $nodeid);
+        }
+
+        return count($userids);
+    }
+
+    /**
      * Move a naming to a different unit.
      *
      * Separate from removing and re-adding, because the two are not the same

@@ -119,6 +119,16 @@ if ($action !== '' && confirm_sesskey()) {
             );
             break;
 
+        case 'placepeople':
+            $placed = mapping::place_managed_people(required_param('nodeid', PARAM_INT));
+            redirect(
+                $pageurl,
+                get_string('manage:placedpeople', 'local_reportlms', $placed),
+                null,
+                \core\output\notification::NOTIFY_SUCCESS
+            );
+            break;
+
         case 'importunits':
             $created = mapping::import_manager_departments();
             redirect(
@@ -174,12 +184,42 @@ if (!$nodes) {
             'sesskey' => sesskey(),
         ]);
 
+        /*
+         * The people this unit's managers manage and it does not have yet.
+         *
+         * A learner with a blank or wrong department field lands nowhere near
+         * whoever actually runs their training, and no amount of auto-detect
+         * fixes that, because the fact it needs is not in the data. Their
+         * manager is the one who knows, so the offer is made here with the
+         * number on it, and it disappears when there is nothing left to add.
+         */
+        $placeable = mapping::placeable_for((int) $node->id);
+        $actions = [];
+
+        if ($placeable) {
+            $place = new moodle_url($pageurl, [
+                'action' => 'placepeople',
+                'nodeid' => $node->id,
+                'sesskey' => sesskey(),
+            ]);
+
+            $actions[] = html_writer::link(
+                $place,
+                count($placeable) === 1
+                    ? get_string('manage:placeperson', 'local_reportlms')
+                    : get_string('manage:placepeople', 'local_reportlms', count($placeable)),
+                ['title' => get_string('manage:placepeople_help', 'local_reportlms')]
+            );
+        }
+
+        $actions[] = html_writer::link($delete, get_string('delete'), ['class' => 'text-danger']);
+
         $table->data[] = [
             s($node->name),
             get_string('manage:kind:' . $node->kind, 'local_reportlms'),
             $node->parentid && isset($nodes[$node->parentid]) ? s($nodes[$node->parentid]->name) : '-',
             count(mapping::members_of((int) $node->id)),
-            html_writer::link($delete, get_string('delete'), ['class' => 'text-danger']),
+            implode(' &nbsp; ', $actions),
         ];
     }
 
