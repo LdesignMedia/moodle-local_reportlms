@@ -93,10 +93,26 @@ class org {
         global $DB;
 
         $shortname = self::fieldmap()['department'];
+        $ourlock = (string) get_config('local_reportlms', 'lockedfield');
+
+        // The mapping moved away from a field this plugin locked: undo that
+        // lock. Only ours — a lock the customer set themselves is recorded
+        // nowhere and is therefore never touched.
+        if ($ourlock !== '' && $ourlock !== $shortname) {
+            $old = $DB->get_record('user_info_field', ['shortname' => $ourlock], 'id, locked');
+            if ($old && !empty($old->locked)) {
+                $DB->set_field('user_info_field', 'locked', 0, ['id' => $old->id]);
+            }
+            unset_config('lockedfield', 'local_reportlms');
+        }
+
         $field = $DB->get_record('user_info_field', ['shortname' => $shortname], 'id, locked');
 
         if ($field && empty($field->locked)) {
             $DB->set_field('user_info_field', 'locked', 1, ['id' => $field->id]);
+            // Recorded so a later re-map (and db/uninstall.php) can undo
+            // exactly what was done, and nothing else.
+            set_config('lockedfield', $shortname, 'local_reportlms');
         }
     }
 

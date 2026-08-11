@@ -150,6 +150,18 @@ if ($hassiteconfig) {
             $status .= html_writer::tag('p', get_string('connect:setupintro', 'local_reportlms'));
         }
 
+        // A mapped organisation field that does not exist on this site is a
+        // silently dead tree: the collector finds nothing and everyone lands
+        // in Unassigned. Said here on the ordinary page, not only behind
+        // advanced mode where nobody would go looking for it.
+        $missingfields = \local_reportlms\local\profile_fields::missing_mappings();
+        if ($missingfields) {
+            $status .= html_writer::div(
+                get_string('settings:orgfieldmissingwarning', 'local_reportlms', implode(', ', $missingfields)),
+                'alert alert-warning'
+            );
+        }
+
         // Connecting is not offered here. Setting a site up is a sequence,
         // licence, then reading what will leave the site, then the connection
         // itself, and only the report page shows where in that sequence a site
@@ -246,6 +258,36 @@ if ($hassiteconfig) {
                 \local_reportlms\local\config::DEFAULT_PUSHPATH,
                 PARAM_PATH
             ));
+
+            // For the updated-callback below: the save request must find the
+            // function already defined, and a local plugin's lib.php is not
+            // loaded for free.
+            require_once(__DIR__ . '/lib.php');
+
+            /*
+             * Their own heading, apart from the connection settings above: the
+             * warning up there says "change only if support asks", and these
+             * are exactly the settings an administrator is invited to change.
+             * The department mapping is the one the plugin locks against
+             * learner self-editing, which its description says out loud.
+             */
+            $settings->add(new admin_setting_heading(
+                'local_reportlms/orgfieldsheading',
+                get_string('settings:orgfieldsheading', 'local_reportlms'),
+                get_string('settings:orgfieldsintro', 'local_reportlms')
+            ));
+
+            foreach (['sector', 'department', 'function'] as $orgrole) {
+                $select = new admin_setting_configselect(
+                    'local_reportlms/orgfield_' . $orgrole,
+                    get_string('settings:orgfield_' . $orgrole, 'local_reportlms'),
+                    get_string('settings:orgfield_' . $orgrole . '_desc', 'local_reportlms'),
+                    '',
+                    \local_reportlms\local\profile_fields::field_options($orgrole)
+                );
+                $select->set_updatedcallback('local_reportlms_orgfield_updated');
+                $settings->add($select);
+            }
 
             // The editor lives on its own page rather than in settings: it
             // edits data, not configuration, and its own capability decides who

@@ -61,6 +61,14 @@ final class label_map_test extends \advanced_testcase {
     private function make_field(string $shortname): \stdClass {
         global $DB;
 
+        // db/install.php creates the rlms_* fields in the phpunit baseline, so
+        // the field this asks for may already exist. Reuse it: a second row
+        // with the same shortname doubles every join that resolves by it.
+        $existing = $DB->get_record('user_info_field', ['shortname' => $shortname]);
+        if ($existing) {
+            return $existing;
+        }
+
         $categoryid = $DB->insert_record('user_info_category', (object) [
             'name' => 'Report LMS ' . $shortname,
             'sortorder' => 1,

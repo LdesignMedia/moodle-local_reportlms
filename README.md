@@ -8,8 +8,8 @@ against is `reportlms/docs/push-contract-v1.md`.
 
 ## Status
 
-Connect flow only. The push itself, the pseudonymiser, the collectors and the scheduled task are
-not built yet. See ClickUp 86cay1v14 and 86cay1v1d.
+Connect flow, pseudonymiser, collectors, scheduled push and reconcile tasks, org mapping, launch
+tokens and the embedded dashboard are all built. See ClickUp 86cay1v14, 86cay1v1d and 86cay1v20.
 
 ## Requirements
 

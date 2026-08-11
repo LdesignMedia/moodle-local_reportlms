@@ -122,6 +122,11 @@ class push_batch extends \core\task\scheduled_task {
      * The push itself, under the lock.
      */
     protected function push(): void {
+        // Before the empty-queue return, not after: the lock follows the
+        // mapping, and the mapping can change on a site where nobody is
+        // dirty. Cheap and idempotent either way.
+        \local_reportlms\local\collector\org::lock_department_field();
+
         $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN);
         if (!$userids) {
             mtrace('Report LMS: nothing to push.');
@@ -137,10 +142,6 @@ class push_batch extends \core\task\scheduled_task {
         $apikey = (string) get_config('local_reportlms', 'apikey');
         $signingsecret = (string) get_config('local_reportlms', 'signingsecret');
         $environment = (string) get_config('local_reportlms', 'environmentid');
-
-        // Cheap and idempotent, and it has to happen after the mapping is set
-        // rather than at upgrade, when it usually is not yet.
-        \local_reportlms\local\collector\org::lock_department_field();
 
         $sent = 0;
         foreach ($chunks as $i => $chunk) {

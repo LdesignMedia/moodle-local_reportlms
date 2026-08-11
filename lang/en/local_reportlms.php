@@ -120,8 +120,28 @@ $string['connect:connectedat'] = 'Connected since {$a}';
 $string['connect:keyexpires'] = 'Licence and key expire on {$a}';
 $string['connect:lastpush'] = 'Last data sent {$a}';
 
+// Profile fields the plugin creates at install. The display names are
+// written into the field records once, so a later language pack change does
+// not rename them; an administrator may rename them freely, since ensure()
+// never overwrites an existing field.
+$string['profilefield:category'] = 'Report LMS';
+$string['profilefield:sector'] = 'Sector';
+$string['profilefield:department'] = 'Department';
+$string['profilefield:function'] = 'Function';
+
 // Advanced settings.
 $string['settings:advancedbutton'] = 'Advanced settings';
+$string['settings:orgfieldsheading'] = 'Organisation fields';
+$string['settings:orgfieldsintro'] = 'Which user profile fields hold each person\'s place in the organisation. The plugin created its own fields at install; map a field your site already maintains instead if you have one. Changing a mapping rebuilds the organisation tree from the newly mapped field on the next sync.';
+$string['settings:orgfield_sector'] = 'Sector field';
+$string['settings:orgfield_sector_desc'] = 'The profile field that names each person\'s sector.';
+$string['settings:orgfield_department'] = 'Department field';
+$string['settings:orgfield_department_desc'] = 'The profile field that names each person\'s department. The mapped field is locked against learners editing their own placement; administrators and HR imports keep writing normally.';
+$string['settings:orgfield_function'] = 'Function field';
+$string['settings:orgfield_function_desc'] = 'The profile field that names each person\'s function or role.';
+$string['settings:orgfield_plugin'] = 'Report LMS field ({$a})';
+$string['settings:orgfield_missing'] = '{$a} (missing on this site)';
+$string['settings:orgfieldmissingwarning'] = 'A mapped organisation field does not exist on this site: {$a}. The organisation tree cannot be built from it — fix the mapping under Advanced settings.';
 $string['settings:advancedheading'] = 'Advanced connection settings';
 $string['settings:advancedwarning'] = 'These settings are managed by the connect process. Change them only if Report LMS support asks you to.';
 $string['settings:baseurl'] = 'Report LMS URL';
