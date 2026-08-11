@@ -267,6 +267,57 @@ class org {
 
         ksort($nodes);
 
+        /*
+         * Managers stated on the mapping page, not only those a capability
+         * betrayed.
+         *
+         * This list is what stops a manager being counted among their own
+         * people on the Report LMS side. It used to be built from the
+         * capability alone, which was fine while every manager held one, and
+         * became empty the moment a site did the thing the access rework asks
+         * of it: name its managers and take the blanket grant off the manager
+         * role. A site that had tidied up correctly was the one whose figures
+         * still counted its managers.
+         *
+         * Keyed to the unit they were named against rather than to their own
+         * department, because a naming says which unit somebody runs and that
+         * is the whole content of it.
+         *
+         * Role rows are skipped. A role names a set of people that changes on
+         * its own, and the wire carries people.
+         */
+        foreach (mapping::managers() as $named) {
+            if (!$named->userid) {
+                continue;
+            }
+
+            $namedkey = mapping::nodekey((int) $named->nodeid);
+
+            if ($namedkey === null) {
+                continue;
+            }
+
+            $managers[] = (object) [
+                'userid' => (int) $named->userid,
+                'nodekey' => $namedkey,
+            ];
+        }
+
+        // The same person can be both named and detected against the same unit,
+        // and saying so twice is not saying it more firmly.
+        $seenmanagers = [];
+        $managers = array_values(array_filter($managers, static function ($manager) use (&$seenmanagers): bool {
+            $key = $manager->userid . '@' . $manager->nodekey;
+
+            if (isset($seenmanagers[$key])) {
+                return false;
+            }
+
+            $seenmanagers[$key] = true;
+
+            return true;
+        }));
+
         return (object) [
             'nodes' => array_values($nodes),
             'members' => $members,

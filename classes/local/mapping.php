@@ -376,10 +376,14 @@ class mapping {
      *
      * Auto-detect reads a learner's own department field, so anybody whose
      * profile is blank or wrong lands nowhere near the person who actually runs
-     * their training. Their manager knows: they are the participants of the
-     * courses that manager holds the capability on. This is that list, minus
-     * the ones already placed here, so the offer says exactly what pressing it
-     * would change and vanishes once there is nothing left to add.
+     * their training. Their manager knows.
+     *
+     * **Their courses are the ones they are enrolled on.** That used to be read
+     * off the capability, which says exactly this and says it better: :view on
+     * a course means "these participants are yours". It stopped working the
+     * moment a site did what the access rework asks and took the blanket grant
+     * off the manager role, at which point a correctly tidied site was the one
+     * where this knew nothing. Enrolment is a fact that survives being tidy.
      *
      * Only named managers count. Somebody detected by capability alone has not
      * been stated to run this unit by anybody, and their course participants
@@ -390,6 +394,8 @@ class mapping {
      * @return array<int, int> User ids.
      */
     public static function placeable_for(int $nodeid): array {
+        global $DB;
+
         $managers = [];
 
         foreach (self::managers() as $row) {
@@ -402,33 +408,48 @@ class mapping {
             return [];
         }
 
+        [$insql, $params] = $DB->get_in_or_equal(array_keys($managers), SQL_PARAMS_NAMED);
+
+        // Everybody enrolled on a course one of these managers is enrolled on.
+        // u.id > 2 drops the guest and the first administrator, who are on some
+        // courses for reasons that have nothing to do with the organisation.
+        $sql = "SELECT DISTINCT theirs.userid
+                  FROM {user_enrolments} mine
+                  JOIN {enrol} eone ON eone.id = mine.enrolid
+                  JOIN {enrol} etwo ON etwo.courseid = eone.courseid
+                  JOIN {user_enrolments} theirs ON theirs.enrolid = etwo.id
+                  JOIN {user} u ON u.id = theirs.userid
+                 WHERE mine.userid {$insql}
+                   AND u.deleted = 0
+                   AND u.id > 2";
+
         $already = array_flip(self::members_of($nodeid));
         $ismanager = self::manager_userids();
         $candidates = [];
 
-        foreach (manager_resolver::managers() as $manager) {
-            if (!isset($managers[(int) $manager->userid])) {
+        foreach ($DB->get_fieldset_sql($sql, $params) as $participantid) {
+            $participantid = (int) $participantid;
+
+            /*
+             * No manager is one of their own unit's people, and no
+             * administrator is anybody's.
+             *
+             * A manager is enrolled on the courses they run, so every one of
+             * them turns up in this list, and so does any colleague managing
+             * alongside them. An administrator turns up because they are on
+             * everything. Counting either makes a department of nine read as
+             * ten and puts the person reading the report into the list of
+             * people they are reading about.
+             */
+            if (isset($ismanager[$participantid]) || isset($already[$participantid])) {
                 continue;
             }
 
-            foreach ($manager->participants as $participantid) {
-                $participantid = (int) $participantid;
-
-                /*
-                 * No manager is one of their own unit's people.
-                 *
-                 * They are enrolled on the courses they run, so every one of
-                 * them turns up in their own participant list, and so does any
-                 * colleague who manages alongside them. Counting them would
-                 * make a department of nine read as ten and put the person
-                 * reading the report into the list they are reading.
-                 */
-                if (isset($ismanager[$participantid]) || isset($already[$participantid])) {
-                    continue;
-                }
-
-                $candidates[$participantid] = $participantid;
+            if (is_siteadmin($participantid)) {
+                continue;
             }
+
+            $candidates[$participantid] = $participantid;
         }
 
         return array_values($candidates);
