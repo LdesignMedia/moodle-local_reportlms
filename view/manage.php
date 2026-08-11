@@ -255,8 +255,8 @@ $table->head = [
  *
  * Somebody named here who also holds the capability used to appear twice, once
  * per route, which reads as two managers and invites somebody to remove "the
- * duplicate". They are one person with one job and two reasons, so the routes
- * belong in one cell.
+ * duplicate". One person, one row, and one route: being named is a statement
+ * somebody made here, and it is the answer whenever it exists.
  *
  * Roles stay on their own rows. A role names a set of people that changes on its
  * own, so it cannot be merged with any individual without saying something
@@ -347,15 +347,32 @@ foreach (manager_resolver::managers() as $manager) {
     }
 }
 
+/*
+ * How many people are named here and also reach this through a role.
+ *
+ * Counted rather than shown per row. Two routes in one cell described a state
+ * to be resolved as though it were a fact about somebody, and invited whoever
+ * read it to remove "the duplicate".
+ */
+$alsogranted = 0;
+
 foreach ($register as $entry) {
-    $routes = [];
-
+    /*
+     * One route per row, and being named is the one that wins.
+     *
+     * A naming is a statement somebody made on this page. A capability is how
+     * they happened to get in before anybody stated it. Where both are true the
+     * naming is the answer, and the grant underneath is a tidy-up rather than a
+     * second kind of manager.
+     */
     if ($entry->mappingid) {
-        $routes[] = get_string('manage:route:named', 'local_reportlms');
-    }
+        $route = get_string('manage:route:named', 'local_reportlms');
 
-    if ($entry->capability) {
-        $routes[] = get_string('manage:route:capability', 'local_reportlms');
+        if ($entry->capability) {
+            $alsogranted++;
+        }
+    } else {
+        $route = get_string('manage:route:capability', 'local_reportlms');
     }
 
     $actions = [];
@@ -395,7 +412,8 @@ foreach ($register as $entry) {
                 'nodeid' => $entry->nodeid,
                 'sesskey' => sesskey(),
             ]),
-            get_string('manage:namehere', 'local_reportlms')
+            get_string('manage:fix', 'local_reportlms'),
+            ['title' => get_string('manage:fix_help', 'local_reportlms')]
         );
     }
 
@@ -420,7 +438,7 @@ foreach ($register as $entry) {
     $table->data[] = [
         $entry->who,
         $cell,
-        implode(', ', $routes),
+        $route,
         implode(' &nbsp; ', $actions),
     ];
 }
@@ -429,6 +447,26 @@ if (!$table->data) {
     echo html_writer::tag('p', get_string('manage:nomanagers', 'local_reportlms'), ['class' => 'text-muted']);
 } else {
     echo html_writer::table($table);
+}
+
+/*
+ * The overlap, said once rather than per row.
+ *
+ * These people are named here and would also get in through a role, so the
+ * naming is not yet the only thing holding their access up and removing it
+ * would not remove them. Nothing on this page can fix that: a capability lives
+ * in a role definition, and taking it off one person would mean stripping a
+ * role that carries hundreds of other things. So this points at the place that
+ * can, rather than offering a button that would quietly do the wrong amount.
+ */
+if ($alsogranted) {
+    $roleurl = new moodle_url('/admin/roles/manage.php');
+
+    echo html_writer::div(
+        get_string('manage:alsogranted', 'local_reportlms', $alsogranted)
+        . ' ' . html_writer::link($roleurl, get_string('manage:alsogranted_link', 'local_reportlms')),
+        'text-muted small mt-2'
+    );
 }
 
 /*
