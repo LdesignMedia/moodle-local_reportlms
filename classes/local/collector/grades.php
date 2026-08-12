@@ -68,7 +68,7 @@ class grades {
 
         // The criteria join selects the main activity, the same rule the
         // attempts collector uses. gradetype filters out scale and text items.
-        $sql = "SELECT gg.id, gg.userid, cm.id AS cmid,
+        $sql = "SELECT gg.id, gg.userid, cm.id AS cmid, cm.course AS courseid,
                        gg.finalgrade, gi.grademax, gi.grademin
                   FROM {grade_grades} gg
                   JOIN {grade_items} gi ON gi.id = gg.itemid
@@ -98,6 +98,9 @@ class grades {
             $rows[] = (object) [
                 'userid' => (int) $record->userid,
                 'cmid' => (int) $record->cmid,
+                // Internal, never serialised: the batch builder filters rows
+                // by who counts as a learner in the course.
+                'courseid' => (int) $record->courseid,
                 'grade' => round($percentage, 2),
                 'grade_max' => 100,
             ];

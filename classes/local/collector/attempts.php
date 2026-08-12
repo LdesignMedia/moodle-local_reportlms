@@ -66,7 +66,7 @@ class attempts {
 
         // The criteria join is what selects the main activity: only attempts
         // on a quiz that gates its course's completion are counted.
-        $sql = "SELECT qa.userid, cm.id AS cmid, COUNT(qa.id) AS attempts
+        $sql = "SELECT qa.userid, cm.id AS cmid, cm.course AS courseid, COUNT(qa.id) AS attempts
                   FROM {quiz_attempts} qa
                   JOIN {course_modules} cm ON cm.instance = qa.quiz
                   JOIN {modules} m ON m.id = cm.module AND m.name = 'quiz'
@@ -79,7 +79,7 @@ class attempts {
                    AND qa.state = 'finished'
                    AND qa.preview = 0
                    AND qa.userid {$insql}
-              GROUP BY qa.userid, cm.id
+              GROUP BY qa.userid, cm.id, cm.course
               ORDER BY qa.userid, cm.id";
 
         // A recordset, never get_records_sql: that helper keys rows by the
@@ -92,6 +92,9 @@ class attempts {
             $rows[] = (object) [
                 'userid' => (int) $record->userid,
                 'cmid' => (int) $record->cmid,
+                // Internal, never serialised: the batch builder filters rows
+                // by who counts as a learner in the course.
+                'courseid' => (int) $record->courseid,
                 'kind' => 'quiz',
                 'summative' => true,
                 'attempts' => (int) $record->attempts,

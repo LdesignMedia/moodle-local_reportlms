@@ -61,7 +61,7 @@ class activity_completion {
         [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
         $params['incomplete'] = COMPLETION_INCOMPLETE;
 
-        $sql = "SELECT cmc.id, cmc.userid, cm.id AS cmid, m.name AS kind, cmc.timemodified
+        $sql = "SELECT cmc.id, cmc.userid, cm.id AS cmid, cm.course AS courseid, m.name AS kind, cmc.timemodified
                   FROM {course_modules_completion} cmc
                   JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
                   JOIN {modules} m ON m.id = cm.module
@@ -76,6 +76,9 @@ class activity_completion {
             $rows[] = (object) [
                 'userid' => (int) $record->userid,
                 'cmid' => (int) $record->cmid,
+                // Internal, never serialised: the batch builder filters rows
+                // by who counts as a learner in the course.
+                'courseid' => (int) $record->courseid,
                 'kind' => $record->kind,
                 'completed_at' => (int) $record->timemodified,
             ];

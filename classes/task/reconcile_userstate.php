@@ -30,7 +30,7 @@ use local_reportlms\local\userstate;
 /**
  * Sweeps the source tables for changes the observers never saw.
  *
- * Events are the fast path but they are not complete. Course restores, plugin
+ * Events are the fast path, but they are not complete. Course restores, plugin
  * upgrades, enrolment sync tasks, gradebook recalculation and anything written
  * straight to the database all change reported data without raising an event we
  * observe. Without this sweep the SaaS drifts quietly, which is worse than
@@ -58,6 +58,12 @@ class reconcile_userstate extends \core\task\scheduled_task {
             'cmcompletion' => ['table' => 'course_modules_completion', 'column' => 'timemodified', 'userfield' => 'userid'],
             'grades' => ['table' => 'grade_grades', 'column' => 'timemodified', 'userfield' => 'userid'],
             'quizattempts' => ['table' => 'quiz_attempts', 'column' => 'timemodified', 'userfield' => 'userid'],
+            // Role assignments decide whether an enrolment counts as a
+            // learner at all (see local\gradable), so a missed role event has
+            // to be sweepable the same as a missed enrolment event. Deletions
+            // leave no row to sweep; the role_unassigned observer carries
+            // those, which is why the pair matters here too.
+            'roles' => ['table' => 'role_assignments', 'column' => 'timemodified', 'userfield' => 'userid'],
         ];
     }
 

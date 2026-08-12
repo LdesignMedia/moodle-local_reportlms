@@ -134,7 +134,18 @@ class push_batch extends \core\task\scheduled_task {
             return;
         }
 
-        $chunks = batch_builder::build($userids, time());
+        try {
+            $chunks = batch_builder::build($userids, time());
+        } catch (\local_reportlms\local\push_refused_exception $e) {
+            // A refusal here is the builder declining to miscount (no gradable
+            // roles, contexts mid-rebuild), not a broken site. The flags stay
+            // dirty; returning lets the task retry on its normal slot instead
+            // of failing into Moodle's exponential backoff, which would stall
+            // every push for hours over a transient.
+            mtrace('Report LMS push refused before sending: ' . $e->getMessage());
+
+            return;
+        }
 
         // Injectable so a test can hand back a refusal without a network.
         $client = $this->client ?? new api_client(config::baseurl());
@@ -206,7 +217,7 @@ class push_batch extends \core\task\scheduled_task {
             }
 
             $sent += count($chunk->userids);
-            mtrace("chunk {$i}: {$chunk->factrows} fact rows for " . count($chunk->userids)
+            mtrace("chunk $i: $chunk->factrows fact rows for " . count($chunk->userids)
                 . ' learners accepted (' . ($reply['batch_id'] ?? 'no batch id') . ').');
         }
 

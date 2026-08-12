@@ -47,6 +47,13 @@ $observers = [
     ['eventname' => '\core\event\user_enrolment_updated', 'callback' => $callback],
     ['eventname' => '\core\event\user_enrolment_deleted', 'callback' => $callback],
 
+    // Roles, which decide whether an enrolment counts: only a gradable role
+    // makes a learner, so promoting somebody to course Manager or demoting
+    // them back must re-push their facts, not wait to be noticed. Both events
+    // carry the affected user in relateduserid.
+    ['eventname' => '\core\event\role_assigned', 'callback' => $callback],
+    ['eventname' => '\core\event\role_unassigned', 'callback' => $callback],
+
     // Progress.
     ['eventname' => '\core\event\course_completed', 'callback' => $callback],
     ['eventname' => '\core\event\course_module_completion_updated', 'callback' => $callback],

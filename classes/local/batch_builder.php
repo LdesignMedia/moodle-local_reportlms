@@ -71,7 +71,26 @@ class batch_builder {
                 'grades' => [], 'activity_completion' => [], 'certificates' => []];
         }
 
+        /*
+         * Who counts, decided once and applied to every block.
+         *
+         * A course-role Manager is enrolled like anybody else, and without
+         * this filter every chart counts them as a learner who never
+         * finishes. The rule (a gradable role in the course, per Moodle's own
+         * gradebook roles setting) lives in one place and gates all six fact
+         * blocks together, so a manager cannot vanish from the enrolment
+         * counts yet linger in the attempts bands.
+         *
+         * This governs what is written from here on; the SaaS deletes nothing
+         * on its own, so rows pushed before this rule existed stay until the
+         * environment is reset or fact removal grows contract semantics.
+         */
+        $countable = gradable::pairs($userids);
+
         foreach (enrolments::collect($userids) as $row) {
+            if (!isset($countable[$row->userid][(int) $row->courseid])) {
+                continue;
+            }
             $peruser[$row->userid]['enrolments'][] = [
                 'learner_pid' => pseudonym::learner($row->userid),
                 'course_ref' => pseudonym::course((int) $row->courseid),
@@ -80,6 +99,9 @@ class batch_builder {
             ];
         }
         foreach (completion::collect($userids) as $row) {
+            if (!isset($countable[$row->userid][(int) $row->courseid])) {
+                continue;
+            }
             $peruser[$row->userid]['completion'][] = [
                 'learner_pid' => pseudonym::learner($row->userid),
                 'course_ref' => pseudonym::course($row->courseid),
@@ -89,6 +111,9 @@ class batch_builder {
             ];
         }
         foreach (attempts::collect($userids) as $row) {
+            if (!isset($countable[$row->userid][(int) $row->courseid])) {
+                continue;
+            }
             $peruser[$row->userid]['attempts'][] = [
                 'learner_pid' => pseudonym::learner($row->userid),
                 'activity_ref' => pseudonym::activity($row->cmid),
@@ -98,6 +123,9 @@ class batch_builder {
             ];
         }
         foreach (grades::collect($userids) as $row) {
+            if (!isset($countable[$row->userid][(int) $row->courseid])) {
+                continue;
+            }
             $peruser[$row->userid]['grades'][] = [
                 'learner_pid' => pseudonym::learner($row->userid),
                 'activity_ref' => pseudonym::activity($row->cmid),
@@ -106,6 +134,9 @@ class batch_builder {
             ];
         }
         foreach (certificates::collect($userids) as $row) {
+            if (!isset($countable[$row->userid][(int) $row->courseid])) {
+                continue;
+            }
             $peruser[$row->userid]['certificates'][] = [
                 'learner_pid' => pseudonym::learner($row->userid),
                 'course_ref' => pseudonym::course($row->courseid),
@@ -117,6 +148,9 @@ class batch_builder {
             ];
         }
         foreach (activity_completion::collect($userids) as $row) {
+            if (!isset($countable[$row->userid][(int) $row->courseid])) {
+                continue;
+            }
             $peruser[$row->userid]['activity_completion'][] = [
                 'learner_pid' => pseudonym::learner($row->userid),
                 'activity_ref' => pseudonym::activity($row->cmid),
