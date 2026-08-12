@@ -79,25 +79,88 @@ if ($action !== '' && confirm_sesskey()) {
             break;
 
         case 'place':
-            $userid = required_param('userid', PARAM_INT);
+            $userid = optional_param('userid', 0, PARAM_INT);
             $nodeid = optional_param('nodeid', 0, PARAM_INT);
+            $courseids = optional_param_array('courseids', [], PARAM_INT);
 
             // Zero is the "back to auto-detect" option in the same control, so
-            // placing and releasing are one action to the person using it.
-            if ($nodeid > 0) {
-                mapping::place($userid, $nodeid);
-            } else {
-                mapping::release($userid);
+            // placing and releasing are one action to the person using it. Only
+            // ever one person: releasing a course full of people is what the
+            // Release link beside each name is for.
+            if ($nodeid === 0) {
+                if ($userid > 0) {
+                    mapping::release($userid);
+                }
+
+                break;
             }
+
+            /*
+             * One person, or everybody on some courses, or both.
+             *
+             * The courses are resolved here rather than in the form so the
+             * count can be shown before anything is written. Selecting an
+             * all-staff course is how a unit acquires 1,467 people, and placing
+             * is by hand, so every one of them would stop following their
+             * profile field permanently. The number goes in the question.
+             */
+            $toplace = mapping::candidates_from_courses($courseids, $nodeid);
+
+            if ($userid > 0 && !in_array($userid, $toplace, true)) {
+                $toplace[] = $userid;
+            }
+
+            if (!$toplace) {
+                break;
+            }
+
+            $unit = mapping::nodes()[$nodeid] ?? null;
+
+            if (count($toplace) > 1 && !optional_param('confirm', 0, PARAM_BOOL)) {
+                $back = new moodle_url($pageurl, [
+                    'action' => 'place',
+                    'nodeid' => $nodeid,
+                    'userid' => $userid,
+                    'confirm' => 1,
+                    'sesskey' => sesskey(),
+                ]);
+
+                foreach ($courseids as $index => $courseid) {
+                    $back->param('courseids[' . $index . ']', $courseid);
+                }
+
+                echo $OUTPUT->header();
+                echo $OUTPUT->confirm(
+                    get_string('manage:placeconfirm', 'local_reportlms', (object) [
+                        'count' => count($toplace),
+                        'unit' => $unit ? format_string($unit->name) : '',
+                    ]),
+                    $back,
+                    $pageurl
+                );
+                echo $OUTPUT->footer();
+
+                exit;
+            }
+
+            foreach ($toplace as $placeid) {
+                mapping::place((int) $placeid, $nodeid);
+            }
+
+            redirect(
+                $pageurl,
+                get_string('manage:placedpeople', 'local_reportlms', count($toplace)),
+                null,
+                \core\output\notification::NOTIFY_SUCCESS
+            );
             break;
 
         case 'addmanager':
-            $roleid = optional_param('roleid', 0, PARAM_INT);
-
+            // Always a person. The role option is gone; see name_manager.
             mapping::add_manager(
                 required_param('nodeid', PARAM_INT),
-                $roleid > 0 ? null : (optional_param('manageruserid', 0, PARAM_INT) ?: null),
-                $roleid ?: null
+                optional_param('manageruserid', 0, PARAM_INT) ?: null,
+                null
             );
             break;
 
@@ -116,54 +179,6 @@ if ($action !== '' && confirm_sesskey()) {
                 required_param('nodeid', PARAM_INT),
                 required_param('userid', PARAM_INT),
                 null
-            );
-            break;
-
-        case 'placepeople':
-            /*
-             * Confirmed first, because this one is hard to walk back.
-             *
-             * Placing a learner by hand is what stops auto-detect ever moving
-             * them again. Measured on a real site the day this was written: one
-             * unit offered three people and another offered 1,467, because that
-             * manager is an ordinary participant on an all-staff course. The
-             * second is one click away from freezing almost every learner on
-             * the site, and nothing about the button said so.
-             *
-             * The count is in the question, so the number is read before it is
-             * agreed to rather than after.
-             */
-            $confirmnodeid = required_param('nodeid', PARAM_INT);
-
-            if (!optional_param('confirm', 0, PARAM_BOOL)) {
-                $count = count(mapping::placeable_for($confirmnodeid));
-                $unit = mapping::nodes()[$confirmnodeid] ?? null;
-
-                echo $OUTPUT->header();
-                echo $OUTPUT->confirm(
-                    get_string('manage:placeconfirm', 'local_reportlms', (object) [
-                        'count' => $count,
-                        'unit' => $unit ? format_string($unit->name) : '',
-                    ]),
-                    new moodle_url($pageurl, [
-                        'action' => 'placepeople',
-                        'nodeid' => $confirmnodeid,
-                        'confirm' => 1,
-                        'sesskey' => sesskey(),
-                    ]),
-                    $pageurl
-                );
-                echo $OUTPUT->footer();
-
-                exit;
-            }
-
-            $placed = mapping::place_managed_people($confirmnodeid);
-            redirect(
-                $pageurl,
-                get_string('manage:placedpeople', 'local_reportlms', $placed),
-                null,
-                \core\output\notification::NOTIFY_SUCCESS
             );
             break;
 
@@ -222,42 +237,12 @@ if (!$nodes) {
             'sesskey' => sesskey(),
         ]);
 
-        /*
-         * The people this unit's managers manage and it does not have yet.
-         *
-         * A learner with a blank or wrong department field lands nowhere near
-         * whoever actually runs their training, and no amount of auto-detect
-         * fixes that, because the fact it needs is not in the data. Their
-         * manager is the one who knows, so the offer is made here with the
-         * number on it, and it disappears when there is nothing left to add.
-         */
-        $placeable = mapping::placeable_for((int) $node->id);
-        $actions = [];
-
-        if ($placeable) {
-            $place = new moodle_url($pageurl, [
-                'action' => 'placepeople',
-                'nodeid' => $node->id,
-                'sesskey' => sesskey(),
-            ]);
-
-            $actions[] = html_writer::link(
-                $place,
-                count($placeable) === 1
-                    ? get_string('manage:placeperson', 'local_reportlms')
-                    : get_string('manage:placepeople', 'local_reportlms', count($placeable)),
-                ['title' => get_string('manage:placepeople_help', 'local_reportlms')]
-            );
-        }
-
-        $actions[] = html_writer::link($delete, get_string('delete'), ['class' => 'text-danger']);
-
         $table->data[] = [
             s($node->name),
             get_string('manage:kind:' . $node->kind, 'local_reportlms'),
             $node->parentid && isset($nodes[$node->parentid]) ? s($nodes[$node->parentid]->name) : '-',
             count(mapping::members_of((int) $node->id)),
-            implode(' &nbsp; ', $actions),
+            html_writer::link($delete, get_string('delete'), ['class' => 'text-danger']),
         ];
     }
 
@@ -599,11 +584,8 @@ if (mapping::has_departments_to_import()) {
 }
 
 if ($nodes) {
-    $roleoptions = [0 => get_string('manage:norole', 'local_reportlms')] + $roles;
-
     (new \local_reportlms\form\name_manager($pageurl->out(false), [
         'units' => $unitoptions,
-        'roles' => $roleoptions,
     ]))->display();
 } else {
     /*
@@ -657,7 +639,27 @@ if (!$membership) {
 }
 
 if ($nodes) {
-    (new \local_reportlms\form\place_person($pageurl->out(false), ['units' => $unitoptions]))->display();
+    /*
+     * The course list for the picker, built once here.
+     *
+     * get_courses() rather than a hand-rolled query: it applies the visibility
+     * rules and returns the site course, which is dropped because "everyone on
+     * the site" is not a department.
+     */
+    $courseoptions = [];
+
+    foreach (get_courses('all', 'c.shortname ASC', 'c.id, c.shortname, c.fullname') as $course) {
+        if ((int) $course->id === SITEID) {
+            continue;
+        }
+
+        $courseoptions[$course->id] = format_string($course->fullname);
+    }
+
+    (new \local_reportlms\form\place_person($pageurl->out(false), [
+        'units' => $unitoptions,
+        'courses' => $courseoptions,
+    ]))->display();
 } else {
     // Same reasoning as the manager form above: an absent control that explains
     // itself is a step, and one that does not is a bug report.

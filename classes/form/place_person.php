@@ -64,7 +64,28 @@ class place_person extends \moodleform {
                 },
             ]
         );
-        $mform->addRule('userid', null, 'required', null, 'client');
+        /*
+         * Or everybody on some courses, which is the thing an administrator
+         * actually knows.
+         *
+         * Naming people one at a time is honest and unusable for a real
+         * department, which is why the hand-placed list stayed empty on every
+         * connected site. "Everyone on these courses" is one sentence and it
+         * covers four hundred people.
+         *
+         * The options are preloaded rather than searched over AJAX. Measured on
+         * the connected sites: 70, 7 and 908 courses, and Moodle's autocomplete
+         * filters a preloaded list in the browser. A site with tens of
+         * thousands of courses would need a search endpoint; none is near that,
+         * and building one now would be building for a number nobody has.
+         */
+        $mform->addElement(
+            'autocomplete',
+            'courseids',
+            get_string('manage:fromcourses', 'local_reportlms'),
+            $this->_customdata['courses'] ?? [],
+            ['multiple' => true]
+        );
 
         $mform->addElement('select', 'nodeid', get_string('manage:unit', 'local_reportlms'), $units);
 
@@ -72,5 +93,27 @@ class place_person extends \moodleform {
         $mform->setType('action', PARAM_ALPHA);
 
         $this->add_action_buttons(false, get_string('add'));
+    }
+
+    /**
+     * One of the two, not neither.
+     *
+     * Person was required until courses existed beside it. Requiring it still
+     * would mean naming somebody in order to add four hundred people, and
+     * requiring neither would mean a button that silently does nothing.
+     *
+     * @param array $data
+     * @param array $files
+     *
+     * @return array
+     */
+    public function validation($data, $files): array {
+        $errors = parent::validation($data, $files);
+
+        if (empty($data['userid']) && empty($data['courseids'])) {
+            $errors['userid'] = get_string('manage:pickoneorother', 'local_reportlms');
+        }
+
+        return $errors;
     }
 }

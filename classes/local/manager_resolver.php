@@ -549,7 +549,14 @@ class manager_resolver {
      *
      * @return array<int, int> User ids.
      */
-    protected static function participants_of(array $courseids): array {
+    /**
+     * Public so one query defines "participant".
+     *
+     * The mapping editor asks the same question when somebody chooses courses
+     * to place people from, and two queries would drift into disagreeing about
+     * who is on a course.
+     */
+    public static function participants_of(array $courseids): array {
         global $DB;
 
         if (!$courseids) {

@@ -345,107 +345,45 @@ class mapping {
     }
 
     /**
-     * Everybody who manages anything on this site.
+     * The people on these courses, for placing into a unit.
      *
-     * Both routes, because both make somebody a manager: named on the mapping
-     * page, or holding the capability on a course. Used to keep them out of the
-     * headcounts, since a manager standing in their own team's figures makes a
-     * department of nine read as ten and puts the person reading the report into
-     * the list of people they are reading about.
+     * What an administrator actually knows is "everybody on these courses". They
+     * do not know four hundred names, and asking for them one at a time is the
+     * reason the hand-placed list stayed empty on every site.
      *
-     * @return array<int, bool> Keyed by user id, for cheap lookups.
-     */
-    public static function manager_userids(): array {
-        $ids = [];
-
-        foreach (self::managers() as $row) {
-            if ($row->userid) {
-                $ids[(int) $row->userid] = true;
-            }
-        }
-
-        foreach (manager_resolver::managers() as $manager) {
-            $ids[(int) $manager->userid] = true;
-        }
-
-        return $ids;
-    }
-
-    /**
-     * The people a unit's managers manage, who are not in it yet.
+     * This replaced deriving the list from a manager's own enrolments. That
+     * looked equivalent and was not: measured on a real site it offered three
+     * people for one unit and 1,467 for another, because that manager is an
+     * ordinary participant on an all-staff course. Being enrolled somewhere is
+     * not managing it, so the courses are chosen rather than guessed.
      *
-     * Auto-detect reads a learner's own department field, so anybody whose
-     * profile is blank or wrong lands nowhere near the person who actually runs
-     * their training. Their manager knows.
+     * Left out: the guest, site administrators, and anybody already placed here,
+     * so the number shown is what pressing the button changes.
      *
-     * **Their courses are the ones they are enrolled on.** That used to be read
-     * off the capability, which says exactly this and says it better: :view on
-     * a course means "these participants are yours". It stopped working the
-     * moment a site did what the access rework asks and took the blanket grant
-     * off the manager role, at which point a correctly tidied site was the one
-     * where this knew nothing. Enrolment is a fact that survives being tidy.
+     * **Managers are not left out.** A manager of one unit is an ordinary
+     * learner in another, and the head of Sales still takes the compliance
+     * course. They are only ever excluded from the unit they themselves manage,
+     * which is a question for the aggregation rather than for this list.
      *
-     * Only named managers count. Somebody detected by capability alone has not
-     * been stated to run this unit by anybody, and their course participants
-     * are not this unit's people until they have.
-     *
-     * @param int $nodeid
+     * @param array<int, int> $courseids
+     * @param int $nodeid The unit they would go into.
      *
      * @return array<int, int> User ids.
      */
-    public static function placeable_for(int $nodeid): array {
-        global $DB;
+    public static function candidates_from_courses(array $courseids, int $nodeid): array {
+        $courseids = array_values(array_filter(array_map('intval', $courseids)));
 
-        $managers = [];
-
-        foreach (self::managers() as $row) {
-            if ((int) $row->nodeid === $nodeid && $row->userid) {
-                $managers[(int) $row->userid] = true;
-            }
-        }
-
-        if (!$managers) {
+        if (!$courseids) {
             return [];
         }
 
-        [$insql, $params] = $DB->get_in_or_equal(array_keys($managers), SQL_PARAMS_NAMED);
-
-        // Everybody enrolled on a course one of these managers is enrolled on.
-        // u.id > 2 drops the guest and the first administrator, who are on some
-        // courses for reasons that have nothing to do with the organisation.
-        $sql = "SELECT DISTINCT theirs.userid
-                  FROM {user_enrolments} mine
-                  JOIN {enrol} eone ON eone.id = mine.enrolid
-                  JOIN {enrol} etwo ON etwo.courseid = eone.courseid
-                  JOIN {user_enrolments} theirs ON theirs.enrolid = etwo.id
-                  JOIN {user} u ON u.id = theirs.userid
-                 WHERE mine.userid {$insql}
-                   AND u.deleted = 0
-                   AND u.id > 2";
-
         $already = array_flip(self::members_of($nodeid));
-        $ismanager = self::manager_userids();
         $candidates = [];
 
-        foreach ($DB->get_fieldset_sql($sql, $params) as $participantid) {
+        foreach (manager_resolver::participants_of($courseids) as $participantid) {
             $participantid = (int) $participantid;
 
-            /*
-             * No manager is one of their own unit's people, and no
-             * administrator is anybody's.
-             *
-             * A manager is enrolled on the courses they run, so every one of
-             * them turns up in this list, and so does any colleague managing
-             * alongside them. An administrator turns up because they are on
-             * everything. Counting either makes a department of nine read as
-             * ten and puts the person reading the report into the list of
-             * people they are reading about.
-             */
-            if (isset($ismanager[$participantid]) || isset($already[$participantid])) {
-                continue;
-            }
-
-            if (is_siteadmin($participantid)) {
+            if (isset($already[$participantid]) || is_siteadmin($participantid)) {
                 continue;
             }
 
@@ -453,31 +391,6 @@ class mapping {
         }
 
         return array_values($candidates);
-    }
-
-    /**
-     * Put a unit's managers' people into it, by hand.
-     *
-     * Deliberately not part of {@see import_manager_departments}, which creates
-     * units and namings and touches nobody's membership. Placing a learner is
-     * what stops auto-detect ever moving them again, so it is offered one unit
-     * at a time, with the number on the button, rather than happening to
-     * everybody at once because somebody accepted a different offer.
-     *
-     * Reversible: each of them gets a Release beside their name afterwards.
-     *
-     * @param int $nodeid
-     *
-     * @return int How many were placed.
-     */
-    public static function place_managed_people(int $nodeid): int {
-        $userids = self::placeable_for($nodeid);
-
-        foreach ($userids as $userid) {
-            self::place($userid, $nodeid);
-        }
-
-        return count($userids);
     }
 
     /**

@@ -455,79 +455,83 @@ final class mapping_test extends \advanced_testcase {
         $this->assertSame(0, mapping::import_manager_departments());
     }
 
+
+
+
     /**
-     * A named manager's people are the people on their courses.
+     * Choosing courses chooses their participants.
      *
-     * Their courses used to be read off the capability, which stopped saying
-     * anything the moment a site took the blanket grant off the manager role,
-     * so a correctly tidied site was the one where this knew nothing. Enrolment
-     * survives being tidy.
+     * The thing an administrator knows is "everybody on these courses". Naming
+     * four hundred people one at a time is why the hand-placed list stayed
+     * empty on every connected site.
      */
-    public function test_a_named_managers_people_come_from_the_courses_they_are_on(): void {
+    public function test_the_people_on_the_chosen_courses_are_the_candidates(): void {
         $this->resetAfterTest();
         $this->setAdminUser();
 
-        $manager = $this->getDataGenerator()->create_user();
-        $learner = $this->getDataGenerator()->create_user();
+        $onit = $this->getDataGenerator()->create_user();
         $elsewhere = $this->getDataGenerator()->create_user();
         $course = $this->getDataGenerator()->create_course();
         $other = $this->getDataGenerator()->create_course();
 
-        $this->getDataGenerator()->enrol_user($manager->id, $course->id);
-        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->getDataGenerator()->enrol_user($onit->id, $course->id);
         $this->getDataGenerator()->enrol_user($elsewhere->id, $other->id);
 
         $node = mapping::save_node('Rotterdam', 'department');
-        mapping::add_manager($node, (int) $manager->id, null);
-        mapping::reset();
 
-        $placeable = mapping::placeable_for($node);
-
-        $this->assertSame([(int) $learner->id], $placeable);
+        $this->assertSame(
+            [(int) $onit->id],
+            mapping::candidates_from_courses([(int) $course->id], $node)
+        );
     }
 
     /**
-     * The manager is not one of their own people, and neither is an admin.
+     * Administrators are left out. Managers are not.
+     *
+     * A manager of one unit is an ordinary learner in another, and the head of
+     * Sales still takes the compliance course. Filtering them out of this list
+     * would make it impossible to put them where they actually work.
      */
-    public function test_the_manager_and_the_administrator_are_left_out(): void {
+    public function test_an_administrator_is_left_out_and_a_manager_is_not(): void {
         $this->resetAfterTest();
         $this->setAdminUser();
 
-        $manager = $this->getDataGenerator()->create_user();
+        $elsewheresmanager = $this->getDataGenerator()->create_user();
         $course = $this->getDataGenerator()->create_course();
 
-        $this->getDataGenerator()->enrol_user($manager->id, $course->id);
+        $this->getDataGenerator()->enrol_user($elsewheresmanager->id, $course->id);
 
         global $USER;
         $this->getDataGenerator()->enrol_user($USER->id, $course->id);
 
-        $node = mapping::save_node('Rotterdam', 'department');
-        mapping::add_manager($node, (int) $manager->id, null);
+        $theirs = mapping::save_node('Sales', 'department');
+        mapping::add_manager($theirs, (int) $elsewheresmanager->id, null);
         mapping::reset();
 
-        $this->assertSame([], mapping::placeable_for($node));
+        $here = mapping::save_node('Rotterdam', 'department');
+
+        $this->assertSame(
+            [(int) $elsewheresmanager->id],
+            mapping::candidates_from_courses([(int) $course->id], $here)
+        );
     }
 
     /**
-     * Somebody already in the unit is not offered again, so the count on the
-     * button is what pressing it would change and the offer runs out.
+     * Somebody already in the unit is not offered twice, so the number in the
+     * confirmation is what pressing it changes.
      */
-    public function test_people_already_in_the_unit_are_not_offered_twice(): void {
+    public function test_people_already_in_the_unit_are_not_offered_again(): void {
         $this->resetAfterTest();
         $this->setAdminUser();
 
-        $manager = $this->getDataGenerator()->create_user();
         $learner = $this->getDataGenerator()->create_user();
         $course = $this->getDataGenerator()->create_course();
 
-        $this->getDataGenerator()->enrol_user($manager->id, $course->id);
         $this->getDataGenerator()->enrol_user($learner->id, $course->id);
 
         $node = mapping::save_node('Rotterdam', 'department');
-        mapping::add_manager($node, (int) $manager->id, null);
-        mapping::reset();
+        mapping::place((int) $learner->id, $node);
 
-        $this->assertSame(1, mapping::place_managed_people($node));
-        $this->assertSame([], mapping::placeable_for($node));
+        $this->assertSame([], mapping::candidates_from_courses([(int) $course->id], $node));
     }
 }

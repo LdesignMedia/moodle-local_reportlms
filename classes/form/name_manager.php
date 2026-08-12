@@ -46,7 +46,6 @@ class name_manager extends \moodleform {
         $mform = $this->_form;
         $units = $this->_customdata['units'] ?? [];
 
-        $roles = $this->_customdata['roles'] ?? [];
 
         $mform->addElement('select', 'nodeid', get_string('manage:unit', 'local_reportlms'), $units);
 
@@ -76,8 +75,18 @@ class name_manager extends \moodleform {
             ]
         );
 
-        $mform->addElement('select', 'roleid', get_string('manage:orrole', 'local_reportlms'), $roles);
-
+        /*
+         * No role option.
+         *
+         * There was one, "or everyone holding this role", and it did not
+         * survive contact with the idea: a manager is a person who runs a team,
+         * and a role is a set that changes on its own as people join and leave.
+         * Nobody used it on any connected site. Managers are named one at a
+         * time, which is what naming means.
+         *
+         * The column and the read path stay, so a site that already created one
+         * keeps it. Nothing can create another.
+         */
         $mform->addElement('hidden', 'action', 'addmanager');
         $mform->setType('action', PARAM_ALPHA);
 
