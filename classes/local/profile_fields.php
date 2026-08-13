@@ -37,7 +37,7 @@ use local_reportlms\local\collector\org;
  *
  * Text fields, deliberately: the plugin cannot know a customer's vocabulary,
  * so it cannot offer a menu. The cost is that a typo mints a new department
- * node — the seed sites use menu fields and will not show that failure, so
+ * node, the seed sites use menu fields and will not show that failure, so
  * do not let green QA there stand in for it.
  */
 class profile_fields {
@@ -53,7 +53,7 @@ class profile_fields {
      * Create the category and the three fields, idempotently.
      *
      * A field whose shortname already exists is left exactly as it is: not
-     * recreated, not retyped, and — deliberately — not locked. Locking is
+     * recreated, not retyped, and, deliberately, not locked. Locking is
      * lock_department_field()'s job and follows the mapping, not this list.
      *
      * Safe from db/install.php under web and CLI alike: pure $DB, no $USER,
@@ -138,7 +138,7 @@ class profile_fields {
      * A denylist, not an allowlist: profile field types are pluggable, and
      * the only ones excluded are those whose stored value is not a plain
      * label. Two properties are load-bearing. The configured value always
-     * appears, even when its field no longer exists — otherwise opening the
+     * appears, even when its field no longer exists, otherwise opening the
      * page and pressing Save would silently re-map to whatever option came
      * first. And the empty option names the plugin's own field, which is
      * exactly what an empty config falls back to in org::fieldmap().
@@ -152,8 +152,8 @@ class profile_fields {
 
         $default = 'rlms_' . $role;
 
-        // The default option is labelled like every other entry — the field's
-        // own name — because to an administrator it IS just a field; "Report
+        // The default option is labelled like every other entry, the field's
+        // own name, because to an administrator it IS just a field; "Report
         // LMS field" was a mechanism name leaking into a menu. The lang string
         // only steps in when the field is somehow gone.
         $defaultfield = $DB->get_record('user_info_field', ['shortname' => $default], 'id, name');
@@ -182,7 +182,7 @@ class profile_fields {
         // A configured value must always be an option, or the browser would
         // silently submit whatever came first. Two ways it can be absent from
         // the list: it names the excluded default explicitly, or its field is
-        // gone — only the second is worth an alarm label.
+        // gone, only the second is worth an alarm label.
         $configured = (string) get_config('local_reportlms', 'orgfield_' . $role);
         if ($configured !== '' && !isset($options[$configured])) {
             $field = $DB->get_record('user_info_field', ['shortname' => $configured], 'id, shortname, name');

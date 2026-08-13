@@ -30,7 +30,7 @@ namespace local_reportlms\local\collector;
  * The dimensions section: the catalogue the facts point at.
  *
  * Course and activity titles are the one label the contract lets leave the
- * site as text, because a course name is organisational, not personal — the
+ * site as text, because a course name is organisational, not personal, the
  * plan's data model says "codes with optional non-personal titles". People,
  * departments and functions stay coded; this is what makes the dashboard's
  * dropdowns readable without touching that rule.
@@ -53,7 +53,7 @@ class dimensions {
      *
      * Courses: every real course the facts can reference, which means one
      * with an enrolment or a completion. Activities:
-     * the course modules facts are reported on — those with completion
+     * the course modules facts are reported on, those with completion
      * tracking, plus the main (completion-gating) activity, which is also
      * the one flagged summative, mirroring the attempts collector's rule.
      *

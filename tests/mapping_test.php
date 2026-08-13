@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Tests for the hand-built organisation.
+ * Tests for the organisation somebody stated.
  *
  * @package    local_reportlms
  * @copyright  2026 Luuk Verhoeven, ldesignmedia.nl <info@ldesignmedia.nl>
@@ -390,7 +390,7 @@ final class mapping_test extends \advanced_testcase {
     /**
      * The import turns the departments detected managers run into units.
      *
-     * Units and namings only. Placing a learner by hand is what stops
+     * Units and namings only. Placing a learner is what stops
      * auto-detect moving them again, so doing it wholesale here would freeze
      * every department against the next HR upload.
      */
@@ -406,7 +406,7 @@ final class mapping_test extends \advanced_testcase {
         $names = array_map(static fn($node) => $node->name, mapping::nodes());
         $this->assertContains('Rotterdam', $names);
         $this->assertCount(1, mapping::managers());
-        $this->assertSame([], mapping::membership(), 'Nobody should be placed by hand.');
+        $this->assertSame([], mapping::membership(), 'Nobody should be placed.');
     }
 
     /**
@@ -462,7 +462,7 @@ final class mapping_test extends \advanced_testcase {
      * Choosing courses chooses their participants.
      *
      * The thing an administrator knows is "everybody on these courses". Naming
-     * four hundred people one at a time is why the hand-placed list stayed
+     * four hundred people one at a time is why that list stayed
      * empty on every connected site.
      */
     public function test_the_people_on_the_chosen_courses_are_the_candidates(): void {
@@ -486,11 +486,10 @@ final class mapping_test extends \advanced_testcase {
     }
 
     /**
-     * Administrators are left out. Managers are not.
+     * A manager of another unit is a learner here.
      *
-     * A manager of one unit is an ordinary learner in another, and the head of
-     * Sales still takes the compliance course. Filtering them out of this list
-     * would make it impossible to put them where they actually work.
+     * The head of Sales still takes the compliance course, so filtering every
+     * manager out would make it impossible to put them where they work.
      */
     public function test_an_administrator_is_left_out_and_a_manager_is_not(): void {
         $this->resetAfterTest();
@@ -533,5 +532,115 @@ final class mapping_test extends \advanced_testcase {
         mapping::place((int) $learner->id, $node);
 
         $this->assertSame([], mapping::candidates_from_courses([(int) $course->id], $node));
+    }
+
+    /**
+     * A unit's own manager is not one of its people.
+     *
+     * They are on the courses they run, so they arrive in their own list.
+     * Measured on a real site: choosing tom's course for the unit tom manages
+     * offered four people, three learners and tom. Placing him would count him
+     * among the people he manages, so a department of three reads as four and
+     * the person opening the report is one of its figures.
+     */
+    public function test_the_units_own_manager_is_not_one_of_its_candidates(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+
+        $this->getDataGenerator()->enrol_user($manager->id, $course->id);
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        $node = mapping::save_node('Rotterdam', 'department');
+        mapping::add_manager($node, (int) $manager->id, null);
+        mapping::reset();
+
+        $this->assertSame(
+            [(int) $learner->id],
+            mapping::candidates_from_courses([(int) $course->id], $node)
+        );
+    }
+
+    /**
+     * A category means the whole branch, not the courses filed directly in it.
+     *
+     * "Everyone under Sales" is what somebody means by choosing Sales, and a
+     * site that files its courses two levels down would otherwise get nobody.
+     */
+    public function test_a_category_reaches_the_courses_beneath_it(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $parent = $this->getDataGenerator()->create_category(['name' => 'Sales']);
+        $child = $this->getDataGenerator()->create_category(['parent' => $parent->id]);
+
+        $deep = $this->getDataGenerator()->create_course(['category' => $child->id]);
+        $outside = $this->getDataGenerator()->create_course();
+
+        $inbranch = $this->getDataGenerator()->create_user();
+        $notinbranch = $this->getDataGenerator()->create_user();
+
+        $this->getDataGenerator()->enrol_user($inbranch->id, $deep->id);
+        $this->getDataGenerator()->enrol_user($notinbranch->id, $outside->id);
+
+        $node = mapping::save_node('Rotterdam', 'department');
+
+        $this->assertSame(
+            [(int) $inbranch->id],
+            mapping::candidates_from(['categories' => [(int) $parent->id]], $node)
+        );
+    }
+
+    /**
+     * A cohort is a list somebody already keeps, so it is one of the ways in.
+     *
+     * Cohort members need no enrolment, so they come from a different query
+     * than the course ones and have to be filtered the same way.
+     */
+    public function test_a_cohort_names_its_members(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $member = $this->getDataGenerator()->create_user();
+        $stranger = $this->getDataGenerator()->create_user();
+        $cohort = $this->getDataGenerator()->create_cohort();
+
+        cohort_add_member($cohort->id, $member->id);
+
+        $node = mapping::save_node('Rotterdam', 'department');
+
+        $this->assertSame(
+            [(int) $member->id],
+            mapping::candidates_from(['cohorts' => [(int) $cohort->id]], $node)
+        );
+        $this->assertNotContains((int) $stranger->id, mapping::candidates_from(
+            ['cohorts' => [(int) $cohort->id]],
+            $node
+        ));
+    }
+
+    /**
+     * Two sources naming the same person name them once.
+     */
+    public function test_the_same_person_from_two_sources_appears_once(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $learner = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+        $cohort = $this->getDataGenerator()->create_cohort();
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        cohort_add_member($cohort->id, $learner->id);
+
+        $node = mapping::save_node('Rotterdam', 'department');
+
+        $this->assertSame([(int) $learner->id], mapping::candidates_from([
+            'courses' => [(int) $course->id],
+            'cohorts' => [(int) $cohort->id],
+        ], $node));
     }
 }

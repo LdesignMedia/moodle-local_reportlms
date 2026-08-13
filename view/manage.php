@@ -60,6 +60,16 @@ $PAGE->set_heading('');
 
 $action = optional_param('action', '', PARAM_ALPHA);
 
+/*
+ * Which unit's people are open, carried across an action.
+ *
+ * Releasing somebody is done from inside that list, and a redirect that dropped
+ * this would close the panel after every single release. Somebody correcting
+ * four placements should not have to click the number four times.
+ */
+$openunit = optional_param('people', 0, PARAM_INT);
+$returnurl = $openunit ? new moodle_url($pageurl, ['people' => $openunit]) : $pageurl;
+
 if ($action !== '' && confirm_sesskey()) {
     switch ($action) {
         case 'addnode':
@@ -79,113 +89,115 @@ if ($action !== '' && confirm_sesskey()) {
             break;
 
         case 'place':
-            $userid = optional_param('userid', 0, PARAM_INT);
             $nodeid = optional_param('nodeid', 0, PARAM_INT);
-            $courseids = optional_param_array('courseids', [], PARAM_INT);
+            $chosen = optional_param_array('userid', [], PARAM_INT);
+            $sources = [
+                'courses' => optional_param_array('courseids', [], PARAM_INT),
+                'categories' => optional_param_array('categoryids', [], PARAM_INT),
+                'cohorts' => optional_param_array('cohortids', [], PARAM_INT),
+                'groups' => optional_param_array('groupids', [], PARAM_INT),
+                'profilevalues' => optional_param_array('profilevalues', [], PARAM_TEXT),
+            ];
 
-            // Zero is the "back to auto-detect" option in the same control, so
-            // placing and releasing are one action to the person using it. Only
-            // ever one person: releasing a course full of people is what the
-            // Release link beside each name is for.
+            /*
+             * The Remove link beside a name, which is one person out of a unit.
+             *
+             * Kept separate from the form below because on a unit of four
+             * hundred, deselecting one name from an autocomplete is not how
+             * anybody wants to correct a single mistake.
+             */
+            $single = optional_param('release', 0, PARAM_INT);
+
+            if ($single > 0) {
+                mapping::release($single);
+                redirect($returnurl);
+            }
+
             if ($nodeid === 0) {
-                if ($userid > 0) {
-                    mapping::release($userid);
-                }
-
                 break;
             }
 
             /*
-             * One person, or everybody on some courses, or both.
+             * What is selected is who is in the unit.
              *
-             * The courses are resolved here rather than in the form so the
-             * count can be shown before anything is written. Selecting an
-             * all-staff course is how a unit acquires 1,467 people, and placing
-             * is by hand, so every one of them would stop following their
-             * profile field permanently. The number goes in the question.
+             * The picker opens holding the current membership, so saving it back
+             * unchanged changes nothing, adding a name puts somebody in, and
+             * taking one out takes them out. The sources add to that selection
+             * rather than replacing it: choosing a course means "these people as
+             * well", not "only these people".
              */
-            $toplace = mapping::candidates_from_courses($courseids, $nodeid);
+            $wanted = array_flip(array_filter($chosen));
 
-            if ($userid > 0 && !in_array($userid, $toplace, true)) {
-                $toplace[] = $userid;
+            foreach (mapping::candidates_from($sources, $nodeid) as $fromsource) {
+                $wanted[$fromsource] = true;
             }
 
-            if (!$toplace) {
-                break;
-            }
+            $current = array_flip(mapping::members_of($nodeid));
 
-            $unit = mapping::nodes()[$nodeid] ?? null;
+            $added = array_diff_key($wanted, $current);
+            $removed = array_diff_key($current, $wanted);
 
-            if (count($toplace) > 1 && !optional_param('confirm', 0, PARAM_BOOL)) {
+            if (count($added) > 1 && !optional_param('confirm', 0, PARAM_BOOL)) {
+                /*
+                 * Confirm more than one at a time, with the count in the
+                 * question.
+                 *
+                 * Placing is permanent until somebody undoes it, and a category
+                 * on a real site resolved to 1,487 people. The number is read
+                 * before it is agreed to rather than afterwards.
+                 */
+                $unit = mapping::nodes()[$nodeid] ?? null;
                 $back = new moodle_url($pageurl, [
                     'action' => 'place',
                     'nodeid' => $nodeid,
-                    'userid' => $userid,
                     'confirm' => 1,
                     'sesskey' => sesskey(),
                 ]);
 
-                foreach ($courseids as $index => $courseid) {
-                    $back->param('courseids[' . $index . ']', $courseid);
+                foreach (array_keys($wanted) as $index => $id) {
+                    $back->param('userid[' . $index . ']', $id);
                 }
 
                 echo $OUTPUT->header();
                 echo $OUTPUT->confirm(
                     get_string('manage:placeconfirm', 'local_reportlms', (object) [
-                        'count' => count($toplace),
+                        'count' => count($added),
                         'unit' => $unit ? format_string($unit->name) : '',
                     ]),
                     $back,
-                    $pageurl
+                    $returnurl
                 );
                 echo $OUTPUT->footer();
 
                 exit;
             }
 
-            foreach ($toplace as $placeid) {
-                mapping::place((int) $placeid, $nodeid);
+            foreach (array_keys($added) as $id) {
+                mapping::place((int) $id, $nodeid);
             }
 
-            redirect(
-                $pageurl,
-                get_string('manage:placedpeople', 'local_reportlms', count($toplace)),
-                null,
-                \core\output\notification::NOTIFY_SUCCESS
-            );
-            break;
+            foreach (array_keys($removed) as $id) {
+                mapping::release((int) $id);
+            }
 
-        case 'addmanager':
-            // Always a person. The role option is gone; see name_manager.
-            mapping::add_manager(
-                required_param('nodeid', PARAM_INT),
-                optional_param('manageruserid', 0, PARAM_INT) ?: null,
-                null
-            );
-            break;
+            if ($added || $removed) {
+                redirect(
+                    $returnurl,
+                    get_string('manage:placedpeople', 'local_reportlms', (object) [
+                        'added' => count($added),
+                        'removed' => count($removed),
+                    ]),
+                    null,
+                    \core\output\notification::NOTIFY_SUCCESS
+                );
+            }
 
-        case 'movemanager':
-            mapping::move_manager(
-                required_param('id', PARAM_INT),
-                required_param('nodeid', PARAM_INT)
-            );
-            break;
-
-        case 'namehere':
-            // Promoting somebody the capability already found into somebody the
-            // register states outright. Same act as the form below, reached from
-            // the row that made it obvious.
-            mapping::add_manager(
-                required_param('nodeid', PARAM_INT),
-                required_param('userid', PARAM_INT),
-                null
-            );
             break;
 
         case 'importunits':
             $created = mapping::import_manager_departments();
             redirect(
-                $pageurl,
+                $returnurl,
                 get_string('manage:imported', 'local_reportlms', $created),
                 null,
                 \core\output\notification::NOTIFY_SUCCESS
@@ -197,11 +209,10 @@ if ($action !== '' && confirm_sesskey()) {
             break;
     }
 
-    redirect($pageurl);
+    redirect($returnurl);
 }
 
 $nodes = mapping::nodes();
-$membership = mapping::membership();
 
 $roles = role_fix_names(get_all_roles(), $context, ROLENAME_ORIGINAL, true);
 
@@ -212,7 +223,247 @@ echo html_writer::div(
     'local-reportlms-header'
 );
 
+/*
+ * A person's name, linking to their profile.
+ *
+ * Every name in this editor answers a question somebody is about to ask about
+ * that person: which department are they really in, is this the Paul I meant,
+ * did they ever log in. Printing the name and making them go and search for it
+ * is the sort of small friction that turns a two-minute correction into a
+ * five-minute one.
+ *
+ * Falls back to plain text for somebody the site no longer has, since a link to
+ * a deleted profile is a dead end dressed as an answer.
+ *
+ * A closure rather than a function: this is a page script, and a named function
+ * declared here would sit in the global namespace for the rest of the request.
+ */
+$personlink = static function ($user, string $fallback): string {
+    if (!$user) {
+        return $fallback;
+    }
+
+    return html_writer::link(
+        new moodle_url('/user/profile.php', ['id' => $user->id]),
+        fullname($user)
+    );
+};
+
+/*
+ * One unit's people, as a page rather than a panel.
+ *
+ * It was rendered underneath the units table, which put a second table and a
+ * second heading on a page that already carries three sections. A list somebody
+ * asked for by clicking a number deserves the screen, and the way back is a
+ * button rather than scrolling past everything they did not ask about.
+ *
+ * Short-circuits here so nothing below is built: no forms, no register, no
+ * course list to enumerate.
+ */
+if ($openunit && isset($nodes[$openunit])) {
+    /*
+     * Who manages what, as a lookup, built once for this page.
+     *
+     * Used twice: to say who runs the unit being looked at, and to mark anybody
+     * in its list who runs a unit of their own. The second matters because a
+     * manager of one unit is an ordinary learner in another, so finding the head
+     * of Sales among Flexpool A's people is correct and looks like a mistake
+     * unless the page says what they are.
+     */
+    $managerof = [];
+
+    foreach (mapping::managers() as $row) {
+        if ($row->userid && isset($nodes[$row->nodeid])) {
+            $managerof[(int) $row->userid][] = format_string($nodes[$row->nodeid]->name);
+        }
+    }
+
+    echo html_writer::tag('h3', get_string(
+        'manage:peoplein',
+        'local_reportlms',
+        format_string($nodes[$openunit]->name)
+    ));
+
+    // Who runs this one, named rather than left to the register three sections
+    // down, since it is the first thing somebody looking at a unit asks.
+    $runners = [];
+
+    foreach (mapping::managers() as $row) {
+        if ((int) $row->nodeid === $openunit && $row->userid) {
+            $runners[] = $personlink(core_user::get_user($row->userid), (string) $row->userid);
+        }
+    }
+
+    echo html_writer::tag(
+        'p',
+        $runners
+            ? get_string('manage:managedby', 'local_reportlms', implode(', ', $runners))
+            : get_string('manage:managedbynobody', 'local_reportlms'),
+        ['class' => 'text-muted']
+    );
+
+    echo html_writer::tag(
+        'p',
+        get_string('manage:placed_help', 'local_reportlms'),
+        ['class' => 'text-muted']
+    );
+
+    $inunit = mapping::members_of($openunit);
+
+    if (!$inunit) {
+        echo html_writer::tag('p', get_string('manage:nobodyhere', 'local_reportlms'), ['class' => 'text-muted']);
+    } else {
+        $peopletable = new html_table();
+        $peopletable->head = [get_string('manage:person', 'local_reportlms'), ''];
+
+        foreach ($inunit as $userid) {
+            $release = new moodle_url($pageurl, [
+                'action' => 'place',
+                'release' => $userid,
+                'people' => $openunit,
+                'sesskey' => sesskey(),
+            ]);
+
+            $name = $personlink(core_user::get_user($userid), (string) $userid);
+
+            // A manager standing in somebody else's unit is not a mistake, and
+            // saying which unit they run is what stops it looking like one.
+            if (!empty($managerof[$userid])) {
+                $name .= ' ' . html_writer::span(
+                    get_string('manage:managerof', 'local_reportlms', implode(', ', $managerof[$userid])),
+                    'badge badge-info bg-info'
+                );
+            }
+
+            $peopletable->data[] = [
+                $name,
+                html_writer::link($release, get_string('manage:release', 'local_reportlms')),
+            ];
+        }
+
+        echo html_writer::table($peopletable);
+    }
+
+    /*
+     * Adding people happens here, on the unit, rather than in a section at the
+     * bottom of the page with a unit dropdown on it.
+     *
+     * That dropdown was the whole problem: choosing people and choosing which
+     * unit they go into were two answers to two questions on one form, and the
+     * page they belonged to was three sections away from the unit itself. Here
+     * the unit is already known, so the form asks one thing.
+     */
+    /*
+     * The course list for the picker, built once here.
+     *
+     * get_courses() rather than a hand-rolled query: it applies the visibility
+     * rules and returns the site course, which is dropped because "everyone on
+     * the site" is not a department.
+     */
+    $courseoptions = [];
+
+    foreach (get_courses('all', 'c.shortname ASC', 'c.id, c.shortname, c.fullname') as $course) {
+        if ((int) $course->id === SITEID) {
+            continue;
+        }
+
+        $courseoptions[$course->id] = format_string($course->fullname);
+    }
+
+    /*
+     * The other two ways to name a set of people.
+     *
+     * Categories come from Moodle's own list, which is already indented to show
+     * the tree. Cohorts are offered only when the site has any.
+     *
+     * Groups are deliberately absent. They are the obvious third way and one
+     * connected site has 32,024 of them, so a preloaded picker is not an
+     * option; that one needs a search endpoint of its own.
+     */
+    $categoryoptions = \core_course_category::make_categories_list();
+
+    $cohortoptions = [];
+
+    foreach ($DB->get_records('cohort', ['visible' => 1], 'name ASC', 'id, name') as $cohort) {
+        $cohortoptions[$cohort->id] = format_string($cohort->name);
+    }
+
+    /*
+     * Groups, when there are few enough to list.
+     *
+     * Measured: 2 on one connected site and 32,024 on another. The second is why
+     * this is guarded rather than simply built: an autocomplete holding 32,024
+     * options is megabytes of markup and a browser that stops responding.
+     *
+     * Above the limit the form says so and points at courses, which is honest
+     * and actionable. Replacing this with a search endpoint is the proper fix
+     * and wants an AMD module.
+     */
+    $groupcount = $DB->count_records('groups');
+    $groupoptions = [];
+    $toomanygroups = 0;
+
+    if ($groupcount > 0 && $groupcount <= 500) {
+        $sql = 'SELECT g.id, g.name, c.fullname
+                  FROM {groups} g
+                  JOIN {course} c ON c.id = g.courseid
+              ORDER BY c.fullname ASC, g.name ASC';
+
+        foreach ($DB->get_records_sql($sql) as $group) {
+            // The course name is half the answer: two courses commonly hold a
+            // group of the same name, and a picker of bare group names would
+            // make somebody guess which.
+            $groupoptions[$group->id] = format_string($group->fullname) . ': ' . format_string($group->name);
+        }
+    } else if ($groupcount > 500) {
+        $toomanygroups = $groupcount;
+    }
+
+    /*
+     * The distinct values of the mapped department field.
+     *
+     * Empty on a site whose profile fields do not describe its organisation,
+     * which is exactly the site this picker would be no use to anyway.
+     */
+    $profilevalues = [];
+    $departmentfield = \local_reportlms\local\collector\org::fieldmap()['department'];
+
+    if ($departmentfield !== '') {
+        $sql = 'SELECT DISTINCT ' . $DB->sql_compare_text('d.data', 255) . ' AS value
+                  FROM {user_info_data} d
+                  JOIN {user_info_field} f ON f.id = d.fieldid
+                 WHERE f.shortname = :shortname AND ' . $DB->sql_compare_text('d.data', 255) . " <> :empty
+              ORDER BY value ASC";
+
+        foreach ($DB->get_records_sql($sql, ['shortname' => $departmentfield, 'empty' => '']) as $row) {
+            $profilevalues[$row->value] = format_string($row->value);
+        }
+    }
+
+    (new \local_reportlms\form\place_person($pageurl->out(false), [
+        'nodeid' => $openunit,
+        'members' => $inunit,
+        'courses' => $courseoptions,
+        'categories' => $categoryoptions,
+        'cohorts' => $cohortoptions,
+        'groups' => $groupoptions,
+        'toomanygroups' => $toomanygroups,
+        'profilevalues' => $profilevalues,
+    ]))->display();
+
+    echo html_writer::link(
+        $pageurl,
+        get_string('manage:backtounits', 'local_reportlms'),
+        ['class' => 'btn btn-secondary']
+    );
+
+    echo $OUTPUT->footer();
+
+    exit;
+}
+
 echo html_writer::tag('p', get_string('manage:intro', 'local_reportlms'), ['class' => 'text-muted']);
+
 
 // ---------------------------------------------------------------- units ----
 
@@ -237,12 +488,39 @@ if (!$nodes) {
             'sesskey' => sesskey(),
         ]);
 
+        /*
+         * The count is the way in to the people behind it.
+         *
+         * There used to be a second table further down listing every
+         * placed person on the site, which answered "who is placed" and
+         * not "who is in this unit", and grew a unit column to compensate. The
+         * number was already on this row; it just was not clickable.
+         */
+        $placed = count(mapping::members_of((int) $node->id));
+        $peopleurl = new moodle_url($pageurl, ['people' => $node->id]);
+
+        /*
+         * An icon on every row, not only on the rows that already have people.
+         *
+         * The count was the only way in, so a unit with nobody in it offered no
+         * way to put anybody in it: the one row that most needed the link was
+         * the one row that did not have it.
+         */
+        $peoplelink = html_writer::link(
+            $peopleurl,
+            $OUTPUT->pix_icon('i/users', get_string('manage:peoplein', 'local_reportlms', $node->name)),
+            [
+                'class' => 'btn local-reportlms-btn local-reportlms-btn-icon',
+                'title' => get_string('manage:peoplein', 'local_reportlms', $node->name),
+            ]
+        );
+
         $table->data[] = [
             s($node->name),
             get_string('manage:kind:' . $node->kind, 'local_reportlms'),
             $node->parentid && isset($nodes[$node->parentid]) ? s($nodes[$node->parentid]->name) : '-',
-            count(mapping::members_of((int) $node->id)),
-            html_writer::link($delete, get_string('delete'), ['class' => 'text-danger']),
+            $placed ? html_writer::link($peopleurl, $placed) : $placed,
+            $peoplelink . ' &nbsp; ' . html_writer::link($delete, get_string('delete'), ['class' => 'text-danger']),
         ];
     }
 
@@ -325,31 +603,6 @@ $table->head = [
  * own, so it cannot be merged with any individual without saying something
  * untrue about who is in it.
  */
-/*
- * A person's name, linking to their profile.
- *
- * Every name in this editor answers a question somebody is about to ask about
- * that person: which department are they really in, is this the Paul I meant,
- * did they ever log in. Printing the name and making them go and search for it
- * is the sort of small friction that turns a two-minute correction into a
- * five-minute one.
- *
- * Falls back to plain text for somebody the site no longer has, since a link to
- * a deleted profile is a dead end dressed as an answer.
- *
- * A closure rather than a function: this is a page script, and a named function
- * declared here would sit in the global namespace for the rest of the request.
- */
-$personlink = static function ($user, string $fallback): string {
-    if (!$user) {
-        return $fallback;
-    }
-
-    return html_writer::link(
-        new moodle_url('/user/profile.php', ['id' => $user->id]),
-        fullname($user)
-    );
-};
 
 $nodesbyname = [];
 
@@ -600,72 +853,6 @@ if ($nodes) {
     echo html_writer::tag(
         'p',
         get_string('manage:needunitformanager', 'local_reportlms'),
-        ['class' => 'alert alert-info']
-    );
-}
-
-// -------------------------------------------------------------- people ----
-
-echo html_writer::tag('h3', get_string('manage:placed', 'local_reportlms'));
-echo html_writer::tag('p', get_string('manage:placed_help', 'local_reportlms'), ['class' => 'text-muted']);
-
-if (!$membership) {
-    echo html_writer::tag('p', get_string('manage:noplaced', 'local_reportlms'), ['class' => 'text-muted']);
-} else {
-    $table = new html_table();
-    $table->head = [
-        get_string('manage:person', 'local_reportlms'),
-        get_string('manage:unit', 'local_reportlms'),
-        '',
-    ];
-
-    foreach ($membership as $userid => $nodeid) {
-        $user = core_user::get_user($userid);
-        $release = new moodle_url($pageurl, [
-            'action' => 'place',
-            'userid' => $userid,
-            'nodeid' => 0,
-            'sesskey' => sesskey(),
-        ]);
-
-        $table->data[] = [
-            $personlink($user, (string) $userid),
-            isset($nodes[$nodeid]) ? s($nodes[$nodeid]->name) : '-',
-            html_writer::link($release, get_string('manage:release', 'local_reportlms')),
-        ];
-    }
-
-    echo html_writer::table($table);
-}
-
-if ($nodes) {
-    /*
-     * The course list for the picker, built once here.
-     *
-     * get_courses() rather than a hand-rolled query: it applies the visibility
-     * rules and returns the site course, which is dropped because "everyone on
-     * the site" is not a department.
-     */
-    $courseoptions = [];
-
-    foreach (get_courses('all', 'c.shortname ASC', 'c.id, c.shortname, c.fullname') as $course) {
-        if ((int) $course->id === SITEID) {
-            continue;
-        }
-
-        $courseoptions[$course->id] = format_string($course->fullname);
-    }
-
-    (new \local_reportlms\form\place_person($pageurl->out(false), [
-        'units' => $unitoptions,
-        'courses' => $courseoptions,
-    ]))->display();
-} else {
-    // Same reasoning as the manager form above: an absent control that explains
-    // itself is a step, and one that does not is a bug report.
-    echo html_writer::tag(
-        'p',
-        get_string('manage:needunitforperson', 'local_reportlms'),
         ['class' => 'alert alert-info']
     );
 }

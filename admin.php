@@ -18,7 +18,7 @@
  * The block cog's target: whatever admin surface this viewer may open.
  *
  * A site administrator lands on the plugin settings; a :manage holder, who
- * cannot open admin settings, lands on the mapping editor — their surface.
+ * cannot open admin settings, lands on the mapping editor, their surface.
  * Nobody is shown a door that refuses them; anyone else gets the standard
  * no-permission page. Redirect-only GET, so no sesskey.
  *

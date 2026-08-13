@@ -28,7 +28,7 @@
  *
  * The state hash alone is not enough. The org section only ships inside a
  * push, and a push with an empty dirty queue returns before building
- * anything — so on a quiet site a re-map would propagate nothing at all.
+ * anything, so on a quiet site a re-map would propagate nothing at all.
  * Marking everyone dirty forces the next push to carry the tree rebuilt from
  * the newly mapped field; the label cache would otherwise serve the old
  * names for up to its TTL; and the department lock has to follow the mapping

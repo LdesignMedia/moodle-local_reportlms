@@ -96,7 +96,7 @@ class org {
         $ourlock = (string) get_config('local_reportlms', 'lockedfield');
 
         // The mapping moved away from a field this plugin locked: undo that
-        // lock. Only ours — a lock the customer set themselves is recorded
+        // lock. Only ours, a lock the customer set themselves is recorded
         // nowhere and is therefore never touched.
         if ($ourlock !== '' && $ourlock !== $shortname) {
             $old = $DB->get_record('user_info_field', ['shortname' => $ourlock], 'id, locked');
@@ -126,7 +126,7 @@ class org {
      *         attrs    list of {userid, auth, active, function (value|null)}
      */
     /**
-     * Declare a hand-built node, and the sector above it if there is one.
+     * Declare a stated node, and the sector above it if there is one.
      *
      * @param string $key As {@see mapping::nodekey} produced it.
      * @param array<string, \stdClass> $nodes Tree so far, added to by reference.
@@ -237,7 +237,7 @@ class org {
              * department, then the person's own, then Unassigned.
              *
              * The manual node is added to the tree here rather than assumed to
-             * exist, because a hand-built unit with one member and no profile
+             * exist, because a stated unit with one member and no profile
              * field anywhere would otherwise be a membership pointing at a node
              * nobody declared.
              */

@@ -128,17 +128,26 @@ if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
 
 $actions = '';
 
-// Administrators only. The settings page is where a site is connected and
-// disconnected, which is not a manager's business even though the report is.
-if (has_capability('moodle/site:config', $context)) {
+/*
+ * The cog goes where the block's cog goes: the mapping editor.
+ *
+ * One rule, in access::admin_destination(), so the two cogs cannot come to
+ * different conclusions about where a person should land. It used to point at
+ * the plugin settings for administrators only, which made the organisation
+ * editor reachable from the block and not from the report standing in front of
+ * it.
+ */
+$destination = access::admin_destination();
+
+if ($destination !== null) {
     $actions .= html_writer::link(
-        new moodle_url('/admin/settings.php', ['section' => 'local_reportlms']),
+        $destination,
         // i/settings, not t/cog: not every theme ships the latter, and a
         // missing pix renders as a broken image rather than as nothing.
-        $OUTPUT->pix_icon('i/settings', get_string('dashboard:settings', 'local_reportlms')),
+        $OUTPUT->pix_icon('i/settings', get_string('dashboard:manage', 'local_reportlms')),
         [
             'class' => 'btn local-reportlms-btn local-reportlms-btn-icon',
-            'title' => get_string('dashboard:settings', 'local_reportlms'),
+            'title' => get_string('dashboard:manage', 'local_reportlms'),
         ]
     );
 }

@@ -69,10 +69,30 @@ final class cog_visibility_test extends \advanced_testcase {
 
     // ---- admin_destination() -------------------------------------------
 
-    public function test_an_administrator_is_routed_to_the_settings_page(): void {
+    /**
+     * An administrator lands on the editor, not on the settings page.
+     *
+     * It used to be the other way round, on the grounds that connecting and
+     * disconnecting is an administrator's business. It is, and it is also a
+     * thing done once. The organisation is the page somebody comes back to, and
+     * settings stays exactly where Moodle puts every plugin's settings.
+     */
+    public function test_an_administrator_is_routed_to_the_editor(): void {
         $this->setAdminUser();
 
-        $this->assertStringContainsString('/admin/settings.php', (string) access::admin_destination());
+        $this->assertStringContainsString(
+            '/local/reportlms/view/manage.php',
+            (string) access::admin_destination()
+        );
+    }
+
+    /**
+     * Somebody with neither is sent nowhere, so no cog is drawn for them.
+     */
+    public function test_a_learner_is_routed_nowhere(): void {
+        $this->setUser($this->getDataGenerator()->create_user());
+
+        $this->assertNull(access::admin_destination());
     }
 
     public function test_a_manage_holder_is_routed_to_the_editor_they_can_open(): void {
@@ -129,7 +149,7 @@ final class cog_visibility_test extends \advanced_testcase {
     }
 
     public function test_an_editor_named_manager_counts_as_a_viewer(): void {
-        // The other way in: no capability, no role assignment — named in the
+        // The other way in: no capability, no role assignment, named in the
         // mapping editor. The persona the editor exists for must not lose
         // the block to a rule written in terms of capabilities.
         $user = $this->getDataGenerator()->create_user();

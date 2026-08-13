@@ -35,7 +35,7 @@ use local_reportlms\local\block_visibility;
  * is what Moodle 4.3+ dispatches (and its presence makes core skip the legacy
  * callback, so nothing runs twice); the lib.php function covers the 3.9-4.2
  * range version.php still claims. Both delegate to block_visibility, which
- * carries its own install/upgrade guard — core guards the legacy path but not
+ * carries its own install/upgrade guard, core guards the legacy path but not
  * this one.
  *
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later

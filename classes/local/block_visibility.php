@@ -30,7 +30,7 @@ use local_reportlms\local\collector\org;
 /**
  * The block is a stored core HTML block: identical markup for every viewer,
  * so it cannot decide per viewer what to show. This is the per-request lever
- * it does not have — CSS in the page head, computed from who is looking and
+ * it does not have: CSS in the page head, computed from who is looking and
  * whether the site is connected.
  *
  * One rule underneath: you see the block only if clicking its button leads
@@ -50,7 +50,7 @@ class block_visibility {
      * Runs on every page render, so cost is watched from the first line:
      * the pagetype gate exits before any capability or config work on every
      * page the block cannot exist on, and the remaining ladder is ordered
-     * cheapest first — the expensive can_view() walk only ever runs for a
+     * cheapest first, the expensive can_view() walk only ever runs for a
      * logged-in non-admin on a connected site.
      *
      * !important on both rules: this style lands in the head before the
@@ -83,7 +83,7 @@ class block_visibility {
                 return $hideall;
             }
 
-            // Anyone with an admin surface to land on sees everything —
+            // Anyone with an admin surface to land on sees everything:
             // the same test admin.php routes by, so the cog is only ever
             // shown to somebody its target will admit.
             if (access::admin_destination() !== null) {

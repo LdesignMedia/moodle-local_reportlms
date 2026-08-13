@@ -107,7 +107,7 @@ class certificates {
         [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
 
         // courseid is nullable on the table: an issue can be granted outside a
-        // course entirely, through a certification or by hand. Those are real
+        // course entirely, through a certification or an administrator. Those are real
         // certificates but they belong to no training, and the dashboard counts
         // per course, so they are left out rather than attached to a guess.
         $sql = "SELECT i.id, i.userid, i.courseid, i.timecreated, i.expires

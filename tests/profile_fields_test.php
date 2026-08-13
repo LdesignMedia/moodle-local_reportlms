@@ -176,7 +176,7 @@ final class profile_fields_test extends \advanced_testcase {
         profile_fields::ensure();
 
         // The configured value stays offered even when its field is gone,
-        // labelled as missing — otherwise opening the page and pressing Save
+        // labelled as missing, otherwise opening the page and pressing Save
         // would submit whatever option happened to come first.
         set_config('orgfield_department', 'weg_gegooid', 'local_reportlms');
         $options = profile_fields::field_options('department');

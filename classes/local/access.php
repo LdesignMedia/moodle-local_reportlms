@@ -191,7 +191,7 @@ class access {
      * The admin surface this viewer may open, or null for none.
      *
      * The block's cog routes through this, and so does the visibility rule
-     * that decides who sees the cog at all — one function, so the icon is
+     * that decides who sees the cog at all, one function, so the icon is
      * only ever shown to somebody its target will admit. Site administrators
      * get the plugin settings; a :manage holder cannot open admin settings,
      * so their surface is the mapping editor.
@@ -199,12 +199,22 @@ class access {
      * @return \moodle_url|null
      */
     public static function admin_destination(): ?\moodle_url {
-        if (has_capability('moodle/site:config', \context_system::instance())) {
-            return new \moodle_url('/admin/settings.php', ['section' => 'local_reportlms']);
-        }
-
+        /*
+         * The mapping editor first, for everybody who may open it.
+         *
+         * It used to send administrators to the plugin settings instead, on the
+         * grounds that connecting and disconnecting is their business. It is,
+         * and it is also a thing done once: the organisation is the page
+         * somebody comes back to. Settings stays exactly where Moodle puts
+         * every plugin's settings, one search away, and this cog stops being
+         * the only route to a page an administrator opens weekly.
+         */
         if (self::can_manage()) {
             return new \moodle_url('/local/reportlms/view/manage.php');
+        }
+
+        if (has_capability('moodle/site:config', \context_system::instance())) {
+            return new \moodle_url('/admin/settings.php', ['section' => 'local_reportlms']);
         }
 
         return null;
@@ -214,7 +224,7 @@ class access {
      * Whether this viewer may configure the site-wide dashboard deck.
      *
      * Site administrators may, without holding anything: Moodle grants them
-     * every capability. System context only, like :manage — the deck belongs
+     * every capability. System context only, like :manage, the deck belongs
      * to the whole site, so authority over it granted "inside one category"
      * would not mean anything.
      *

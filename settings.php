@@ -33,7 +33,7 @@ if ($hassiteconfig) {
         // Advanced mode hides the connection internals from the ordinary view:
         // /admin/settings.php?section=local_reportlms&mode=advanced, reached by
         // URL or by the Advanced settings button below. The button shows for
-        // site-config holders who additionally hold :manage — everyone who can
+        // site-config holders who additionally hold :manage, everyone who can
         // open this page already passed $hassiteconfig, so the capability is a
         // narrowing, not the gate. The settings form posts back without the
         // mode parameter, so the marker setting added below re-flags advanced

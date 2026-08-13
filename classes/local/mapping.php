@@ -29,7 +29,7 @@ namespace local_reportlms\local;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Reads and writes the hand-built organisation.
+ * Reads and writes the organisation somebody stated.
  *
  * Auto-detect gets a real company approximately right and two shapes exactly
  * wrong: a manager who runs two departments places all their people in one, and
@@ -39,7 +39,7 @@ defined('MOODLE_INTERNAL') || die();
  *
  * Two rules hold the design together.
  *
- * **Manual beats auto-detect beats the learner's own field.** A row somebody
+ * **What somebody states here is the answer.** A row somebody
  * typed is a statement of fact about the organisation; a profile field is a
  * guess derived from an HR export. When they disagree, the person wins.
  *
@@ -76,7 +76,7 @@ class mapping {
     }
 
     /**
-     * Every hand-built unit, keyed by id.
+     * Every unit, keyed by id.
      *
      * @return array<int, \stdClass> {id, name, parentid, kind}
      */
@@ -91,7 +91,7 @@ class mapping {
     }
 
     /**
-     * Which unit each learner was put in by hand.
+     * Which unit each learner was put in.
      *
      * @return array<int, int> Learner user id to node id.
      */
@@ -114,7 +114,7 @@ class mapping {
      * The key the org collector and the launch token both build codes from.
      *
      * Deliberately the same shape a profile-derived node produces: a department
-     * under a sector is "sector/department", so a hand-built unit and a derived
+     * under a sector is "sector/department", so a stated unit and a derived
      * one with the same name are the same node rather than two that look alike.
      *
      * @param int $nodeid
@@ -180,7 +180,7 @@ class mapping {
     }
 
     /**
-     * The learners in a unit, put there by hand.
+     * The learners placed in a unit.
      *
      * @param int $nodeid
      *
@@ -235,8 +235,8 @@ class mapping {
     /**
      * Remove a unit, its membership and its managers.
      *
-     * The learners are not touched, they simply stop being claimed by hand and
-     * fall back to whatever auto-detect makes of them, which is the point of
+     * The learners are not touched, they simply stop being claimed and
+     * simply stop being in it, which is the point of
      * being able to delete one at all.
      *
      * @param int $nodeid
@@ -255,7 +255,7 @@ class mapping {
     }
 
     /**
-     * Put a learner in a unit by hand.
+     * Put a learner in a unit.
      *
      * One unit per learner: placing them somewhere new moves them rather than
      * adding a second claim. Several departments per person is a v2 question
@@ -285,7 +285,7 @@ class mapping {
     }
 
     /**
-     * Hand a learner back to auto-detect.
+     * Take a learner out of the unit they were placed in.
      *
      * They land wherever their profile field and their manager put them, which
      * may not be where they were before somebody moved them. That is correct
@@ -345,45 +345,170 @@ class mapping {
     }
 
     /**
-     * The people on these courses, for placing into a unit.
+     * Every course under these categories, including the ones below them.
      *
-     * What an administrator actually knows is "everybody on these courses". They
-     * do not know four hundred names, and asking for them one at a time is the
-     * reason the hand-placed list stayed empty on every site.
+     * "Everyone under Sales" means the whole branch, not the courses somebody
+     * happened to file directly in it. Walked with the stored path rather than
+     * recursively, so a deep tree is one query.
+     *
+     * @param array<int, int> $categoryids
+     *
+     * @return array<int, int> Course ids.
+     */
+    protected static function courses_under(array $categoryids): array {
+        global $DB;
+
+        $categoryids = array_values(array_filter(array_map('intval', $categoryids)));
+
+        if (!$categoryids) {
+            return [];
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal($categoryids, SQL_PARAMS_NAMED);
+        $paths = $DB->get_fieldset_select('course_categories', 'path', "id {$insql}", $params);
+
+        if (!$paths) {
+            return [];
+        }
+
+        $where = [];
+        $params = [];
+
+        foreach (array_values($paths) as $i => $path) {
+            // The category itself, and everything filed beneath it. The
+            // trailing slash matters: without it /1/5 would also match /1/50.
+            $where[] = 'path = :exact' . $i . ' OR ' . $DB->sql_like('path', ':below' . $i);
+            $params['exact' . $i] = $path;
+            $params['below' . $i] = $DB->sql_like_escape($path . '/') . '%';
+        }
+
+        $ids = $DB->get_fieldset_select('course_categories', 'id', '(' . implode(') OR (', $where) . ')', $params);
+
+        if (!$ids) {
+            return [];
+        }
+
+        [$catsql, $catparams] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED);
+
+        return array_map('intval', $DB->get_fieldset_select('course', 'id', "category {$catsql}", $catparams));
+    }
+
+    /**
+     * The people named by any of these, for placing into a unit.
+     *
+     * Several ways to say the same kind of thing, because sites describe
+     * themselves differently and none of them describe themselves the way this
+     * plugin would prefer. A group, a course, a cohort, a whole category, a
+     * profile field value: whichever of them an administrator can point at
+     * without having to remember four hundred names.
+     *
+     * Listed there in order of how narrow they are, which is the order a future
+     * resolver will use when two units claim the same person. Nothing depends on
+     * it yet: this method unions its sources for one unit and the caller places
+     * the result.
      *
      * This replaced deriving the list from a manager's own enrolments. That
      * looked equivalent and was not: measured on a real site it offered three
      * people for one unit and 1,467 for another, because that manager is an
      * ordinary participant on an all-staff course. Being enrolled somewhere is
-     * not managing it, so the courses are chosen rather than guessed.
+     * not managing it, so the source is chosen rather than guessed.
      *
-     * Left out: the guest, site administrators, and anybody already placed here,
-     * so the number shown is what pressing the button changes.
+     * Left out: the guest, site administrators, this unit's own managers, and
+     * anybody already placed here, so the number shown is what pressing the
+     * button changes.
      *
-     * **Managers are not left out.** A manager of one unit is an ordinary
-     * learner in another, and the head of Sales still takes the compliance
-     * course. They are only ever excluded from the unit they themselves manage,
-     * which is a question for the aggregation rather than for this list.
+     * **Managers of other units are not left out.** A manager of one unit is an
+     * ordinary learner in another, and the head of Sales still takes the
+     * compliance course, so filtering every manager would make it impossible to
+     * put them where they actually work.
      *
-     * @param array<int, int> $courseids
+     * @param array $sources courses, categories and cohorts, each an array of ids.
      * @param int $nodeid The unit they would go into.
      *
      * @return array<int, int> User ids.
      */
-    public static function candidates_from_courses(array $courseids, int $nodeid): array {
-        $courseids = array_values(array_filter(array_map('intval', $courseids)));
+    public static function candidates_from(array $sources, int $nodeid): array {
+        global $DB;
 
-        if (!$courseids) {
+        $courseids = array_map('intval', $sources['courses'] ?? []);
+        $courseids = array_merge($courseids, self::courses_under($sources['categories'] ?? []));
+        $courseids = array_values(array_unique(array_filter($courseids)));
+
+        $found = $courseids ? manager_resolver::participants_of($courseids) : [];
+
+        $cohortids = array_values(array_filter(array_map('intval', $sources['cohorts'] ?? [])));
+
+        if ($cohortids) {
+            [$insql, $params] = $DB->get_in_or_equal($cohortids, SQL_PARAMS_NAMED);
+            $found = array_merge($found, $DB->get_fieldset_select('cohort_members', 'userid', "cohortid {$insql}", $params));
+        }
+
+        // A group is the narrowest thing a site can point at: a named set of
+        // people inside one course, which is how many sites already model a
+        // team that shares a course with three other teams.
+        $groupids = array_values(array_filter(array_map('intval', $sources['groups'] ?? [])));
+
+        if ($groupids) {
+            [$insql, $params] = $DB->get_in_or_equal($groupids, SQL_PARAMS_NAMED);
+            $found = array_merge($found, $DB->get_fieldset_select('groups_members', 'userid', "groupid {$insql}", $params));
+        }
+
+        /*
+         * A profile field value, which is the one source that needs no course
+         * at all.
+         *
+         * The same values the tree used to be derived from, except that pointing a unit
+         * at one is a sentence somebody said rather than a rule nobody chose.
+         * It is what makes a site with good HR data and no capabilities work,
+         * and it is the reason a department does not have to be enrolled in
+         * anything to exist.
+         */
+        $values = array_values(array_filter(array_map('trim', $sources['profilevalues'] ?? []), 'strlen'));
+
+        if ($values) {
+            $shortname = collector\org::fieldmap()['department'];
+
+            [$insql, $params] = $DB->get_in_or_equal($values, SQL_PARAMS_NAMED);
+            $params['shortname'] = $shortname;
+
+            $found = array_merge($found, $DB->get_fieldset_sql(
+                "SELECT d.userid
+                   FROM {user_info_data} d
+                   JOIN {user_info_field} f ON f.id = d.fieldid
+                  WHERE f.shortname = :shortname AND d.data {$insql}",
+                $params
+            ));
+        }
+
+        if (!$found) {
             return [];
         }
 
         $already = array_flip(self::members_of($nodeid));
+
+        // The people who run this unit, who are therefore not in it. They are on
+        // the courses they run, so they arrive in their own list, and placing
+        // them would count them among the people they manage.
+        $theirs = [];
+
+        foreach (self::managers() as $row) {
+            if ((int) $row->nodeid === $nodeid && $row->userid) {
+                $theirs[(int) $row->userid] = true;
+            }
+        }
+
         $candidates = [];
 
-        foreach (manager_resolver::participants_of($courseids) as $participantid) {
+        foreach ($found as $participantid) {
             $participantid = (int) $participantid;
 
-            if (isset($already[$participantid]) || is_siteadmin($participantid)) {
+            // The guest belongs to no department. Cohort membership does not
+            // go through the enrolment query that already drops them.
+            if ($participantid <= 2 || isset($already[$participantid]) || isset($theirs[$participantid])) {
+                continue;
+            }
+
+            if (is_siteadmin($participantid)) {
                 continue;
             }
 
@@ -391,6 +516,18 @@ class mapping {
         }
 
         return array_values($candidates);
+    }
+
+    /**
+     * The people on these courses. Kept for the common case and for its tests.
+     *
+     * @param array<int, int> $courseids
+     * @param int $nodeid
+     *
+     * @return array<int, int> User ids.
+     */
+    public static function candidates_from_courses(array $courseids, int $nodeid): array {
+        return self::candidates_from(['courses' => $courseids], $nodeid);
     }
 
     /**
@@ -447,14 +584,14 @@ class mapping {
      * a row can be renamed, re-parented and named a manager against, and one
      * that exists only as a profile-field value cannot.
      *
-     * Units and namings only, never memberships. Placing people by hand is what
-     * stops auto-detect moving them again, so doing it wholesale here would mean
+     * Units and namings only, never memberships. Placing people is what
+     * a deliberate act, so doing it wholesale here would mean
      * one click quietly froze every learner's department and the next HR upload
      * would never move anybody. Placing somebody stays a deliberate act, one
      * person at a time.
      *
      * Names already used are left alone rather than duplicated, so running this
-     * on a site that has typed in some of its tree by hand adds only what is
+     * on a site that has typed in some of its tree adds only what is
      * missing.
      *
      * @return int How many units were created.

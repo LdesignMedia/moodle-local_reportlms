@@ -30,7 +30,7 @@ namespace local_reportlms\local;
  *
  * Added automatically when the site connects, so the report is reachable
  * without anyone hunting for a plugin URL. Adding is idempotent, so a reconnect
- * never produces a second copy. An admin who removes it by hand is not
+ * never produces a second copy. An admin who removes it themselves is not
  * overruled: the removal is remembered and a later reconnect leaves it alone.
  *
  * Where it goes follows $CFG->defaulthomepage, because a block on a page nobody

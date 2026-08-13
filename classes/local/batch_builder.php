@@ -211,6 +211,59 @@ class batch_builder {
     }
 
     /**
+     * A batch carrying only the org tree and the catalogue, when nobody is dirty.
+     *
+     * Both sections ride in the first chunk of a learner push, and there is no
+     * first chunk when no learner changed. So on a quiet site a course rename, a
+     * course being hidden, a unit renamed in the mapping editor or a manager
+     * named against one reached Report LMS only when some unrelated learner
+     * happened to change. On a site between terms that is days, and on a site
+     * that has finished its training it is never.
+     *
+     * The dashboard resolves coded ids against the catalogue and the tree, so
+     * the visible symptom was an old department name on new numbers, or a
+     * renamed course still showing its old title, with nothing on either side
+     * saying anything was stale.
+     *
+     * Null when neither changed, which is the ordinary case and costs two
+     * hashes.
+     *
+     * @param int $snapshotat
+     *
+     * @return \stdClass|null One chunk, shaped exactly like {@see build} returns.
+     */
+    public static function structure_only(int $snapshotat): ?\stdClass {
+        $orgsection = self::org_section_if_changed();
+        $dimensions = self::dimensions_section_if_changed();
+
+        if ($orgsection === null && $dimensions === null) {
+            return null;
+        }
+
+        $payload = self::envelope($snapshotat);
+
+        if ($orgsection !== null) {
+            $payload['org'] = $orgsection;
+        }
+
+        if ($dimensions !== null) {
+            $payload['dimensions'] = $dimensions['section'];
+        }
+
+        // No facts at all. The push task clears an empty learner list and
+        // stores the hashes exactly as it does for a first chunk, so nothing
+        // downstream needs to know this batch is a different shape.
+        $payload['facts'] = [];
+
+        return (object) [
+            'payload' => $payload,
+            'userids' => [],
+            'factrows' => 0,
+            'dimhash' => $dimensions !== null ? $dimensions['hash'] : null,
+        ];
+    }
+
+    /**
      * The coded dimensions catalogue, or null when unchanged since the last
      * accepted push.
      *
