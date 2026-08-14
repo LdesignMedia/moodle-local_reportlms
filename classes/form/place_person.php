@@ -43,6 +43,8 @@ require_once($CFG->libdir . '/formslib.php');
  */
 class place_person extends \moodleform {
     /**
+     * Build the form: a unit, and the sources its people come from.
+     *
      * @return void
      */
     protected function definition(): void {

@@ -28,7 +28,7 @@
  *
  * The profile fields and their data stay: they hold the customer's
  * organisation records, which are not the plugin's to delete. The lock is
- * different — the plugin set it, and a lock nobody can explain on a field the
+ * different: the plugin set it, and a lock nobody can explain on a field the
  * customer owns is exactly the debris an uninstall exists to prevent.
  */
 function xmldb_local_reportlms_uninstall(): bool {

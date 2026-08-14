@@ -32,6 +32,8 @@ use local_reportlms\local\connect_manager;
 use local_reportlms\local\privacy_statement;
 
 /**
+ * Somebody has to have read what leaves the site before anything does.
+ *
  * @covers \local_reportlms\local\privacy_statement
  * @covers \local_reportlms\local\config::privacy_acknowledged
  */
@@ -44,7 +46,7 @@ final class privacy_statement_test extends \advanced_testcase {
      * @return api_client
      */
     private function recording_client(array &$captured): api_client {
-        return new class(config::baseurl(), $captured) extends api_client {
+        return new class (config::baseurl(), $captured) extends api_client {
             /** @var array Payload store, by reference. */
             private array $captured;
 
@@ -60,6 +62,8 @@ final class privacy_statement_test extends \advanced_testcase {
             }
 
             /**
+             * Accept the connect call and record what was acknowledged.
+             *
              * @param string $siteurl
              * @param string $verificationtoken
              * @param int $acknowledgedat

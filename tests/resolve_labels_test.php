@@ -29,7 +29,7 @@ use local_reportlms\external\resolve_labels;
 use local_reportlms\local\access;
 use local_reportlms\local\collector\org;
 use local_reportlms\local\label_map;
-use local_reportlms\local\manager_resolver;
+use local_reportlms\local\mapping;
 use local_reportlms\local\pseudonym;
 
 /**
@@ -43,12 +43,6 @@ use local_reportlms\local\pseudonym;
  * @covers \local_reportlms\external\resolve_labels
  */
 final class resolve_labels_test extends \advanced_testcase {
-    /** @var \stdClass */
-    private $sectorfield;
-
-    /** @var \stdClass */
-    private $departmentfield;
-
     protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
@@ -56,12 +50,8 @@ final class resolve_labels_test extends \advanced_testcase {
         set_config('salt', 'salt-for-unit-tests', 'local_reportlms');
 
         // resetAfterTest() rolls back the database and leaves static properties
-        // alone, so the resolver has to be told to forget between tests.
-        manager_resolver::reset();
-
-        $map = org::fieldmap();
-        $this->sectorfield = $this->make_field($map['sector']);
-        $this->departmentfield = $this->make_field($map['department']);
+        // alone, so the mapping has to be told to forget between tests.
+        mapping::reset();
     }
 
     /**
@@ -129,37 +119,23 @@ final class resolve_labels_test extends \advanced_testcase {
      * @return \stdClass
      */
     private function make_manager_of(string $department): \stdClass {
-        global $DB;
-
-        $course = $this->getDataGenerator()->create_course();
         $manager = $this->getDataGenerator()->create_user();
-        $learner = $this->getDataGenerator()->create_user();
 
-        $DB->insert_record('user_info_data', (object) [
-            'userid' => $manager->id,
-            'fieldid' => $this->departmentfield->id,
-            'data' => $department,
-            'dataformat' => 0,
-        ]);
-
-        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
-
-        $roleid = $this->getDataGenerator()->create_role();
-        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
-        role_assign($roleid, $manager->id, \context_course::instance($course->id)->id);
-
-        manager_resolver::reset();
+        $nodeid = mapping::save_node($department, 'department');
+        mapping::add_manager($nodeid, (int) $manager->id, null);
+        mapping::reset();
+        label_map::purge();
 
         return $manager;
     }
 
     /**
-     * A populated department the caller has nothing to do with.
+     * A department the caller has nothing to do with.
      *
-     * It has to be populated, and that is not incidental. The label map only
-     * carries nodes the tree actually has, so a department nobody is in
-     * resolves to nothing whether or not the scope filter is there. Testing
-     * against an empty one proves the filter works by proving nothing at all,
+     * It has to be a real unit, and that is not incidental. The label map only
+     * carries units the tree actually has, so a code for a unit that does not
+     * exist resolves to nothing whether or not the scope filter is there.
+     * Testing against one proves the filter works by proving nothing at all,
      * which is how the first version of this file passed with the filter
      * deleted.
      *
@@ -168,64 +144,13 @@ final class resolve_labels_test extends \advanced_testcase {
      * @return string The coded node.
      */
     private function make_populated_department(string $department): string {
-        global $DB;
-
         $learner = $this->getDataGenerator()->create_user();
-        $course = $this->getDataGenerator()->create_course();
 
-        $DB->insert_record('user_info_data', (object) [
-            'userid' => $learner->id,
-            'fieldid' => $this->departmentfield->id,
-            'data' => $department,
-            'dataformat' => 0,
-        ]);
-
-        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
-
+        $nodeid = mapping::save_node($department, 'department');
+        mapping::place((int) $learner->id, $nodeid);
+        mapping::reset();
         label_map::purge();
-        manager_resolver::reset();
 
         return pseudonym::node('department', $department);
-    }
-
-    /**
-     * A text profile field, since the generator has no helper for one.
-     *
-     * @param string $shortname
-     *
-     * @return \stdClass
-     */
-    private function make_field(string $shortname): \stdClass {
-        global $DB;
-
-        // db/install.php creates the rlms_* fields in the phpunit baseline, so
-        // the field this asks for may already exist. Reuse it: a second row
-        // with the same shortname doubles every join that resolves by it.
-        $existing = $DB->get_record('user_info_field', ['shortname' => $shortname]);
-        if ($existing) {
-            return $existing;
-        }
-
-        $categoryid = $DB->insert_record('user_info_category', (object) [
-            'name' => 'Report LMS ' . $shortname,
-            'sortorder' => 1,
-        ]);
-
-        $id = $DB->insert_record('user_info_field', (object) [
-            'shortname' => $shortname,
-            'name' => $shortname,
-            'categoryid' => $categoryid,
-            'datatype' => 'text',
-            'sortorder' => 1,
-            'required' => 0,
-            'locked' => 0,
-            'visible' => 2,
-            'forceunique' => 0,
-            'signup' => 0,
-            'param1' => 30,
-            'param2' => 2048,
-        ]);
-
-        return $DB->get_record('user_info_field', ['id' => $id]);
     }
 }

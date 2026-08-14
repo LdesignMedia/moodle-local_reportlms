@@ -56,9 +56,6 @@ $string['connect:statusdisconnected'] = 'Not connected';
 // here. The same counts on the Report LMS side would be counts nobody could act
 // on, which is why they are not sent there.
 // Naming a node after its manager when they have no department of their own.
-$string['settings:managerfallback'] = 'Name a group after its manager when no department is set';
-$string['settings:managerfallback_desc'] = 'A manager with the Report LMS manage permission but no department on their own profile normally places nobody, and their people fall back to their own department or to Unassigned. Turn this on to put them in a group named after that manager instead, so they stay visible. A group named after a person is not a department, so leave this off unless that reads as the truth on your site.';
-$string['label:managerteam'] = '{$a} (no department set)';
 
 // The mapping editor, where somebody states the organisation.
 $string['manage:open'] = 'Open the organisation editor';
@@ -107,16 +104,12 @@ $string['manage:fix'] = 'Fix';
 $string['manage:fix_help'] = 'Write this down here, so who manages whom is stated rather than inherited from a role.';
 $string['manage:alsogranted'] = '{$a} of the people above would also get in through a role, so removing their naming would not remove their access.';
 $string['manage:alsogranted_link'] = 'Check the roles that grant it';
-$string['manage:importoffer'] = 'Some managers run a department that is not a unit yet. Their departments can be added as units and each manager named against theirs, so you can rename them, put them under a sector, or hand one to somebody else. Nobody is placed into a unit by this: learners keep following the profile fields.';
-$string['manage:importaction'] = 'Add these departments as units';
-$string['manage:imported'] = 'Added {$a} units from the departments the managers run.';
 $string['manage:needunitformanager'] = 'Name a unit above first. A manager manages something, so there is nothing to name one against yet.';
 
 $string['warn:heading'] = 'Worth checking in your organisation structure:';
-$string['warn:unplaceable'] = '{$a} managers hold the Report LMS manage permission but have no department set on their own profile, so they place nobody.';
-$string['warn:contested'] = '{$a} people are managed by two managers in different departments. Each of them is counted under one of the two, and which one is not meaningful.';
-$string['warn:overridden'] = '{$a} people are counted under their manager\'s department rather than the one on their own profile. That is how the report is designed to work, but a large number here usually means a manager runs more than one department.';
-$string['warn:footnote'] = 'These counts are not sent to Report LMS. They are worked out on this site, from this site\'s own data.';
+$string['warn:unplaced'] = '{$a} people are not in any unit. They are still counted in the site totals and appear under Unassigned, but they will not show up under a department until somebody puts them in one.';
+$string['warn:unplaced_link'] = 'Open the organisation structure';
+$string['warn:footnote'] = 'This count is not sent to Report LMS. It is worked out on this site, from this site\'s own data.';
 
 // Cron health. Named for Moodle's own scheduled tasks rather than for this
 // plugin: the fault is not ours, and an administrator sent to our settings page
@@ -152,17 +145,13 @@ $string['profilefield:function'] = 'Function';
 
 // Advanced settings.
 $string['settings:advancedbutton'] = 'Advanced settings';
-$string['settings:orgfieldsheading'] = 'Organisation fields';
-$string['settings:orgfieldsintro'] = 'Which user profile fields hold each person\'s place in the organisation. The plugin created its own fields at install; map a field your site already maintains instead if you have one. Changing a mapping rebuilds the organisation tree from the newly mapped field on the next sync.';
-$string['settings:orgfield_sector'] = 'Sector field';
-$string['settings:orgfield_sector_desc'] = 'The profile field that names each person\'s sector.';
-$string['settings:orgfield_department'] = 'Department field';
-$string['settings:orgfield_department_desc'] = 'The profile field that names each person\'s department. The mapped field is locked against learners editing their own placement; administrators and HR imports keep writing normally.';
+$string['settings:orgfieldsheading'] = 'Profile fields';
+$string['settings:orgfieldsintro'] = 'Which user profile field names each person\'s function. Departments are not read from a profile field: they are set in the organisation structure. The plugin created its own field at install; map a field your site already maintains instead if you have one.';
 $string['settings:orgfield_function'] = 'Function field';
 $string['settings:orgfield_function_desc'] = 'The profile field that names each person\'s function or role.';
 $string['settings:orgfield_plugin'] = 'Report LMS field ({$a})';
 $string['settings:orgfield_missing'] = '{$a} (missing on this site)';
-$string['settings:orgfieldmissingwarning'] = 'A mapped organisation field does not exist on this site: {$a}. The organisation tree cannot be built from it, so fix the mapping under Advanced settings.';
+$string['settings:orgfieldmissingwarning'] = 'The mapped function field does not exist on this site: {$a}. Nobody will have a function in the report, so fix the mapping under Advanced settings.';
 $string['settings:advancedheading'] = 'Advanced connection settings';
 $string['settings:advancedwarning'] = 'These settings are managed by the connect process. Change them only if Report LMS support asks you to.';
 $string['settings:baseurl'] = 'Report LMS URL';

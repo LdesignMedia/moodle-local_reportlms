@@ -28,6 +28,8 @@ namespace local_reportlms;
 use local_reportlms\local\dashboard_block;
 
 /**
+ * The block is stored markup, so every change to it is a migration.
+ *
  * @covers \local_reportlms\local\dashboard_block
  */
 final class dashboard_block_test extends \advanced_testcase {
@@ -128,8 +130,12 @@ final class dashboard_block_test extends \advanced_testcase {
         $config = unserialize(base64_decode($mine->configdata));
         $config->text = '<div class="local-reportlms-block">'
             . '<a href="/local/reportlms/view.php">Open the report</a></div>';
-        $DB->set_field('block_instances', 'configdata',
-            base64_encode(serialize($config)), ['id' => $mine->id]);
+        $DB->set_field(
+            'block_instances',
+            'configdata',
+            base64_encode(serialize($config)),
+            ['id' => $mine->id]
+        );
 
         $this->assertSame(1, dashboard_block::refresh());
 

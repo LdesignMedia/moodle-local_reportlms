@@ -29,7 +29,7 @@
  * Install only, no upgrade step, and that is a product decision: the plugin
  * has never shipped to a customer, so there are no installed sites to
  * retrofit. If that ever changes, profile_fields::ensure() is idempotent by
- * design — wiring it into an upgrade savepoint is one line, not a rework.
+ * design, so wiring it into an upgrade savepoint is one line, not a rework.
  */
 function xmldb_local_reportlms_install(): bool {
     \local_reportlms\local\profile_fields::ensure();

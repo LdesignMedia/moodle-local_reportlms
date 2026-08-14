@@ -28,6 +28,8 @@ namespace local_reportlms;
 use local_reportlms\external\connect;
 
 /**
+ * Connecting a site is the one moment its salt and its key are minted.
+ *
  * @covers \local_reportlms\external\connect
  */
 final class connect_test extends \advanced_testcase {

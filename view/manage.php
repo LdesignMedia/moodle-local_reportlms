@@ -27,7 +27,7 @@ require(__DIR__ . '/../../../config.php');
 
 use local_reportlms\local\access;
 use local_reportlms\local\branding;
-use local_reportlms\local\manager_resolver;
+use local_reportlms\local\capability_holders;
 use local_reportlms\local\mapping;
 
 require_login();
@@ -192,16 +192,6 @@ if ($action !== '' && confirm_sesskey()) {
                 );
             }
 
-            break;
-
-        case 'importunits':
-            $created = mapping::import_manager_departments();
-            redirect(
-                $returnurl,
-                get_string('manage:imported', 'local_reportlms', $created),
-                null,
-                \core\output\notification::NOTIFY_SUCCESS
-            );
             break;
 
         case 'removemanager':
@@ -420,25 +410,56 @@ if ($openunit && isset($nodes[$openunit])) {
     }
 
     /*
-     * The distinct values of the mapped department field.
+     * The values in use across every text profile field on the site.
      *
-     * Empty on a site whose profile fields do not describe its organisation,
+     * Any field, not one nominated in the settings. There used to be a
+     * site-wide "department field" because the tree was derived from it and
+     * there could only be one answer. A unit draws from whatever describes it,
+     * and on a real site that is sometimes the department field and sometimes
+     * the office, the contract type or the region.
+     *
+     * Each option is `fieldid:value`, because the same value in two fields is
+     * two different sets of people.
+     *
+     * Empty on a site whose profile fields say nothing about its organisation,
      * which is exactly the site this picker would be no use to anyway.
      */
     $profilevalues = [];
-    $departmentfield = \local_reportlms\local\collector\org::fieldmap()['department'];
+    $toomanyvalues = false;
 
-    if ($departmentfield !== '') {
-        $sql = 'SELECT DISTINCT ' . $DB->sql_compare_text('d.data', 255) . ' AS value
-                  FROM {user_info_data} d
-                  JOIN {user_info_field} f ON f.id = d.fieldid
-                 WHERE f.shortname = :shortname AND ' . $DB->sql_compare_text('d.data', 255) . " <> :empty
-              ORDER BY value ASC";
+    // Same order of magnitude as the group cap above, and for the same reason:
+    // past it the markup is the problem, not the query.
+    $maxprofilevalues = 500;
 
-        foreach ($DB->get_records_sql($sql, ['shortname' => $departmentfield, 'empty' => '']) as $row) {
-            $profilevalues[$row->value] = format_string($row->value);
+    $datacolumn = $DB->sql_compare_text('d.data', 255);
+
+    // Free text and menu-of-choices. The other datatypes are checkboxes, dates
+    // and textareas, none of which names a set of people.
+    [$typesql, $typeparams] = $DB->get_in_or_equal(['text', 'menu'], SQL_PARAMS_NAMED, 'type');
+
+    $sql = "SELECT DISTINCT f.id AS fieldid, f.name AS fieldname, {$datacolumn} AS value
+              FROM {user_info_data} d
+              JOIN {user_info_field} f ON f.id = d.fieldid
+             WHERE f.datatype {$typesql} AND {$datacolumn} <> :empty
+          ORDER BY f.name ASC, value ASC";
+
+    $recordset = $DB->get_recordset_sql($sql, $typeparams + ['empty' => '']);
+
+    foreach ($recordset as $row) {
+        if (count($profilevalues) >= $maxprofilevalues) {
+            // A select with ten thousand options is not a picker. Said out
+            // loud below rather than silently truncated, because a list that
+            // quietly stops is how somebody concludes a value does not exist.
+            $toomanyvalues = true;
+
+            break;
         }
+
+        $profilevalues[$row->fieldid . ':' . $row->value] =
+            format_string($row->fieldname) . ': ' . format_string($row->value);
     }
+
+    $recordset->close();
 
     (new \local_reportlms\form\place_person($pageurl->out(false), [
         'nodeid' => $openunit,
@@ -449,6 +470,7 @@ if ($openunit && isset($nodes[$openunit])) {
         'groups' => $groupoptions,
         'toomanygroups' => $toomanygroups,
         'profilevalues' => $profilevalues,
+        'toomanyvalues' => $toomanyvalues,
     ]))->display();
 
     echo html_writer::link(
@@ -604,12 +626,6 @@ $table->head = [
  * untrue about who is in it.
  */
 
-$nodesbyname = [];
-
-foreach ($nodes as $node) {
-    $nodesbyname[core_text::strtolower(trim($node->name))] = $node;
-}
-
 $register = [];
 $editid = optional_param('edit', 0, PARAM_INT);
 
@@ -639,54 +655,28 @@ foreach (mapping::managers() as $row) {
     ];
 }
 
-foreach (manager_resolver::managers() as $manager) {
-    /*
-     * Administrators are not managers, they are administrators.
-     *
-     * They hold every capability everywhere, so the detector finds them running
-     * whatever they can see, which is everything. Listing that says nothing
-     * about the organisation and buries the people the register is actually for.
-     *
-     * Filtered here rather than in the resolver: that list also decides who sees
-     * whose numbers, and this screen is not the place to change that.
-     */
-    if (is_siteadmin($manager->userid)) {
-        continue;
-    }
+/*
+ * Everybody who can reach a report without anybody having named them.
+ *
+ * They belong on this register because it answers "who can see staff training
+ * data", and a role grant is one of the ways somebody can. They get no unit:
+ * holding local/reportlms:view says nothing about which department is theirs,
+ * and the page used to guess one from their profile field and show it as
+ * though it were a fact. The Fix in their row is how that becomes one.
+ */
+foreach (capability_holders::holders() as $userid) {
+    $user = core_user::get_user($userid);
+    $key = 'u:' . $userid . ':none';
 
-    $user = core_user::get_user($manager->userid);
-    $who = $personlink($user, (string) $manager->userid);
-    $departments = array_filter(array_map('trim', $manager->departments), 'strlen');
-
-    if (!$departments) {
-        $key = 'u:' . $manager->userid . ':none';
-        $register[$key] = $register[$key] ?? (object) [
-            'who' => $who,
-            'unit' => '-',
-            'nodeid' => 0,
-            'userid' => (int) $manager->userid,
-            'mappingid' => 0,
-            'capability' => false,
-        ];
-        $register[$key]->capability = true;
-
-        continue;
-    }
-
-    foreach ($departments as $department) {
-        $node = $nodesbyname[core_text::strtolower($department)] ?? null;
-        $key = 'u:' . $manager->userid . ':' . ($node ? $node->id : 'name:' . core_text::strtolower($department));
-
-        $register[$key] = $register[$key] ?? (object) [
-            'who' => $who,
-            'unit' => $node ? $node->name : $department,
-            'nodeid' => $node ? (int) $node->id : 0,
-            'userid' => (int) $manager->userid,
-            'mappingid' => 0,
-            'capability' => false,
-        ];
-        $register[$key]->capability = true;
-    }
+    $register[$key] = $register[$key] ?? (object) [
+        'who' => $personlink($user, (string) $userid),
+        'unit' => '-',
+        'nodeid' => 0,
+        'userid' => (int) $userid,
+        'mappingid' => 0,
+        'capability' => false,
+    ];
+    $register[$key]->capability = true;
 }
 
 /*
@@ -808,31 +798,6 @@ if ($alsogranted) {
         get_string('manage:alsogranted', 'local_reportlms', $alsogranted)
         . ' ' . html_writer::link($roleurl, get_string('manage:alsogranted_link', 'local_reportlms')),
         'text-muted small mt-2'
-    );
-}
-
-/*
- * The offer to turn detected departments into units, made once.
- *
- * Auto-detect already reads these off profile fields, so nothing here is new
- * information. What it changes is that a department becomes a row somebody can
- * rename, re-parent and name a manager against, instead of a value that only
- * exists inside a profile field.
- *
- * There is no flag remembering whether it was taken. The offer is shown when
- * there is something left to import and hidden when there is not, so accepting
- * it removes the reason to show it and a site that never wants it is never asked
- * a second time about the same department.
- */
-if (mapping::has_departments_to_import()) {
-    $importurl = new moodle_url($pageurl, ['action' => 'importunits', 'sesskey' => sesskey()]);
-
-    echo html_writer::div(
-        html_writer::tag('p', get_string('manage:importoffer', 'local_reportlms'))
-        . html_writer::link($importurl, get_string('manage:importaction', 'local_reportlms'), [
-            'class' => 'btn btn-primary',
-        ]),
-        'alert alert-info'
     );
 }
 

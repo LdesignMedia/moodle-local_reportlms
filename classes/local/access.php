@@ -35,7 +35,7 @@ namespace local_reportlms\local;
  *
  * Getting in and seeing whose data are two different questions. This class only
  * answers the first. What a viewer may then see is decided by
- * {@see manager_resolver}, carried in the launch token's scope, and enforced by
+ * {@see mapping}, carried in the launch token's scope, and enforced by
  * the SaaS on every query.
  *
  * :view answers both halves now: holding it on a course makes you that course's
@@ -102,7 +102,7 @@ class access {
      * for the capability at the system context therefore answers "no" for
      * exactly the people the product was built for. A manager of one course had
      * every capability they needed, was correctly identified as a manager by
-     * manager_resolver, and was turned away at the door.
+     * the capability, and was turned away at the door.
      *
      * Asking about the contexts the user actually has a role in, rather than
      * walking every context on the site, keeps this to one small query plus a
@@ -139,10 +139,12 @@ class access {
          * not that they may rewrite the organisation, and :manage is the
          * capability that hands the second one out.
          */
-        if ($capability === self::VIEW
+        if (
+            $capability === self::VIEW
                 && isloggedin()
                 && !isguestuser()
-                && mapping::managed_nodes((int) $USER->id) !== []) {
+                && mapping::managed_nodes((int) $USER->id) !== []
+        ) {
             return true;
         }
 

@@ -122,29 +122,44 @@ class push_batch extends \core\task\scheduled_task {
      * The push itself, under the lock.
      */
     protected function push(): void {
-        // Before the empty-queue return, not after: the lock follows the
-        // mapping, and the mapping can change on a site where nobody is
-        // dirty. Cheap and idempotent either way.
-        \local_reportlms\local\collector\org::lock_department_field();
-
         $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN);
-        if (!$userids) {
-            mtrace('Report LMS: nothing to push.');
 
-            return;
-        }
+        if ($userids) {
+            try {
+                $chunks = batch_builder::build($userids, time());
+            } catch (\local_reportlms\local\push_refused_exception $e) {
+                // A refusal here is the builder declining to miscount (no
+                // gradable roles, contexts mid-rebuild), not a broken site. The
+                // flags stay dirty; returning lets the task retry on its normal
+                // slot instead of failing into Moodle's exponential backoff,
+                // which would stall every push for hours over a transient.
+                mtrace('Report LMS push refused before sending: ' . $e->getMessage());
 
-        try {
-            $chunks = batch_builder::build($userids, time());
-        } catch (\local_reportlms\local\push_refused_exception $e) {
-            // A refusal here is the builder declining to miscount (no gradable
-            // roles, contexts mid-rebuild), not a broken site. The flags stay
-            // dirty; returning lets the task retry on its normal slot instead
-            // of failing into Moodle's exponential backoff, which would stall
-            // every push for hours over a transient.
-            mtrace('Report LMS push refused before sending: ' . $e->getMessage());
+                return;
+            }
+        } else {
+            /*
+             * Nobody changed, but the shape of the site might have.
+             *
+             * The org tree and the catalogue ride in the first chunk of a
+             * learner push, and there is no first chunk when no learner is
+             * dirty. So a course renamed or hidden, a unit renamed in the
+             * mapping editor, or a manager named against one, waited for some
+             * unrelated learner to change before it could travel. Between terms
+             * that is days; on a site that has finished its training it is
+             * never, and the dashboard goes on showing an old name against
+             * current numbers.
+             */
+            $structure = batch_builder::structure_only(time());
 
-            return;
+            if ($structure === null) {
+                mtrace('Report LMS: nothing to push.');
+
+                return;
+            }
+
+            mtrace('Report LMS: no learner changed, sending the organisation and catalogue.');
+            $chunks = [$structure];
         }
 
         // Injectable so a test can hand back a refusal without a network.
@@ -180,8 +195,10 @@ class push_batch extends \core\task\scheduled_task {
                  * identifiers rather than starting a second history beside the
                  * first.
                  */
-                if ($e instanceof \local_reportlms\local\push_refused_exception
-                        && $e->reason === self::REFUSED_UNACKNOWLEDGED) {
+                if (
+                    $e instanceof \local_reportlms\local\push_refused_exception
+                        && $e->reason === self::REFUSED_UNACKNOWLEDGED
+                ) {
                     connect_manager::disconnect();
                     mtrace('Report LMS refused this site until somebody reads the data statement.');
                     mtrace('Disconnected. What was already sent is kept, and reconnecting resumes it.');

@@ -132,19 +132,23 @@ class label_map {
     /**
      * The org tree's labels.
      *
-     * Node identity has to be derived exactly the way {@see org::collect}
-     * derives it, including the rule that a department's key carries its
-     * sector: "HR under Transport" and "HR under Office" are two nodes, and a
-     * label map built on the bare department name would resolve one code and
-     * miss the other.
+     * Read from the same rows {@see org::collect} reads, so a code that reached
+     * Report LMS can always be turned back into the name somebody typed. It
+     * used to be rebuilt from the distinct values in two profile fields, which
+     * matched only by coincidence: a unit created in the editor and named
+     * something nobody has in their profile produced a code with no label, and
+     * the dashboard rendered its hash.
+     *
+     * A department's key carries its sector, so "HR" under "Transport" and "HR"
+     * under "Office" are two nodes with the same label and different codes.
      *
      * @return array<string, array{label: string, kind: string, parent: string|null}>
      */
     protected static function nodes(): array {
         $map = [];
 
-        // The bucket for people with no mapped value. Always present, exactly
-        // as the collector always emits it.
+        // The bucket for people nobody has placed. Always present, exactly as
+        // the collector always emits it.
         [$level, $value] = explode(':', org::UNASSIGNED, 2);
         $map[pseudonym::node($level, $value)] = [
             'label' => get_string('label:unassigned', 'local_reportlms'),
@@ -152,51 +156,35 @@ class label_map {
             'parent' => null,
         ];
 
-        /*
-         * Nodes named after a manager who has no department of their own.
-         *
-         * Labelled so nobody mistakes one for a department: it says whose team
-         * it is and that the department is missing, which is also the fix.
-         *
-         * The name is resolved here and never sent. Report LMS holds the coded
-         * id like any other node and cannot turn it back into a person.
-         */
-        foreach (manager_resolver::fallback_managers() as $userid) {
-            $user = \core_user::get_user($userid, 'id, firstname, lastname, firstnamephonetic, '
-                . 'lastnamephonetic, middlename, alternatename');
+        $nodes = mapping::nodes();
 
-            if (!$user) {
+        foreach ($nodes as $node) {
+            $key = mapping::nodekey((int) $node->id);
+
+            if ($key === null) {
                 continue;
             }
 
-            $map[pseudonym::node('department', manager_resolver::MANAGER_NODE . $userid)] = [
-                'label' => get_string('label:managerteam', 'local_reportlms', fullname($user)),
-                'kind' => 'department',
-                'parent' => null,
-            ];
-        }
+            [$kind, $path] = explode(':', $key, 2);
 
-        foreach (self::sector_department_pairs() as $pair) {
-            $sectorcode = null;
+            $parentcode = null;
 
-            if ($pair->sector !== null) {
-                $sectorcode = pseudonym::node('sector', $pair->sector);
-                $map[$sectorcode] = [
-                    'label' => $pair->sector,
-                    'kind' => 'sector',
-                    'parent' => null,
-                ];
+            if ($node->parentid !== null && isset($nodes[$node->parentid])) {
+                $parentkey = mapping::nodekey((int) $node->parentid);
+
+                if ($parentkey !== null) {
+                    [$parentkind, $parentpath] = explode(':', $parentkey, 2);
+                    $parentcode = pseudonym::node($parentkind, $parentpath);
+                }
             }
 
-            if ($pair->department === null) {
-                continue;
-            }
-
-            $departmentvalue = ($pair->sector !== null ? $pair->sector . '/' : '') . $pair->department;
-            $map[pseudonym::node('department', $departmentvalue)] = [
-                'label' => $pair->department,
-                'kind' => 'department',
-                'parent' => $sectorcode,
+            $map[pseudonym::node($kind, $path)] = [
+                // The name alone. The path is the node's identity, not its
+                // label: a picker showing "Transport/HR" under Transport reads
+                // as a mistake.
+                'label' => $node->name,
+                'kind' => $node->kind,
+                'parent' => $parentcode,
             ];
         }
 
@@ -211,7 +199,7 @@ class label_map {
     protected static function functions(): array {
         $map = [];
 
-        foreach (self::field_values(org::fieldmap()['function']) as $value) {
+        foreach (self::field_values(org::function_field()) as $value) {
             $map[pseudonym::functionref($value)] = [
                 'label' => $value,
                 'kind' => 'function',
@@ -220,67 +208,6 @@ class label_map {
         }
 
         return $map;
-    }
-
-    /**
-     * The distinct sector and department combinations in use.
-     *
-     * Distinct pairs rather than the full user list: the collector walks every
-     * user because it has to emit a membership row per person, this only needs
-     * the shapes those rows can take.
-     *
-     * @return array<int, \stdClass> {sector, department}, either may be null.
-     */
-    protected static function sector_department_pairs(): array {
-        global $DB;
-
-        $map = org::fieldmap();
-        $sectorid = self::field_id($map['sector']);
-        $departmentid = self::field_id($map['department']);
-
-        if ($sectorid === null && $departmentid === null) {
-            return [];
-        }
-
-        // Left joins on both, so a user with only one of the two still
-        // contributes the node they do have.
-        $sql = "SELECT DISTINCT s.data AS sector, d.data AS department
-                  FROM {user} u
-             LEFT JOIN {user_info_data} s ON s.userid = u.id AND s.fieldid = :sectorid
-             LEFT JOIN {user_info_data} d ON d.userid = u.id AND d.fieldid = :departmentid
-                 WHERE u.deleted = 0 AND u.id > 2";
-
-        // A recordset, not get_records_sql: that keys the result by the first
-        // column, and the first column here is the sector, which repeats once
-        // per department under it. Keyed, every sector kept exactly one
-        // department and the rest vanished, so most nodes had no label and the
-        // dashboard showed their hash.
-        $recordset = $DB->get_recordset_sql($sql, [
-            // 0 never matches a real field id, which is how an unconfigured
-            // level degrades to "nobody has one" instead of a broken query.
-            'sectorid' => $sectorid ?? 0,
-            'departmentid' => $departmentid ?? 0,
-        ]);
-
-        $pairs = [];
-
-        foreach ($recordset as $row) {
-            $sector = self::clean($row->sector);
-            $department = self::clean($row->department);
-
-            if ($sector === null && $department === null) {
-                continue;
-            }
-
-            $pairs[$sector . "\0" . $department] = (object) [
-                'sector' => $sector,
-                'department' => $department,
-            ];
-        }
-
-        $recordset->close();
-
-        return array_values($pairs);
     }
 
     /**
@@ -318,6 +245,8 @@ class label_map {
     }
 
     /**
+     * The id of one profile field, by shortname.
+     *
      * @param string $shortname
      *
      * @return int|null Null when the site has no such field.

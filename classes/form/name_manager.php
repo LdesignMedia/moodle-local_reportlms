@@ -40,12 +40,13 @@ require_once($CFG->libdir . '/formslib.php');
  */
 class name_manager extends \moodleform {
     /**
+     * Build the form: a unit, and the person who runs it.
+     *
      * @return void
      */
     protected function definition(): void {
         $mform = $this->_form;
         $units = $this->_customdata['units'] ?? [];
-
 
         $mform->addElement('select', 'nodeid', get_string('manage:unit', 'local_reportlms'), $units);
 

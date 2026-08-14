@@ -28,7 +28,8 @@ namespace local_reportlms;
 use local_reportlms\external\resolve_learners;
 use local_reportlms\local\access;
 use local_reportlms\local\learner_names;
-use local_reportlms\local\manager_resolver;
+use local_reportlms\local\capability_holders;
+use local_reportlms\local\mapping;
 use local_reportlms\local\pseudonym;
 
 /**
@@ -44,7 +45,8 @@ final class learner_names_test extends \advanced_testcase {
         $this->resetAfterTest();
 
         set_config('salt', 'salt-for-unit-tests', 'local_reportlms');
-        manager_resolver::reset();
+        capability_holders::reset();
+        mapping::reset();
     }
 
     /**
@@ -70,10 +72,11 @@ final class learner_names_test extends \advanced_testcase {
         [$manager] = $this->manager_with_a_participant('Anna', 'Jansen');
 
         $elsewhere = $this->getDataGenerator()->create_user(['firstname' => 'Bob', 'lastname' => 'Elders']);
-        $othercourse = $this->getDataGenerator()->create_course();
-        $this->getDataGenerator()->enrol_user($elsewhere->id, $othercourse->id);
+        $other = mapping::save_node('Utrecht', 'department');
+        mapping::place((int) $elsewhere->id, $other);
 
-        manager_resolver::reset();
+        capability_holders::reset();
+        mapping::reset();
         $this->setUser($manager);
 
         $code = pseudonym::learner((int) $elsewhere->id);
@@ -105,7 +108,8 @@ final class learner_names_test extends \advanced_testcase {
         assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
         role_assign($roleid, $user->id, \context_system::instance()->id);
 
-        manager_resolver::reset();
+        capability_holders::reset();
+        mapping::reset();
         $this->setUser($user);
 
         $this->assertSame([], learner_names::resolve([pseudonym::learner((int) $someone->id)]));
@@ -130,10 +134,11 @@ final class learner_names_test extends \advanced_testcase {
         [$manager] = $this->manager_with_a_participant('Anna', 'Jansen');
 
         $elsewhere = $this->getDataGenerator()->create_user(['firstname' => 'Bob', 'lastname' => 'Elders']);
-        $othercourse = $this->getDataGenerator()->create_course();
-        $this->getDataGenerator()->enrol_user($elsewhere->id, $othercourse->id);
+        $other = mapping::save_node('Utrecht', 'department');
+        mapping::place((int) $elsewhere->id, $other);
 
-        manager_resolver::reset();
+        capability_holders::reset();
+        mapping::reset();
 
         $code = pseudonym::learner((int) $elsewhere->id);
 
@@ -147,29 +152,61 @@ final class learner_names_test extends \advanced_testcase {
     }
 
     /**
-     * A manager of one course, and one participant in it.
+     * A manager named against a unit, and one person placed in it.
+     *
+     * It used to be a manager granted the capability on a course, and whoever
+     * was enrolled on it. That is why this file changed: a grant on a course is
+     * not a statement about who works for somebody, and on a connected site one
+     * such grant reached an all-staff course and made 1,467 learners nameable
+     * by one person.
      *
      * @param string $firstname
      * @param string $lastname
      *
-     * @return array{0: \stdClass, 1: \stdClass} The manager and the participant.
+     * @return array{0: \stdClass, 1: \stdClass} The manager and the person.
      */
     private function manager_with_a_participant(string $firstname, string $lastname): array {
-        $course = $this->getDataGenerator()->create_course();
         $manager = $this->getDataGenerator()->create_user();
         $learner = $this->getDataGenerator()->create_user([
             'firstname' => $firstname,
             'lastname' => $lastname,
         ]);
 
-        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $nodeid = mapping::save_node('Rotterdam', 'department');
+        mapping::place((int) $learner->id, $nodeid);
+        mapping::add_manager($nodeid, (int) $manager->id, null);
 
-        $roleid = $this->getDataGenerator()->create_role();
-        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
-        role_assign($roleid, $manager->id, \context_course::instance($course->id)->id);
-
-        manager_resolver::reset();
+        capability_holders::reset();
+        mapping::reset();
 
         return [$manager, $learner];
+    }
+
+    /**
+     * A manager of a sector names the people in the departments under it.
+     *
+     * Report LMS expands a scope node to its subtree before it serves a figure,
+     * so this side has to expand it too. A sector manager served numbers for
+     * people whose names this site then refused to translate would read as the
+     * report being broken.
+     */
+    public function test_a_manager_of_a_sector_names_people_in_its_departments(): void {
+        $manager = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user([
+            'firstname' => 'Sanne',
+            'lastname' => 'de Vries',
+        ]);
+
+        $sectorid = mapping::save_node('Operations', 'sector');
+        $departmentid = mapping::save_node('Rotterdam', 'department', $sectorid);
+        mapping::place((int) $learner->id, $departmentid);
+        mapping::add_manager($sectorid, (int) $manager->id, null);
+        mapping::reset();
+
+        $this->setUser($manager);
+
+        $code = pseudonym::learner((int) $learner->id);
+
+        $this->assertSame(['Sanne de Vries'], array_values(learner_names::resolve([$code])));
     }
 }

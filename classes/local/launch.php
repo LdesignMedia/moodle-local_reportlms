@@ -38,11 +38,8 @@ class launch {
     public const TTL = 300;
 
     /**
-     * The URL to put in the iframe.
+     * The URL to put in the iframe, signed for the current viewer.
      *
-     * @return string
-     */
-    /**
      * @param bool $welcome Whether to greet the viewer, just after connecting.
      *
      * @return string
@@ -160,31 +157,22 @@ class launch {
             ];
         }
 
-        // Otherwise the viewer is a manager, and their scope is the nodes their
-        // own department resolves to, crossed with the courses they manage. An
-        // empty scope here means nothing rather than everything, which is why
-        // the two cases are kept apart above.
-        $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
-
-        $named = self::named_nodes();
-
+        /*
+         * Otherwise the viewer is a manager, and their scope is the units they
+         * were named against. An empty scope here means nothing rather than
+         * everything, which is why the two cases are kept apart above.
+         *
+         * No course list rides along any more. It used to, worked out from the
+         * courses the viewer held :view on, so that the Report LMS side could
+         * refuse a cell for a training they had nothing to do with. Naming a
+         * manager says which people are theirs, not which trainings, and their
+         * unit is already the boundary.
+         */
         return [
             'sub' => pseudonym::learner((int) $USER->id),
             'role' => 'department',
-            'scope' => $manager ? self::scope_of($manager) : $named,
-            /*
-             * The courses they manage, so the SaaS can refuse a cell for a
-             * training they have nothing to do with.
-             *
-             * Absent for somebody named only in the editor. Naming a manager
-             * says which people are theirs, not which trainings, and sending an
-             * empty list would read as "no courses at all" and serve them
-             * nothing. Their unit is the boundary, and it is already in scope.
-             */
-            'courses' => $manager ? array_map(
-                static fn(int $courseid): string => pseudonym::course($courseid),
-                $manager->courseids
-            ) : null,
+            'scope' => self::named_nodes(),
+            'courses' => null,
         ];
     }
 
@@ -198,77 +186,37 @@ class launch {
      * @return array<int, string>|null
      */
     public static function viewer_scope(): ?array {
-        global $USER;
+        $named = self::named_nodes();
 
-        $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
-
-        if (!$manager) {
-            // Named in the editor without holding any capability, which is the
-            // route most customers will use.
-            $named = self::named_nodes();
-
-            return $named ?: null;
-        }
-
-        $nodes = self::scope_of($manager);
-
-        return $nodes ?: null;
+        return $named ?: null;
     }
 
     /**
-     * The coded nodes this viewer may have named, scope plus its ancestors.
+     * The coded nodes whose names this viewer may be told.
      *
-     * Kept apart from {@see viewer_scope}, which is what rides the token and
-     * decides which cells the SaaS will serve. This is a wider and weaker
-     * thing: which codes the label service will translate. A manager is served
-     * their own department's numbers and no other, and is told the name of the
-     * sector above it, because a department drawn under an unnamed parent is a
-     * picker nobody can use.
+     * Kept as its own method because it used to be a wider and weaker thing
+     * than the scope: a manager was served their own department's numbers and
+     * no other, and was still told the name of the sector above it, because a
+     * department drawn under an unnamed parent is a picker nobody can use.
      *
-     * Derived from the manager record rather than by walking the label map,
-     * because the map holds the tree as it currently stands and a manager whose
-     * own department has no members yet is simply absent from it. A viewer must
-     * not lose the ability to name their own department because nobody has
-     * been put in it.
+     * The two answers are now the same, because {@see named_nodes} already
+     * carries the parents. It stays separate so the distinction survives if the
+     * label service ever needs to be more generous than the token.
      *
      * @return array<int, string>|null Null for a viewer who manages nothing.
      */
     public static function viewer_nameable(): ?array {
-        global $USER;
-
         $named = self::named_nodes();
-        $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
 
-        if (!$manager || !$manager->departments) {
-            // Named in the editor and nothing else: their units, and the
-            // sectors above them so the picker can draw the tree.
-            return $named ?: null;
-        }
-
-        $sector = self::sector_of($manager->userid);
-        $codes = [];
-
-        foreach ($manager->departments as $department) {
-            $codes[] = pseudonym::node(
-                'department',
-                ($sector !== null ? $sector . '/' : '') . $department
-            );
-        }
-
-        if ($sector !== null) {
-            $codes[] = pseudonym::node('sector', $sector);
-        }
-
-        return array_values(array_unique(array_merge($codes, $named)));
+        return $named ?: null;
     }
 
     /**
      * The coded units this viewer was named the manager of, plus their parents.
      *
-     * Kept apart from the profile-derived scope because the two arrive by
-     * different routes and either can be empty: somebody may be named in the
-     * editor without holding any capability, and somebody may hold :view on a
-     * course without appearing in the editor at all.
+     * The whole of a manager's scope. Holding local/reportlms:view on a course
+     * puts nothing here: it lets somebody open a report, and what they see in
+     * it is the units they were named against, which may be none.
      *
      * @return array<int, string>
      */
@@ -302,55 +250,6 @@ class launch {
         }
 
         return array_values(array_unique($codes));
-    }
-
-    /**
-     * The coded org nodes a manager may see.
-     *
-     * Built with the same key rule the org collector uses, because the SaaS
-     * matches these against the node ids that collector pushed. A department's
-     * identity includes its sector, so a manager with no sector value lands on
-     * a different node than one with the same department under a sector.
-     *
-     * @param \stdClass $manager As returned by {@see manager_resolver::managers}.
-     *
-     * @return array<int, string>
-     */
-    protected static function scope_of(\stdClass $manager): array {
-        $named = self::named_nodes();
-
-        if (!$manager->departments) {
-            return $named;
-        }
-
-        $department = reset($manager->departments);
-        $sector = self::sector_of($manager->userid);
-
-        return array_values(array_unique(array_merge([
-            pseudonym::node('department', ($sector !== null ? $sector . '/' : '') . $department),
-        ], $named)));
-    }
-
-    /**
-     * A user's mapped sector value, or null.
-     *
-     * @param int $userid
-     *
-     * @return string|null
-     */
-    protected static function sector_of(int $userid): ?string {
-        global $DB;
-
-        $shortname = collector\org::fieldmap()['sector'];
-
-        $sql = "SELECT d.data
-                  FROM {user_info_data} d
-                  JOIN {user_info_field} f ON f.id = d.fieldid
-                 WHERE f.shortname = :shortname AND d.userid = :userid";
-
-        $value = trim((string) $DB->get_field_sql($sql, ['shortname' => $shortname, 'userid' => $userid]));
-
-        return $value === '' ? null : $value;
     }
 
     /**

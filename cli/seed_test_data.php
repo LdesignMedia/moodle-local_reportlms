@@ -41,6 +41,7 @@ require_once($CFG->libdir . '/grade/constants.php');
  * prompt protects against hesitation; a list protects against the wrong
  * terminal.
  */
+/** @var array The only sites this may run against. It invents data, so it asks first. */
 const ALLOWED_HOSTS = [
     'workplace.test.example.com',
     'moodle.test.example.com',
@@ -85,27 +86,21 @@ $dryrun = (bool) $options['dry-run'];
 $wantlearners = max(1, (int) $options['learners']);
 $wantcourses = max(1, (int) $options['courses']);
 
-// Only people the org tree already places. Inventing profile values as well
-// would mean testing a shape no customer has.
-$map = \local_reportlms\local\collector\org::fieldmap();
-$field = $DB->get_record('user_info_field', ['shortname' => $map['department']]);
-
-if (!$field) {
-    cli_error("No '{$map['department']}' profile field on this site. Map orgfield_department first.");
-}
-
+// Only people the org tree already places. Enrolling somebody nobody has put
+// in a unit produces results under Unassigned, which is a shape worth testing
+// deliberately rather than by accident.
 $sql = "SELECT u.id
           FROM {user} u
-          JOIN {user_info_data} d ON d.userid = u.id AND d.fieldid = :fieldid
+          JOIN {local_reportlms_member} m ON m.userid = u.id
          WHERE u.deleted = 0 AND u.suspended = 0 AND u.id > 2
-           AND " . $DB->sql_compare_text('d.data', 255) . " <> :empty
       ORDER BY u.id";
 
-$learnerids = $DB->get_fieldset_sql($sql, ['fieldid' => $field->id, 'empty' => '']);
+$learnerids = $DB->get_fieldset_sql($sql);
 $learnerids = array_slice($learnerids, 0, $wantlearners);
 
 if (!$learnerids) {
-    cli_error('No users carry a department value, so there is nobody to enrol.');
+    cli_error('Nobody is placed in a unit, so there is nobody to enrol. '
+        . 'Build the organisation on view/manage.php first, or run cli/seed_organisation.php.');
 }
 
 $courses = $DB->get_records_select('course', 'id > 1 AND visible = 1', null, 'id', 'id, fullname', 0, $wantcourses);

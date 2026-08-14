@@ -39,7 +39,6 @@ namespace local_reportlms\local\collector;
  * active when any method is active.
  */
 class enrolments {
-
     /**
      * Enrolment rows for a batch of learners.
      *
@@ -88,5 +87,4 @@ class enrolments {
 
         return $rows;
     }
-
 }

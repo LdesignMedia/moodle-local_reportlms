@@ -36,256 +36,166 @@ use local_reportlms\local\mapping;
  * tree cannot be merged safely. When the state hash is unchanged since the
  * last accepted push, the batch builder omits the section entirely.
  *
- * Node identity is the value's path, not the bare value. "HR under
- * Transport" and "HR under Office" are two different departments, so a
- * department node's key includes its sector. A rename therefore produces a
- * new node and the members move to it, which is the behaviour the plan
- * specifies.
+ * The tree is stated, never inferred. Every unit, every membership and every
+ * manager is a row somebody wrote on the mapping page, and this reads them.
  *
- * People without a mapped value land in a visible "Unassigned" node rather
- * than disappearing, so HR can spot data gaps.
+ * It used to work the tree out instead, from two profile fields and from who
+ * held local/reportlms:view on which course. Both are guesses about something
+ * only a person knows, and on connected sites both were wrong in ways no amount
+ * of better inference fixes: a blank profile field is indistinguishable from a
+ * wrong one, a manager of two departments placed all their people in one, and
+ * being enrolled on an all-staff course made one manager look responsible for
+ * 1,467 of a site's 1,495 learners.
  *
- * Managers come from the local/reportlms:manage capability rather than from a
- * profile field: see {@see \local_reportlms\local\manager_resolver}. A managed
- * participant takes their manager's department, overriding whatever they have
- * set on themselves, so one person being responsible for a group is enough to
- * place the whole group in the tree.
+ * Node identity is the unit's path, not its name. "HR" under "Transport" and
+ * "HR" under "Office" are two different departments, so a department node's key
+ * carries its sector. A rename therefore produces a new node and the members
+ * move to it.
+ *
+ * Anybody nobody has placed lands in a visible "Unassigned" node rather than
+ * disappearing, so they stay in the site's totals and the gap is something
+ * somebody can see and clear.
  *
  * The state hash covers managers too, because it is computed over everything
- * returned here. A role assignment or an enrolment change therefore moves the
- * hash and gets pushed, which it would not if managers were computed later.
+ * returned here.
  */
 class org {
     /** @var string Node key of the unassigned bucket. */
     public const UNASSIGNED = 'department:Unassigned';
 
     /**
-     * The profile field shortnames that drive the tree.
+     * The profile field naming what somebody does.
      *
-     * Admin-configurable later, alongside the mapping preview. The defaults
-     * are the dedicated fields the plugin will create at install.
+     * The last profile field this plugin reads. Function is an attribute of a
+     * person rather than a place in the tree: two people with the same job work
+     * in different departments, and the aggregation slices by it without the
+     * organisation depending on it. So it stays a field, where sector and
+     * department became rows.
      *
-     * @return array{sector: string, department: string, function: string}
+     * @return string
      */
-    public static function fieldmap(): array {
-        return [
-            'sector' => get_config('local_reportlms', 'orgfield_sector') ?: 'rlms_sector',
-            'department' => get_config('local_reportlms', 'orgfield_department') ?: 'rlms_department',
-            'function' => get_config('local_reportlms', 'orgfield_function') ?: 'rlms_function',
-        ];
-    }
-
-    /**
-     * Lock the mapped department field, so a learner cannot edit their own.
-     *
-     * Called on every push rather than once at upgrade, because the mapping is
-     * a config value an administrator changes long after installing: locking
-     * only at upgrade would lock whatever the mapping happened to point at that
-     * day, which is usually nothing.
-     *
-     * Moodle then allows only moodle/user:update holders to change it. The lock
-     * affects the edit form alone, so an HR upload or a web service sync keeps
-     * writing normally.
-     *
-     * @return void
-     */
-    public static function lock_department_field(): void {
-        global $DB;
-
-        $shortname = self::fieldmap()['department'];
-        $ourlock = (string) get_config('local_reportlms', 'lockedfield');
-
-        // The mapping moved away from a field this plugin locked: undo that
-        // lock. Only ours, a lock the customer set themselves is recorded
-        // nowhere and is therefore never touched.
-        if ($ourlock !== '' && $ourlock !== $shortname) {
-            $old = $DB->get_record('user_info_field', ['shortname' => $ourlock], 'id, locked');
-            if ($old && !empty($old->locked)) {
-                $DB->set_field('user_info_field', 'locked', 0, ['id' => $old->id]);
-            }
-            unset_config('lockedfield', 'local_reportlms');
-        }
-
-        $field = $DB->get_record('user_info_field', ['shortname' => $shortname], 'id, locked');
-
-        if ($field && empty($field->locked)) {
-            $DB->set_field('user_info_field', 'locked', 1, ['id' => $field->id]);
-            // Recorded so a later re-map (and db/uninstall.php) can undo
-            // exactly what was done, and nothing else.
-            set_config('lockedfield', $shortname, 'local_reportlms');
-        }
+    public static function function_field(): string {
+        return get_config('local_reportlms', 'orgfield_function') ?: 'rlms_function';
     }
 
     /**
      * The full org state.
      *
      * @return \stdClass {nodes, members, managers, attrs}:
-     *         nodes    key => {key, parent (key|null), kind}
+     *         nodes    list of {key, parent (key|null), kind}
      *         members  list of {userid, nodekey}
-     *         managers empty for now
+     *         managers list of {userid, nodekey}
      *         attrs    list of {userid, auth, active, function (value|null)}
      */
-    /**
-     * Declare a stated node, and the sector above it if there is one.
-     *
-     * @param string $key As {@see mapping::nodekey} produced it.
-     * @param array<string, \stdClass> $nodes Tree so far, added to by reference.
-     *
-     * @return \stdClass
-     */
-    protected static function manual_node(string $key, array &$nodes): \stdClass {
-        if (strpos($key, 'sector:') === 0) {
-            return (object) ['key' => $key, 'parent' => null, 'kind' => 'sector'];
-        }
-
-        $value = substr($key, strlen('department:'));
-        $slash = strpos($value, '/');
-
-        if ($slash === false) {
-            return (object) ['key' => $key, 'parent' => null, 'kind' => 'department'];
-        }
-
-        $sectorkey = 'sector:' . substr($value, 0, $slash);
-
-        if (!isset($nodes[$sectorkey])) {
-            $nodes[$sectorkey] = (object) ['key' => $sectorkey, 'parent' => null, 'kind' => 'sector'];
-        }
-
-        return (object) ['key' => $key, 'parent' => $sectorkey, 'kind' => 'department'];
-    }
-
     public static function collect(): \stdClass {
         global $DB;
 
-        $map = self::fieldmap();
-        [$fieldsql, $fieldparams] = $DB->get_in_or_equal(array_values($map), SQL_PARAMS_NAMED);
+        $nodes = [
+            self::UNASSIGNED => (object) [
+                'key' => self::UNASSIGNED,
+                'parent' => null,
+                'kind' => 'department',
+            ],
+        ];
 
-        // One pass: every real user with their auth, suspension state and
-        // any of the three mapped field values.
-        $sql = "SELECT u.id, u.auth, u.suspended, f.shortname, d.data
+        /*
+         * Every stated unit, including the empty ones.
+         *
+         * A unit used to reach the wire only by having a member, because a unit
+         * was a profile value and a value nobody holds does not exist. A unit is
+         * now a row somebody created deliberately, usually just before they
+         * start filling it, and a department that vanishes from the report
+         * between being created and being populated reads as the editor having
+         * failed to save it.
+         */
+        $stated = mapping::nodes();
+
+        foreach ($stated as $node) {
+            $key = mapping::nodekey((int) $node->id);
+
+            if ($key === null) {
+                continue;
+            }
+
+            $parent = null;
+
+            if ($node->parentid !== null && isset($stated[$node->parentid])) {
+                $parent = mapping::nodekey((int) $node->parentid);
+            }
+
+            $nodes[$key] = (object) ['key' => $key, 'parent' => $parent, 'kind' => $node->kind];
+        }
+
+        // Resolved once for the whole site rather than per user: this is one
+        // query and the loop below runs for every account on the site.
+        $placed = mapping::membership();
+
+        /*
+         * The function field, by id rather than by shortname in the join.
+         *
+         * Looked up separately so a site without the field runs the same single
+         * pass as one with it, instead of a query whose shape depends on
+         * whether a row exists.
+         */
+        $fieldid = (int) $DB->get_field(
+            'user_info_field',
+            'id',
+            ['shortname' => self::function_field()],
+            IGNORE_MULTIPLE
+        );
+
+        $sql = "SELECT u.id, u.auth, u.suspended, d.data AS functionvalue
                   FROM {user} u
-             LEFT JOIN {user_info_data} d ON d.userid = u.id
-             LEFT JOIN {user_info_field} f ON f.id = d.fieldid AND f.shortname {$fieldsql}
+             LEFT JOIN {user_info_data} d ON d.userid = u.id AND d.fieldid = :fieldid
                  WHERE u.deleted = 0 AND u.id > 2
               ORDER BY u.id";
 
-        // Read once: the loop asks about every user on the site.
-        $manual = mapping::membership();
-
-        $users = [];
-        foreach ($DB->get_recordset_sql($sql, $fieldparams) as $row) {
-            $uid = (int) $row->id;
-            if (!isset($users[$uid])) {
-                $users[$uid] = (object) [
-                    'auth' => $row->auth, 'suspended' => (int) $row->suspended,
-                    'sector' => null, 'department' => null, 'function' => null,
-                ];
-            }
-            foreach ($map as $level => $shortname) {
-                if ($row->shortname === $shortname && trim((string) $row->data) !== '') {
-                    $users[$uid]->{$level} = trim($row->data);
-                }
-            }
-        }
-
-        // Who manages whom, from the capability and course enrolment. A managed
-        // participant takes their manager's department, whatever they have set
-        // on themselves: one person is responsible for the group, and the group
-        // inherits their place in the tree.
-        $managerids = \local_reportlms\local\manager_resolver::managers();
-        $managed = \local_reportlms\local\manager_resolver::membership();
-
-        foreach ($managed as $uid => $inherited) {
-            if (isset($users[$uid])) {
-                // Both levels, or the key names a department under a sector it
-                // does not sit in, and no label ever resolves for it.
-                $users[$uid]->sector = $inherited->sector;
-                $users[$uid]->department = $inherited->department;
-            }
-        }
-
-        $nodes = [];
         $members = [];
-        $managers = [];
         $attrs = [];
 
-        $nodes[self::UNASSIGNED] = (object) ['key' => self::UNASSIGNED, 'parent' => null, 'kind' => 'department'];
+        $recordset = $DB->get_recordset_sql($sql, ['fieldid' => $fieldid]);
 
-        foreach ($users as $uid => $u) {
-            $sectorkey = $u->sector !== null ? 'sector:' . $u->sector : null;
-            if ($sectorkey !== null && !isset($nodes[$sectorkey])) {
-                $nodes[$sectorkey] = (object) ['key' => $sectorkey, 'parent' => null, 'kind' => 'sector'];
+        foreach ($recordset as $row) {
+            $uid = (int) $row->id;
+
+            $nodekey = self::UNASSIGNED;
+
+            if (isset($placed[$uid])) {
+                // A placement pointing at a unit that has since been deleted
+                // leaves somebody nowhere, which is Unassigned rather than an
+                // error: the report must still count them.
+                $nodekey = mapping::nodekey((int) $placed[$uid]) ?? self::UNASSIGNED;
             }
 
-            // A department's identity includes its sector: same label under
-            // two sectors is two nodes. A department without a sector hangs
-            // off the root.
-            $deptkey = null;
-            if ($u->department !== null) {
-                $deptkey = 'department:' . ($u->sector !== null ? $u->sector . '/' : '') . $u->department;
-                if (!isset($nodes[$deptkey])) {
-                    $nodes[$deptkey] = (object) ['key' => $deptkey, 'parent' => $sectorkey, 'kind' => 'department'];
-                }
-            }
-
-            /*
-             * Membership, in order of authority.
-             *
-             * A row somebody typed in the mapping editor beats everything: it
-             * is a statement of fact about the organisation, where a profile
-             * field is a guess derived from an HR export. Then the manager's
-             * department, then the person's own, then Unassigned.
-             *
-             * The manual node is added to the tree here rather than assumed to
-             * exist, because a stated unit with one member and no profile
-             * field anywhere would otherwise be a membership pointing at a node
-             * nobody declared.
-             */
-            $manualkey = isset($manual[$uid]) ? mapping::nodekey((int) $manual[$uid]) : null;
-
-            if ($manualkey !== null && !isset($nodes[$manualkey])) {
-                $nodes[$manualkey] = self::manual_node($manualkey, $nodes);
-            }
-
-            $nodekey = $manualkey ?? $deptkey ?? $sectorkey ?? self::UNASSIGNED;
             $members[] = (object) ['userid' => $uid, 'nodekey' => $nodekey];
 
-            // A manager manages the node their own department resolves to, so
-            // it is recorded here rather than worked out again: this is the
-            // same key their participants were just placed in.
-            if (isset($managerids[$uid]) && $deptkey !== null) {
-                $managers[] = (object) ['userid' => $uid, 'nodekey' => $deptkey];
-            }
+            $functionvalue = trim((string) $row->functionvalue);
 
             $attrs[] = (object) [
                 'userid' => $uid,
-                'auth' => $u->auth,
-                'active' => $u->suspended == 0,
-                'function' => $u->function,
+                'auth' => $row->auth,
+                'active' => $row->suspended == 0,
+                'function' => $functionvalue === '' ? null : $functionvalue,
             ];
         }
 
-        ksort($nodes);
+        $recordset->close();
 
         /*
-         * Managers stated on the mapping page, not only those a capability
-         * betrayed.
+         * Managers, as named on the mapping page and nowhere else.
          *
-         * This list is what stops a manager being counted among their own
-         * people on the Report LMS side. It used to be built from the
-         * capability alone, which was fine while every manager held one, and
-         * became empty the moment a site did the thing the access rework asks
-         * of it: name its managers and take the blanket grant off the manager
-         * role. A site that had tidied up correctly was the one whose figures
-         * still counted its managers.
-         *
-         * Keyed to the unit they were named against rather than to their own
-         * department, because a naming says which unit somebody runs and that
-         * is the whole content of it.
+         * This list is what stops a manager being counted among the people of
+         * the unit they run. Holding local/reportlms:view is not on it: that
+         * capability says what somebody may look at, and running a department
+         * is a fact about the organisation. A site can grant the one without
+         * asserting the other, and most do.
          *
          * Role rows are skipped. A role names a set of people that changes on
          * its own, and the wire carries people.
          */
+        $managers = [];
+        $seen = [];
+
         foreach (mapping::managers() as $named) {
             if (!$named->userid) {
                 continue;
@@ -297,45 +207,27 @@ class org {
                 continue;
             }
 
+            $key = (int) $named->userid . '@' . $namedkey;
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+
             $managers[] = (object) [
                 'userid' => (int) $named->userid,
                 'nodekey' => $namedkey,
             ];
         }
 
-        // The same person can be both named and detected against the same unit,
-        // and saying so twice is not saying it more firmly.
-        $seenmanagers = [];
-        $managers = array_values(array_filter($managers, static function ($manager) use (&$seenmanagers): bool {
-            $key = $manager->userid . '@' . $manager->nodekey;
-
-            if (isset($seenmanagers[$key])) {
-                return false;
-            }
-
-            $seenmanagers[$key] = true;
-
-            return true;
-        }));
+        ksort($nodes);
 
         return (object) [
             'nodes' => array_values($nodes),
             'members' => $members,
             'managers' => $managers,
             'attrs' => $attrs,
-            /*
-             * What this tree is not sure about.
-             *
-             * Kept on the object for the settings page, and deliberately not
-             * sent: every one of these is fixed by changing a profile field or
-             * a role assignment on this site, so a copy on the Report LMS side
-             * would be a number nobody there could act on.
-             */
-            'warnings' => [
-                'unplaceable_managers' => count(\local_reportlms\local\manager_resolver::unplaceable()),
-                'contested_learners' => count(\local_reportlms\local\manager_resolver::contested()),
-                'overridden_learners' => count(\local_reportlms\local\manager_resolver::overridden()),
-            ],
         ];
     }
 

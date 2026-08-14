@@ -124,7 +124,7 @@ $capabilities = [
     ],
 
     /*
-     * May decide which dashboard cards this site shows — to everybody.
+     * May decide which dashboard cards this site shows, to everybody.
      *
      * The deck is site configuration, not a personal preference, so this is a
      * write capability at system context. Like :manage, a grant made at a

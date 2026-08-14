@@ -31,6 +31,8 @@ use local_reportlms\local\push_refused_exception;
 use local_reportlms\task\push_batch;
 
 /**
+ * A refused batch must not be recorded as delivered.
+ *
  * @covers \local_reportlms\task\push_batch
  * @covers \local_reportlms\local\push_refused_exception
  */
@@ -62,7 +64,7 @@ final class push_refusal_test extends \advanced_testcase {
      * @return api_client
      */
     private function refusing_client(string $reason): api_client {
-        return new class(\local_reportlms\local\config::baseurl(), $reason) extends api_client {
+        return new class (\local_reportlms\local\config::baseurl(), $reason) extends api_client {
             /** @var string */
             private $reason;
 
@@ -71,8 +73,13 @@ final class push_refusal_test extends \advanced_testcase {
                 $this->reason = $reason;
             }
 
-            public function push(string $pushpath, string $rawbody, string $apikey,
-                    string $signingsecret, string $idempotencykey): array {
+            public function push(
+                string $pushpath,
+                string $rawbody,
+                string $apikey,
+                string $signingsecret,
+                string $idempotencykey
+            ): array {
                 throw new push_refused_exception($this->reason, 'Refused for testing.');
             }
         };

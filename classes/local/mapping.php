@@ -169,6 +169,77 @@ class mapping {
     }
 
     /**
+     * How many people nobody has put in a unit.
+     *
+     * The standing chore of a hand-built tree, and the one number that says
+     * whether it is being kept up. They are not lost: they land in Unassigned
+     * and stay in the site's totals, so nothing silently drops out of a
+     * compliance figure. But nobody will notice them unless somebody counts.
+     *
+     * @return int
+     */
+    public static function unplaced_count(): int {
+        global $DB;
+
+        return $DB->count_records_sql(
+            "SELECT COUNT(u.id)
+               FROM {user} u
+              WHERE u.deleted = 0
+                AND u.id > 2
+                AND NOT EXISTS (
+                    SELECT 1
+                      FROM {local_reportlms_member} m
+                     WHERE m.userid = u.id
+                )"
+        );
+    }
+
+    /**
+     * These units and everything under them.
+     *
+     * Naming somebody the manager of a sector has to mean the departments in
+     * it. Report LMS already expands a scope node to its subtree before it
+     * serves a figure, so anything on this side that answers the same question
+     * about the same people has to expand it too, or a sector manager is served
+     * numbers for people whose names this site refuses to translate.
+     *
+     * The tree is small and already loaded, so this walks it in memory rather
+     * than asking the database for a recursive query it may not have.
+     *
+     * @param array<int, int> $nodeids
+     *
+     * @return array<int, int> The given units and their descendants.
+     */
+    public static function subtree(array $nodeids): array {
+        $children = [];
+
+        foreach (self::nodes() as $node) {
+            if ($node->parentid !== null) {
+                $children[(int) $node->parentid][] = (int) $node->id;
+            }
+        }
+
+        $found = [];
+        $queue = array_map('intval', $nodeids);
+
+        while ($queue) {
+            $nodeid = array_pop($queue);
+
+            if (isset($found[$nodeid])) {
+                continue;
+            }
+
+            $found[$nodeid] = $nodeid;
+
+            foreach ($children[$nodeid] ?? [] as $childid) {
+                $queue[] = $childid;
+            }
+        }
+
+        return array_values($found);
+    }
+
+    /**
      * Everyone named as a manager, for the register the editor shows.
      *
      * @return array<int, \stdClass> {id, nodeid, userid, roleid}
@@ -434,7 +505,7 @@ class mapping {
         $courseids = array_merge($courseids, self::courses_under($sources['categories'] ?? []));
         $courseids = array_values(array_unique(array_filter($courseids)));
 
-        $found = $courseids ? manager_resolver::participants_of($courseids) : [];
+        $found = self::participants_of($courseids);
 
         $cohortids = array_values(array_filter(array_map('intval', $sources['cohorts'] ?? [])));
 
@@ -457,25 +528,26 @@ class mapping {
          * A profile field value, which is the one source that needs no course
          * at all.
          *
-         * The same values the tree used to be derived from, except that pointing a unit
-         * at one is a sentence somebody said rather than a rule nobody chose.
-         * It is what makes a site with good HR data and no capabilities work,
-         * and it is the reason a department does not have to be enrolled in
-         * anything to exist.
+         * Pointing a unit at a profile value is a sentence somebody said, where
+         * deriving the tree from that same field was a rule nobody chose. It is
+         * what makes a site with good HR data and no capabilities work, and it
+         * is the reason a department does not have to be enrolled in anything
+         * to exist.
+         *
+         * Any profile field, not one nominated in the settings. The field used
+         * to be a site-wide mapping because the tree came from it and there
+         * could only be one answer; a source is chosen per unit, so "which
+         * field" belongs next to the value rather than in a setting somebody
+         * has to change first.
          */
-        $values = array_values(array_filter(array_map('trim', $sources['profilevalues'] ?? []), 'strlen'));
-
-        if ($values) {
-            $shortname = collector\org::fieldmap()['department'];
-
+        foreach (self::profile_values($sources['profilevalues'] ?? []) as $fieldid => $values) {
             [$insql, $params] = $DB->get_in_or_equal($values, SQL_PARAMS_NAMED);
-            $params['shortname'] = $shortname;
+            $params['fieldid'] = $fieldid;
 
             $found = array_merge($found, $DB->get_fieldset_sql(
                 "SELECT d.userid
                    FROM {user_info_data} d
-                   JOIN {user_info_field} f ON f.id = d.fieldid
-                  WHERE f.shortname = :shortname AND d.data {$insql}",
+                  WHERE d.fieldid = :fieldid AND d.data {$insql}",
                 $params
             ));
         }
@@ -577,98 +649,73 @@ class mapping {
     }
 
     /**
-     * Turn the departments the detected managers run into units, once.
+     * The enrolled users of a set of courses.
      *
-     * Auto-detect already reads those departments off profile fields, so this
-     * invents nothing. What it does is make them editable: a unit that exists as
-     * a row can be renamed, re-parented and named a manager against, and one
-     * that exists only as a profile-field value cannot.
+     * One query defines "participant", because the unit sources and anything
+     * that later reacts to an enrolment have to agree about who is on a course.
      *
-     * Units and namings only, never memberships. Placing people is what
-     * a deliberate act, so doing it wholesale here would mean
-     * one click quietly froze every learner's department and the next HR upload
-     * would never move anybody. Placing somebody stays a deliberate act, one
-     * person at a time.
+     * @param array<int, int> $courseids
      *
-     * Names already used are left alone rather than duplicated, so running this
-     * on a site that has typed in some of its tree adds only what is
-     * missing.
-     *
-     * @return int How many units were created.
+     * @return array<int, int> User ids.
      */
-    public static function import_manager_departments(): int {
-        $existing = [];
+    public static function participants_of(array $courseids): array {
+        global $DB;
 
-        foreach (self::nodes() as $node) {
-            $existing[\core_text::strtolower(trim($node->name))] = (int) $node->id;
+        if (!$courseids) {
+            return [];
         }
 
-        $created = 0;
+        [$insql, $params] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED);
 
-        foreach (manager_resolver::managers() as $manager) {
-            if (is_siteadmin($manager->userid)) {
-                // An administrator holds every capability everywhere, so they
-                // are detected as managing whatever they can see. That is not a
-                // fact about the organisation and it should not become a unit.
-                continue;
-            }
+        $sql = "SELECT DISTINCT ue.userid
+                  FROM {user_enrolments} ue
+                  JOIN {enrol} e ON e.id = ue.enrolid
+                  JOIN {user} u ON u.id = ue.userid
+                 WHERE e.courseid {$insql}
+                   AND u.deleted = 0
+                   AND u.id > 2";
 
-            foreach ($manager->departments as $department) {
-                $name = trim((string) $department);
-
-                if ($name === '') {
-                    continue;
-                }
-
-                $key = \core_text::strtolower($name);
-
-                if (!isset($existing[$key])) {
-                    $existing[$key] = self::save_node($name, 'department');
-                    $created++;
-                }
-
-                self::add_manager($existing[$key], (int) $manager->userid, null);
-            }
-        }
-
-        return $created;
+        return array_map('intval', $DB->get_fieldset_sql($sql, $params));
     }
 
     /**
-     * Whether there is anything for {@see import_manager_departments} to do.
+     * Chosen profile values, grouped by the field they belong to.
      *
-     * Drives whether the offer is on screen at all. It stops being true the
-     * moment it has been taken, so the link disappears by itself rather than
-     * needing a flag to remember that somebody pressed it, and a site that never
-     * presses it is never nagged twice about the same thing.
+     * The picker offers `fieldid:value` because the same value means different
+     * things in different fields, and a site holding "Rotterdam" in both a
+     * department field and an office field would otherwise draw both.
      *
-     * @return bool
+     * @param array $selected Raw `fieldid:value` strings from the form.
+     *
+     * @return array<int, array<int, string>> Values keyed by field id.
      */
-    public static function has_departments_to_import(): bool {
-        $existing = [];
+    protected static function profile_values(array $selected): array {
+        $byfield = [];
 
-        foreach (self::nodes() as $node) {
-            $existing[\core_text::strtolower(trim($node->name))] = true;
-        }
+        foreach ($selected as $raw) {
+            $raw = (string) $raw;
+            $split = strpos($raw, ':');
 
-        foreach (manager_resolver::managers() as $manager) {
-            if (is_siteadmin($manager->userid)) {
+            if ($split === false) {
                 continue;
             }
 
-            foreach ($manager->departments as $department) {
-                $name = trim((string) $department);
+            $fieldid = (int) substr($raw, 0, $split);
+            $value = trim(substr($raw, $split + 1));
 
-                if ($name !== '' && !isset($existing[\core_text::strtolower($name)])) {
-                    return true;
-                }
+            if ($fieldid <= 0 || $value === '') {
+                continue;
             }
+
+            $byfield[$fieldid][] = $value;
         }
 
-        return false;
+        return $byfield;
     }
 
     /**
+     * Take a naming back out of the register.
+     *
      * @param int $id
      *
      * @return void

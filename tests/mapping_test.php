@@ -27,43 +27,36 @@ namespace local_reportlms;
 
 use local_reportlms\local\access;
 use local_reportlms\local\collector\org;
-use local_reportlms\local\manager_resolver;
 use local_reportlms\local\mapping;
 
 /**
  * Two rules, and everything here tests one of them.
  *
- * Manual beats auto-detect beats the learner's own field, and being named a
- * manager grants the report without any role assignment.
+ * A unit's people are the rows somebody wrote, and being named a manager grants
+ * the report without any role assignment.
  *
  * @covers \local_reportlms\local\mapping
  */
 final class mapping_test extends \advanced_testcase {
-    /** @var \stdClass */
-    private $departmentfield;
-
     protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
 
         set_config('salt', 'salt-for-unit-tests', 'local_reportlms');
 
-        manager_resolver::reset();
         mapping::reset();
-
-        $this->departmentfield = $this->make_field(org::fieldmap()['department']);
     }
 
     /**
-     * The whole point of the editor: a row somebody typed wins.
+     * The whole point of the editor: a row somebody typed is where they are.
      *
-     * A profile field is a guess derived from an HR export. A row in here is a
-     * statement of fact about the organisation, so when they disagree the
-     * person wins.
+     * This used to assert that the row beat the learner's profile field, which
+     * was the only rule that mattered while the tree was derived from one.
+     * Nothing derives now, so the row is not the winner of an argument, it is
+     * the only answer there is.
      */
-    public function test_a_hand_placed_learner_beats_their_profile_field(): void {
+    public function test_a_placed_learner_is_in_the_unit_they_were_placed_in(): void {
         $learner = $this->getDataGenerator()->create_user();
-        $this->set_department($learner->id, 'Utrecht');
 
         $node = mapping::save_node('Rotterdam', 'department');
         mapping::place((int) $learner->id, $node);
@@ -72,8 +65,31 @@ final class mapping_test extends \advanced_testcase {
     }
 
     /**
-     * And the unit exists in the tree even when no profile field mentions it,
-     * or the membership would point at a node nobody declared.
+     * Nobody is placed by a profile field, however well it describes them.
+     *
+     * The regression this whole change exists to prevent coming back. A field
+     * can still be pointed at as a source, which writes a placement; what it
+     * cannot do is place somebody on its own.
+     */
+    public function test_a_profile_field_places_nobody(): void {
+        global $DB;
+
+        $learner = $this->getDataGenerator()->create_user();
+        $field = $this->make_field('rlms_department');
+
+        $DB->insert_record('user_info_data', (object) [
+            'userid' => $learner->id,
+            'fieldid' => $field->id,
+            'data' => 'Utrecht',
+            'dataformat' => 0,
+        ]);
+
+        $this->assertSame('department:Unassigned', $this->node_of($learner->id));
+    }
+
+    /**
+     * A unit exists in the tree because somebody made it, whether or not
+     * anybody is in it yet.
      */
     public function test_a_hand_built_unit_is_declared_in_the_tree(): void {
         $learner = $this->getDataGenerator()->create_user();
@@ -86,8 +102,11 @@ final class mapping_test extends \advanced_testcase {
     }
 
     /**
-     * A department under a sector gets the same compound key a derived one
-     * would, so the two are the same node rather than two that look alike.
+     * A department under a sector keys as `department:Sector/Name`.
+     *
+     * The property the migration rested on: the same string the tree used to be
+     * derived into, so every fact Report LMS holds stayed attached to its node
+     * when the sites stopped deriving.
      */
     public function test_a_unit_under_a_sector_keys_the_same_way_as_a_derived_one(): void {
         $sector = mapping::save_node('Operations', 'sector');
@@ -97,17 +116,20 @@ final class mapping_test extends \advanced_testcase {
     }
 
     /**
-     * Releasing hands them back, which is what makes a mistake survivable.
+     * Releasing takes them out, which is what makes a mistake survivable.
+     *
+     * They land in Unassigned rather than back in a department worked out from
+     * their profile, because there is nowhere else for them to land. That is
+     * the cost of a stated tree and the reason the settings page counts them.
      */
-    public function test_releasing_a_learner_returns_them_to_auto_detect(): void {
+    public function test_releasing_a_learner_returns_them_to_unassigned(): void {
         $learner = $this->getDataGenerator()->create_user();
-        $this->set_department($learner->id, 'Utrecht');
 
         $node = mapping::save_node('Rotterdam', 'department');
         mapping::place((int) $learner->id, $node);
         mapping::release((int) $learner->id);
 
-        $this->assertSame('department:Utrecht', $this->node_of($learner->id));
+        $this->assertSame('department:Unassigned', $this->node_of($learner->id));
     }
 
     /**
@@ -132,14 +154,13 @@ final class mapping_test extends \advanced_testcase {
      */
     public function test_deleting_a_unit_hands_its_people_back(): void {
         $learner = $this->getDataGenerator()->create_user();
-        $this->set_department($learner->id, 'Utrecht');
 
         $node = mapping::save_node('Rotterdam', 'department');
         mapping::place((int) $learner->id, $node);
         mapping::delete_node($node);
 
         $this->assertSame([], mapping::membership());
-        $this->assertSame('department:Utrecht', $this->node_of($learner->id));
+        $this->assertSame('department:Unassigned', $this->node_of($learner->id));
     }
 
     /**
@@ -154,7 +175,7 @@ final class mapping_test extends \advanced_testcase {
         $this->assertFalse(access::can_view());
 
         mapping::add_manager($node, (int) $user->id, null);
-        manager_resolver::reset();
+        mapping::reset();
 
         $this->assertTrue(access::can_view());
         $this->assertFalse(access::can_view_all(), 'A named manager runs one unit, not the site.');
@@ -240,40 +261,8 @@ final class mapping_test extends \advanced_testcase {
      *
      * @return string|null
      */
-    /**
-     * A manager the capability route finds, running the given department.
-     *
-     * Built the way manager_resolver actually looks: somebody holding :view in a
-     * course context, with a department on their own profile, and a participant
-     * in that course for them to manage. Anything less is not detected at all
-     * and the test would pass for the wrong reason.
-     *
-     * @param string $department
-     *
-     * @return \stdClass The manager.
-     */
-    private function a_manager_of(string $department): \stdClass {
-        $manager = $this->getDataGenerator()->create_user();
-        $learner = $this->getDataGenerator()->create_user();
-        $course = $this->getDataGenerator()->create_course();
-
-        $this->set_department($manager->id, $department);
-
-        $roleid = $this->getDataGenerator()->create_role();
-        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id);
-        role_assign($roleid, $manager->id, \context_course::instance($course->id)->id);
-
-        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
-
-        manager_resolver::reset();
-        mapping::reset();
-
-        return $manager;
-    }
-
     private function node_of(int $userid): ?string {
         mapping::reset();
-        manager_resolver::reset();
 
         foreach (org::collect()->members as $member) {
             if ((int) $member->userid === $userid) {
@@ -284,22 +273,10 @@ final class mapping_test extends \advanced_testcase {
         return null;
     }
 
-    /**
-     * @param int $userid
-     * @param string $value
-     */
-    private function set_department(int $userid, string $value): void {
-        global $DB;
-
-        $DB->insert_record('user_info_data', (object) [
-            'userid' => $userid,
-            'fieldid' => $this->departmentfield->id,
-            'data' => $value,
-            'dataformat' => 0,
-        ]);
-    }
 
     /**
+     * A text profile field, reusing one the install baseline already made.
+     *
      * @param string $shortname
      *
      * @return \stdClass
@@ -386,77 +363,6 @@ final class mapping_test extends \advanced_testcase {
 
         $this->assertCount(1, mapping::managers());
     }
-
-    /**
-     * The import turns the departments detected managers run into units.
-     *
-     * Units and namings only. Placing a learner is what stops
-     * auto-detect moving them again, so doing it wholesale here would freeze
-     * every department against the next HR upload.
-     */
-    public function test_importing_creates_units_and_namings_but_not_memberships(): void {
-        $this->resetAfterTest();
-        $this->setAdminUser();
-
-        $this->a_manager_of('Rotterdam');
-
-        $this->assertTrue(mapping::has_departments_to_import());
-        $this->assertSame(1, mapping::import_manager_departments());
-
-        $names = array_map(static fn($node) => $node->name, mapping::nodes());
-        $this->assertContains('Rotterdam', $names);
-        $this->assertCount(1, mapping::managers());
-        $this->assertSame([], mapping::membership(), 'Nobody should be placed.');
-    }
-
-    /**
-     * A department that is already a unit is not added twice.
-     */
-    public function test_importing_leaves_units_that_already_exist_alone(): void {
-        $this->resetAfterTest();
-        $this->setAdminUser();
-
-        $this->a_manager_of('Rotterdam');
-        mapping::save_node('Rotterdam', 'department');
-
-        $this->assertSame(0, mapping::import_manager_departments());
-        $this->assertCount(1, mapping::nodes());
-    }
-
-    /**
-     * The offer stops being made once it has been taken.
-     *
-     * No flag remembers that somebody pressed it. The condition is "there is
-     * something left to import", so accepting removes the reason to ask and a
-     * site that never wants it is never asked twice about the same department.
-     */
-    public function test_the_offer_disappears_once_taken(): void {
-        $this->resetAfterTest();
-        $this->setAdminUser();
-
-        $this->a_manager_of('Rotterdam');
-        mapping::import_manager_departments();
-
-        $this->assertFalse(mapping::has_departments_to_import());
-    }
-
-    /**
-     * An administrator is not a manager and their reach is not a department.
-     *
-     * They hold every capability everywhere, so the detector finds them running
-     * whatever they can see. Turning that into units would invent an
-     * organisation out of an access level.
-     */
-    public function test_an_administrator_contributes_no_units(): void {
-        $this->resetAfterTest();
-        $this->setAdminUser();
-
-        $this->assertFalse(mapping::has_departments_to_import());
-        $this->assertSame(0, mapping::import_manager_departments());
-    }
-
-
-
 
     /**
      * Choosing courses chooses their participants.

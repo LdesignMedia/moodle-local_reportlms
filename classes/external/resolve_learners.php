@@ -50,6 +50,8 @@ defined('MOODLE_INTERNAL') || die();
  */
 class resolve_learners extends external_api {
     /**
+     * What this service takes.
+     *
      * @return external_function_parameters
      */
     public static function execute_parameters(): external_function_parameters {
@@ -64,6 +66,8 @@ class resolve_learners extends external_api {
     }
 
     /**
+     * Turn coded learner identifiers back into names, for those in scope.
+     *
      * @param array $codes
      *
      * @return array
@@ -88,6 +92,8 @@ class resolve_learners extends external_api {
     }
 
     /**
+     * The shape of what this service returns.
+     *
      * @return external_single_structure
      */
     public static function execute_returns(): external_single_structure {

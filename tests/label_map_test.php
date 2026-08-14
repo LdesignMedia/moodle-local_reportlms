@@ -25,20 +25,16 @@
 
 namespace local_reportlms;
 
-use local_reportlms\local\collector\org;
 use local_reportlms\local\label_map;
+use local_reportlms\local\mapping;
 use local_reportlms\local\pseudonym;
 
 /**
+ * Codes leave this site; names never do, so this is what turns them back.
+ *
  * @covers \local_reportlms\local\label_map
  */
 final class label_map_test extends \advanced_testcase {
-    /** @var \stdClass */
-    private $sectorfield;
-
-    /** @var \stdClass */
-    private $departmentfield;
-
     protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
@@ -46,78 +42,41 @@ final class label_map_test extends \advanced_testcase {
         // Coding anything needs the salt a connect would have generated.
         set_config('salt', 'salt-for-unit-tests', 'local_reportlms');
 
-        $map = org::fieldmap();
-        $this->sectorfield = $this->make_field($map['sector']);
-        $this->departmentfield = $this->make_field($map['department']);
+        mapping::reset();
     }
 
     /**
-     * A text profile field, since the generator has no helper for one.
+     * A unit in a sector, as the editor would create it.
      *
-     * @param string $shortname
+     * These used to be built by writing profile field values onto a learner,
+     * because the labels were rebuilt from the distinct values in two fields. A
+     * unit is a row now, and a label is that row's name, so a unit with nobody
+     * in it still has one.
      *
-     * @return \stdClass
-     */
-    private function make_field(string $shortname): \stdClass {
-        global $DB;
-
-        // db/install.php creates the rlms_* fields in the phpunit baseline, so
-        // the field this asks for may already exist. Reuse it: a second row
-        // with the same shortname doubles every join that resolves by it.
-        $existing = $DB->get_record('user_info_field', ['shortname' => $shortname]);
-        if ($existing) {
-            return $existing;
-        }
-
-        $categoryid = $DB->insert_record('user_info_category', (object) [
-            'name' => 'Report LMS ' . $shortname,
-            'sortorder' => 1,
-        ]);
-
-        $id = $DB->insert_record('user_info_field', (object) [
-            'shortname' => $shortname,
-            'name' => $shortname,
-            'categoryid' => $categoryid,
-            'datatype' => 'text',
-            'sortorder' => 1,
-            'required' => 0,
-            'locked' => 0,
-            'visible' => 2,
-            'forceunique' => 0,
-            'signup' => 0,
-            'defaultdata' => '',
-            'param1' => 30,
-            'param2' => 2048,
-        ]);
-
-        return $DB->get_record('user_info_field', ['id' => $id]);
-    }
-
-    /**
      * @param string $sector
      * @param string $department
      *
-     * @return \stdClass
+     * @return int The department node id.
      */
-    private function learner(string $sector, string $department): \stdClass {
-        global $DB;
+    private function unit(string $sector, string $department): int {
+        $sectors = [];
 
-        $user = $this->getDataGenerator()->create_user();
-
-        foreach ([$this->sectorfield->id => $sector, $this->departmentfield->id => $department] as $fieldid => $value) {
-            $DB->insert_record('user_info_data', (object) [
-                'userid' => $user->id,
-                'fieldid' => $fieldid,
-                'data' => $value,
-                'dataformat' => 0,
-            ]);
+        foreach (mapping::nodes() as $node) {
+            if ($node->kind === 'sector') {
+                $sectors[$node->name] = (int) $node->id;
+            }
         }
 
-        return $user;
+        $sectorid = $sectors[$sector] ?? mapping::save_node($sector, 'sector');
+        $nodeid = mapping::save_node($department, 'department', $sectorid);
+
+        mapping::reset();
+
+        return $nodeid;
     }
 
     public function test_a_department_resolves_to_its_own_name(): void {
-        $this->learner('Operations', 'Rotterdam');
+        $this->unit('Operations', 'Rotterdam');
 
         $code = pseudonym::node('department', 'Operations/Rotterdam');
         $labels = label_map::resolve([$code]);
@@ -135,8 +94,8 @@ final class label_map_test extends \advanced_testcase {
      * last was silently dropped.
      */
     public function test_departments_sharing_a_name_across_sectors_stay_distinct(): void {
-        $this->learner('Operations', 'HR');
-        $this->learner('Finance', 'HR');
+        $this->unit('Operations', 'HR');
+        $this->unit('Finance', 'HR');
 
         $operations = pseudonym::node('department', 'Operations/HR');
         $finance = pseudonym::node('department', 'Finance/HR');
@@ -156,7 +115,7 @@ final class label_map_test extends \advanced_testcase {
      */
     public function test_every_department_under_one_sector_is_named(): void {
         foreach (['Rotterdam', 'Utrecht', 'Den Haag', 'Groningen'] as $department) {
-            $this->learner('Operations', $department);
+            $this->unit('Operations', $department);
         }
 
         $codes = array_map(
@@ -174,7 +133,7 @@ final class label_map_test extends \advanced_testcase {
      * raw code for anything it cannot name.
      */
     public function test_an_unknown_code_is_simply_absent(): void {
-        $this->learner('Operations', 'Rotterdam');
+        $this->unit('Operations', 'Rotterdam');
 
         $labels = label_map::resolve(['n_notacodethissitehasever']);
 
@@ -201,7 +160,7 @@ final class label_map_test extends \advanced_testcase {
      */
     public function test_purging_forgets_both_maps(): void {
         $course = $this->getDataGenerator()->create_course();
-        $this->learner('Operations', 'Rotterdam');
+        $this->unit('Operations', 'Rotterdam');
 
         $code = pseudonym::node('department', 'Operations/Rotterdam');
         $this->assertNotEmpty(label_map::resolve([$code]));

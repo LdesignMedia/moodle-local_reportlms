@@ -43,7 +43,6 @@ use local_reportlms\local\collector\org;
  * people a door that is locked for them.
  */
 class block_visibility {
-
     /**
      * The <style> block for the current page and viewer, or ''.
      *
@@ -57,6 +56,15 @@ class block_visibility {
      * theme stylesheet, and at equal specificity the later sheet would win.
      */
     public static function css(): string {
+        /*
+         * $PAGE, not $this->page.
+         *
+         * The sniff reads any class whose name begins with "block" as a block
+         * class, and this one is not: it is a local helper called from a hook
+         * and from the legacy head callback, neither of which has a block
+         * instance to ask.
+         */
+        // phpcs:ignore moodle.PHP.ForbiddenGlobalUse.BadGlobal
         global $CFG, $PAGE;
 
         try {
@@ -67,6 +75,7 @@ class block_visibility {
                 return '';
             }
 
+            // phpcs:ignore moodle.PHP.ForbiddenGlobalUse.BadGlobal
             if (!in_array($PAGE->pagetype, dashboard_block::PAGE_TYPES, true)) {
                 return '';
             }

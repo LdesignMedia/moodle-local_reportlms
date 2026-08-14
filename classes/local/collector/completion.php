@@ -40,7 +40,6 @@ namespace local_reportlms\local\collector;
  * in here once the settings exist.
  */
 class completion {
-
     /**
      * Completion rows for a batch of learners.
      *

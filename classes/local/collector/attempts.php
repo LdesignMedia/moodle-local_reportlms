@@ -39,7 +39,6 @@ namespace local_reportlms\local\collector;
  * halfway is not a try, and a teacher previewing the quiz is not a learner.
  */
 class attempts {
-
     /**
      * Attempt counts for a batch of learners.
      *

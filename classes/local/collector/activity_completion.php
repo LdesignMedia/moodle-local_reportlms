@@ -39,7 +39,6 @@ namespace local_reportlms\local\collector;
  * property of the course setup, not of this collector.
  */
 class activity_completion {
-
     /**
      * Completed-activity rows for a batch of learners.
      *

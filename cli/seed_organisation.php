@@ -53,6 +53,7 @@ require_once($CFG->libdir . '/grade/constants.php');
  * users and writes learning records and there is no undo. A prompt protects
  * against hesitation; a list protects against the wrong terminal.
  */
+/** @var array The only sites this may run against. It invents data, so it asks first. */
 const ALLOWED_HOSTS = [
     'moodle.test.example.com',
     'workplace.test.example.com',
@@ -68,6 +69,7 @@ const TAG = 'rlmsseed';
  * Uneven on purpose: a tree where every department has the same headcount
  * makes a broken filter look right, because every cell reads the same.
  */
+/** @var array The shape of the organisation this builds: departments under each sector. */
 const SECTORS = [
     'Operations' => ['Rotterdam', 'Utrecht', 'Den Haag', 'Groningen', 'Eindhoven'],
     'Finance' => ['Accounting', 'Payroll'],
@@ -203,7 +205,13 @@ function rlms_seed_field(string $shortname, string $name, int $categoryid): int 
     ]);
 }
 
-$map = \local_reportlms\local\collector\org::fieldmap();
+/*
+ * One profile field, where there were three.
+ *
+ * Sector and department are rows in the mapping tables now, written further
+ * down. Function is still an attribute of a person, so it is still a field.
+ */
+$functionfield = \local_reportlms\local\collector\org::function_field();
 
 $categoryid = (int) $DB->get_field('user_info_category', 'id', ['name' => 'Organisation']);
 
@@ -215,12 +223,34 @@ if (!$categoryid) {
 }
 
 $fields = [
-    'sector' => rlms_seed_field($map['sector'], 'Sector', $categoryid),
-    'department' => rlms_seed_field($map['department'], 'Department', $categoryid),
-    'function' => rlms_seed_field($map['function'], 'Function', $categoryid),
+    'function' => rlms_seed_field($functionfield, 'Function', $categoryid),
 ];
 
-cli_writeln('Profile fields ready: ' . implode(', ', array_values($map)));
+cli_writeln('Profile field ready: ' . $functionfield);
+
+/*
+ * The organisation itself, as rows.
+ *
+ * A unit per sector and per department under it, so the seeded site looks like
+ * one somebody built in the editor, because that is now the only way a site can
+ * have a tree at all.
+ */
+$unitids = [];
+
+foreach (SECTORS as $sector => $departments) {
+    $sectorid = \local_reportlms\local\mapping::save_node($sector, 'sector');
+
+    foreach ($departments as $department) {
+        $unitids[$sector][$department] =
+            \local_reportlms\local\mapping::save_node($department, 'department', $sectorid);
+    }
+}
+
+\local_reportlms\local\mapping::reset();
+
+$departmentcount = count($unitids, COUNT_RECURSIVE) - count($unitids);
+
+cli_writeln('Units: ' . count(SECTORS) . ' sectors, ' . $departmentcount . ' departments');
 
 // --------------------------------------------------- categories and courses ----
 
@@ -343,21 +373,23 @@ for ($i = 0; $i < $wantlearners; $i++) {
     // people, which is what a real organisation looks like.
     [$sector, $department] = $pairs[($i * 7 + (int) ($i / 11)) % count($pairs)];
 
+    $userid = rlms_seed_user(
+        TAG . '_l' . $i,
+        'Learner',
+        $department . ' ' . $i,
+        [$fields['function'] => FUNCTIONS[$i % count(FUNCTIONS)]]
+    );
+
+    \local_reportlms\local\mapping::place($userid, $unitids[$sector][$department]);
+
     $learners[] = [
-        'id' => rlms_seed_user(
-            TAG . '_l' . $i,
-            'Learner',
-            $department . ' ' . $i,
-            [
-                $fields['sector'] => $sector,
-                $fields['department'] => $department,
-                $fields['function'] => FUNCTIONS[$i % count(FUNCTIONS)],
-            ]
-        ),
+        'id' => $userid,
         'sector' => $sector,
         'department' => $department,
     ];
 }
+
+\local_reportlms\local\mapping::reset();
 
 cli_writeln('Learners: ' . count($learners));
 
@@ -370,12 +402,13 @@ if (!$managerrole) {
 }
 
 /*
- * One manager per sector, assigned at the category level.
+ * One manager per sector, named against the sector's first department.
  *
- * Their own department field is what every participant of their courses
- * inherits, so it has to be a real department from that sector: a manager
- * placed in a department nobody else is in would produce a node carrying only
- * borrowed members.
+ * Named in the mapping tables, which is what makes somebody a manager. The
+ * category-level role assignment is kept alongside it, not because it places
+ * anybody, but because it is the shape the register has to show: somebody who
+ * holds local/reportlms:view and would once have been read as running whatever
+ * that grant reached.
  */
 $managers = [];
 
@@ -386,28 +419,30 @@ foreach (SECTORS as $sector => $departments) {
         TAG . '_mgr_' . strtolower(str_replace(' ', '', $sector)),
         'Manager',
         $sector,
-        [
-            $fields['sector'] => $sector,
-            $fields['department'] => $department,
-            $fields['function'] => 'Team lead',
-        ]
+        [$fields['function'] => 'Team lead']
     );
 
+    \local_reportlms\local\mapping::add_manager($unitids[$sector][$department], $userid, null);
     role_assign($managerrole->id, $userid, \context_coursecat::instance($catids[$sector])->id);
     $managers[] = "{$sector} / {$department}";
 }
 
-// One at system level, which reaches every course and therefore the whole
-// organisation. Worth having in the fixture because it is the shape that
-// surprises people.
+/*
+ * One holding the capability at system level and named against nothing.
+ *
+ * Worth having in the fixture because it is the shape that used to surprise
+ * people: this grant reaches every course on the site, and the plugin read that
+ * as running the whole organisation. It now opens the report and shows an empty
+ * one, with a Fix in the register.
+ */
 $systemmanagerid = rlms_seed_user(TAG . '_mgr_system', 'Manager', 'Organisation-wide', [
-    $fields['sector'] => 'Operations',
-    $fields['department'] => 'Rotterdam',
     $fields['function'] => 'Team lead',
 ]);
 role_assign($managerrole->id, $systemmanagerid, \context_system::instance()->id);
 
-cli_writeln('Managers: ' . count($managers) . ' at category level, 1 at system level');
+\local_reportlms\local\mapping::reset();
+
+cli_writeln('Managers: ' . count($managers) . ' named, 1 holding the capability and named against nothing');
 
 /*
  * An HR auditor: sees everything, manages nothing.
@@ -419,8 +454,11 @@ cli_writeln('Managers: ' . count($managers) . ' at category level, 1 at system l
 $auditrole = $DB->get_record('role', ['shortname' => TAG . '_auditor']);
 
 if (!$auditrole) {
-    $roleid = create_role('Report LMS auditor', TAG . '_auditor',
-        'Sees every department, manages none. Seeded for testing.');
+    $roleid = create_role(
+        'Report LMS auditor',
+        TAG . '_auditor',
+        'Sees every department, manages none. Seeded for testing.'
+    );
     set_role_contextlevels($roleid, [CONTEXT_SYSTEM]);
     $auditrole = $DB->get_record('role', ['id' => $roleid]);
 }
@@ -429,8 +467,6 @@ assign_capability('local/reportlms:view', CAP_ALLOW, $auditrole->id, \context_sy
 assign_capability('local/reportlms:viewall', CAP_ALLOW, $auditrole->id, \context_system::instance()->id, true);
 
 $auditorid = rlms_seed_user(TAG . '_hr_auditor', 'Auditor', 'HR', [
-    $fields['sector'] => 'Finance',
-    $fields['department'] => 'Payroll',
     $fields['function'] => 'Advisor',
 ]);
 role_assign($auditrole->id, $auditorid, \context_system::instance()->id);
@@ -531,10 +567,12 @@ foreach ($courses as $index => $course) {
 
         // Certificates, on the people who finished. Expiry spread either side
         // of today so the "expiring soon" and "expired" counts are both real.
-        if ($cm && !$DB->record_exists('customcert_issues', [
+        if (
+            $cm && !$DB->record_exists('customcert_issues', [
             'customcertid' => $cm->instance,
             'userid' => $learner['id'],
-        ])) {
+            ])
+        ) {
             $DB->insert_record('customcert_issues', (object) [
                 'customcertid' => $cm->instance,
                 'userid' => $learner['id'],

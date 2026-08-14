@@ -28,6 +28,8 @@ namespace local_reportlms;
 use local_reportlms\local\cron_health;
 
 /**
+ * A push that stopped running is invisible unless somebody notices the silence.
+ *
  * @covers \local_reportlms\local\cron_health
  */
 final class cron_health_test extends \advanced_testcase {

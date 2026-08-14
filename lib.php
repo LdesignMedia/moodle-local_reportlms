@@ -24,20 +24,18 @@
  */
 
 /**
- * An org field mapping changed: make the change actually travel.
+ * The function field mapping changed: make the change actually travel.
  *
  * The state hash alone is not enough. The org section only ships inside a
- * push, and a push with an empty dirty queue returns before building
- * anything, so on a quiet site a re-map would propagate nothing at all.
- * Marking everyone dirty forces the next push to carry the tree rebuilt from
- * the newly mapped field; the label cache would otherwise serve the old
- * names for up to its TTL; and the department lock has to follow the mapping
- * the moment it moves, not whenever a push next happens to run.
+ * push, and a push with an empty dirty queue returns before building anything,
+ * so on a quiet site a re-map would propagate nothing at all. Marking everyone
+ * dirty forces the next push to carry the attributes read from the newly mapped
+ * field, and the label cache would otherwise serve the old names for up to its
+ * TTL.
  */
 function local_reportlms_orgfield_updated(): void {
     \local_reportlms\local\userstate::mark_all_dirty();
     \local_reportlms\local\label_map::purge();
-    \local_reportlms\local\collector\org::lock_department_field();
 }
 
 /**

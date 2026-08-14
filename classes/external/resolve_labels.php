@@ -53,6 +53,8 @@ class resolve_labels extends external_api {
     protected const MAX_CODES = 500;
 
     /**
+     * What this service takes.
+     *
      * @return external_function_parameters
      */
     public static function execute_parameters(): external_function_parameters {
@@ -65,6 +67,8 @@ class resolve_labels extends external_api {
     }
 
     /**
+     * Turn coded node identifiers back into the names this site holds.
+     *
      * @param array $codes
      *
      * @return array
@@ -103,6 +107,8 @@ class resolve_labels extends external_api {
     }
 
     /**
+     * The shape of what this service returns.
+     *
      * @return external_single_structure
      */
     public static function execute_returns(): external_single_structure {

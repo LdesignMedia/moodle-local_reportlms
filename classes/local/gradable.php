@@ -32,9 +32,9 @@ namespace local_reportlms\local;
  * A course-role Manager is enrolled like anybody else, so without a role check
  * they are a learner as far as every chart is concerned: a course of 101 where
  * 100 students finished reads 99% because the manager never will. Who should
- * count is not this plugin's question to invent — Moodle answers it with the
+ * count is not this plugin's question to invent. Moodle answers it with the
  * gradebook roles setting, the same rule its own gradebook and completion
- * reports use — so that is the rule adopted here.
+ * reports use, so that is the rule adopted here.
  *
  * A role counts when it is assigned at the course context or any ancestor
  * (category, system), which is how Moodle itself resolves roles. The ancestry
@@ -43,7 +43,6 @@ namespace local_reportlms\local;
  * both straight indexed lookups and the intersection is a set test per row.
  */
 class gradable {
-
     /**
      * The role ids that make somebody a learner.
      *
@@ -132,7 +131,7 @@ class gradable {
 
             // A NULL or missing path is a context mid-rebuild (the LEFT JOIN
             // keeps a course with no context row visible here too): no basis
-            // for a verdict either way. Counted rather than skipped — a
+            // for a verdict either way. Counted rather than skipped, because a
             // silent skip would filter the learner out, the push would
             // succeed, and their cleared dirty flag would never bring them
             // back. Refusing below keeps the flags; the next run decides on
@@ -161,11 +160,11 @@ class gradable {
         if ($nullpaths > 0) {
             throw new push_refused_exception(
                 'context_paths_unbuilt',
-                "$nullpaths enrolment pair(s) sit under a course context with no path (contexts mid-rebuild). Refusing to push rather than miscount; the next run will see rebuilt paths."
+                "$nullpaths enrolment pair(s) sit under a course context with no path (contexts mid-rebuild). "
+                . 'Refusing to push rather than miscount; the next run will see rebuilt paths.'
             );
         }
 
         return $pairs;
     }
-
 }

@@ -1,0 +1,34 @@
+# Local CI entrypoint - delegates to the vendored ci-selfhosted workflow so we
+# can pin the runner labels (ldesign self-hosted) instead of GitHub-hosted.
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-selfhosted.yml
+    secrets: inherit
+    with:
+      # No tests/behat directory. The surfaces worth driving through a browser
+      # are the dashboard block and the embedded report, and both need a
+      # connected Report LMS environment that CI has no way to reach.
+      disable_behat: true
+      # No templates directory: every bit of markup this plugin renders comes
+      # from html_writer or from the Report LMS side.
+      disable_mustache: true
+      # No Gruntfile.js and no package.json. The one AMD module is built with
+      # the moodle CLI in Docker rather than in CI, so the catalyst grunt runner
+      # fails with "Unable to find local grunt".
+      disable_grunt: true
+      # The plugin declares Moodle 3.9 so a customer on an older site can still
+      # install it, and 4.5 is what every connected environment actually runs.
+      min_php: 8.1
+      moodle_branches: MOODLE_405_STABLE
+      # Pin upstream catalyst-moodle-workflows to the last commit before their
+      # 2026-07-06 "Moved cache into its own branch" refactor, whose empty
+      # updates-cache branch breaks parse-version for all consumers
+      # ("Moodle updates cache file not found"). Drop this pin once upstream's
+      # refresh-moodle-updates-cache workflow has run successfully.
+      internal_workflow_branch: bb878c5f96553dc1d6afebfb50b210e6c91e5b3f
+      # amd/build is generated, and docs holds working notes rather than code.
+      ignore_paths: amd/build,vendor,node_modules,docs

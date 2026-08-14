@@ -85,38 +85,31 @@ if ($hassiteconfig) {
         }
 
         /*
-         * What this site's own tree is not sure about.
+         * The people nobody has put in a unit.
          *
          * Here rather than on the Report LMS side, because here is where
-         * somebody can act: every one of these is fixed by changing a profile
-         * field or a role assignment on this site. A count shown anywhere else
-         * is a count nobody can do anything about.
+         * somebody can act. It replaced three counts about a tree the plugin
+         * used to work out for itself, all of which described how uncertain
+         * that guess was. There is no guess now, so the only thing left to say
+         * is how much of the tree has not been filled in, and that is a real
+         * chore on a site with staff turnover.
          *
          * Only shown when there is something to say. A permanent row of zeroes
          * trains people to stop reading it.
          */
         if ($connected) {
-            $counts = [
-                'unplaceable' => count(\local_reportlms\local\manager_resolver::unplaceable()),
-                'contested' => count(\local_reportlms\local\manager_resolver::contested()),
-                'overridden' => count(\local_reportlms\local\manager_resolver::overridden()),
-            ];
+            $unplaced = \local_reportlms\local\mapping::unplaced_count();
 
-            $lines = [];
+            if ($unplaced > 0) {
+                $manageurl = new moodle_url('/local/reportlms/view/manage.php');
 
-            foreach ($counts as $key => $count) {
-                if ($count > 0) {
-                    $lines[] = html_writer::tag(
-                        'li',
-                        get_string('warn:' . $key, 'local_reportlms', $count)
-                    );
-                }
-            }
-
-            if ($lines) {
                 $status .= html_writer::div(
                     html_writer::span(get_string('warn:heading', 'local_reportlms'), 'local-reportlms-warn-label')
-                    . html_writer::tag('ul', implode('', $lines))
+                    . html_writer::tag('ul', html_writer::tag(
+                        'li',
+                        get_string('warn:unplaced', 'local_reportlms', $unplaced)
+                        . ' ' . html_writer::link($manageurl, get_string('warn:unplaced_link', 'local_reportlms'))
+                    ))
                     . html_writer::tag('p', get_string('warn:footnote', 'local_reportlms'), ['class' => 'local-reportlms-warn-foot']),
                     'local-reportlms-treewarning'
                 );
@@ -265,11 +258,13 @@ if ($hassiteconfig) {
             require_once(__DIR__ . '/lib.php');
 
             /*
-             * Their own heading, apart from the connection settings above: the
-             * warning up there says "change only if support asks", and these
-             * are exactly the settings an administrator is invited to change.
-             * The department mapping is the one the plugin locks against
-             * learner self-editing, which its description says out loud.
+             * Its own heading, apart from the connection settings above: the
+             * warning up there says "change only if support asks", and this is
+             * a setting an administrator is invited to change.
+             *
+             * One field, where there were three. Sector and department became
+             * rows in the mapping editor, so the only profile field left is the
+             * one naming what somebody does.
              */
             $settings->add(new admin_setting_heading(
                 'local_reportlms/orgfieldsheading',
@@ -277,17 +272,15 @@ if ($hassiteconfig) {
                 get_string('settings:orgfieldsintro', 'local_reportlms')
             ));
 
-            foreach (['sector', 'department', 'function'] as $orgrole) {
-                $select = new admin_setting_configselect(
-                    'local_reportlms/orgfield_' . $orgrole,
-                    get_string('settings:orgfield_' . $orgrole, 'local_reportlms'),
-                    get_string('settings:orgfield_' . $orgrole . '_desc', 'local_reportlms'),
-                    '',
-                    \local_reportlms\local\profile_fields::field_options($orgrole)
-                );
-                $select->set_updatedcallback('local_reportlms_orgfield_updated');
-                $settings->add($select);
-            }
+            $select = new admin_setting_configselect(
+                'local_reportlms/orgfield_function',
+                get_string('settings:orgfield_function', 'local_reportlms'),
+                get_string('settings:orgfield_function_desc', 'local_reportlms'),
+                '',
+                \local_reportlms\local\profile_fields::field_options('function')
+            );
+            $select->set_updatedcallback('local_reportlms_orgfield_updated');
+            $settings->add($select);
 
             // The editor lives on its own page rather than in settings: it
             // edits data, not configuration, and its own capability decides who
@@ -300,13 +293,6 @@ if ($hassiteconfig) {
                     get_string('manage:open', 'local_reportlms'),
                     ['class' => 'btn btn-secondary']
                 )
-            ));
-
-            $settings->add(new admin_setting_configcheckbox(
-                'local_reportlms/managerfallback',
-                get_string('settings:managerfallback', 'local_reportlms'),
-                get_string('settings:managerfallback_desc', 'local_reportlms'),
-                0
             ));
 
             $settings->add(new admin_setting_configcheckbox(

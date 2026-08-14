@@ -54,6 +54,8 @@ defined('MOODLE_INTERNAL') || die();
  */
 class connect extends external_api {
     /**
+     * What this service takes.
+     *
      * @return external_function_parameters
      */
     public static function execute_parameters(): external_function_parameters {
@@ -61,6 +63,8 @@ class connect extends external_api {
     }
 
     /**
+     * Connect this site to Report LMS and report what happened.
+     *
      * @return array
      */
     public static function execute(): array {
@@ -108,6 +112,8 @@ class connect extends external_api {
     }
 
     /**
+     * The shape of what this service returns.
+     *
      * @return external_single_structure
      */
     public static function execute_returns(): external_single_structure {

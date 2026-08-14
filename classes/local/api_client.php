@@ -108,8 +108,13 @@ class api_client {
      * @return array Decoded response, carrying batch_id on a 202.
      * @throws \moodle_exception On transport failure or a non-2xx reply.
      */
-    public function push(string $pushpath, string $rawbody, string $apikey,
-            string $signingsecret, string $idempotencykey): array {
+    public function push(
+        string $pushpath,
+        string $rawbody,
+        string $apikey,
+        string $signingsecret,
+        string $idempotencykey
+    ): array {
         global $CFG;
         require_once($CFG->libdir . '/filelib.php');
 

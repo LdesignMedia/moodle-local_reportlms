@@ -40,6 +40,8 @@ class push_refused_exception extends \moodle_exception {
     public $reason;
 
     /**
+     * Carry both what Report LMS refused and why, so the task can say so.
+     *
      * @param string $reason Machine-readable code from Report LMS.
      * @param string $message What it said, written for the administrator.
      */

@@ -46,7 +46,6 @@ namespace local_reportlms\local\collector;
  * coded learner and a coded course and cannot turn either back into a person.
  */
 class certificates {
-
     /**
      * Certificates held by a batch of learners.
      *

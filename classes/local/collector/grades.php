@@ -43,7 +43,6 @@ namespace local_reportlms\local\collector;
  * course's completion.
  */
 class grades {
-
     /**
      * Normalised grades for a batch of learners.
      *

@@ -105,13 +105,24 @@ class learner_names {
             return $DB->get_fieldset_select('user', 'id', 'deleted = 0 AND id > 2');
         }
 
-        $manager = manager_resolver::managers()[(int) $USER->id] ?? null;
+        /*
+         * The people in the units this viewer was named against.
+         *
+         * It used to be the participants of every course they held :view on,
+         * which is a different set and usually a much larger one: on a
+         * connected site one manager's grant reached an all-staff course and
+         * with it 1,467 of the site's 1,495 learners, whose names this would
+         * then translate.
+         */
+        $userids = [];
 
-        if (!$manager) {
-            return [];
+        foreach (mapping::subtree(mapping::managed_nodes((int) $USER->id)) as $nodeid) {
+            foreach (mapping::members_of((int) $nodeid) as $userid) {
+                $userids[(int) $userid] = (int) $userid;
+            }
         }
 
-        return array_map('intval', $manager->participants);
+        return array_values($userids);
     }
 
     /**

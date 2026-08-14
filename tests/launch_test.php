@@ -97,8 +97,10 @@ final class launch_test extends \advanced_testcase {
 
         $claims = $this->claims();
 
-        foreach (['iss', 'env', 'sub', 'role', 'scope', 'cron_last_run_at',
-            'push_task_last_run_at', 'configure', 'iat', 'exp', 'jti'] as $key) {
+        foreach (
+            ['iss', 'env', 'sub', 'role', 'scope', 'cron_last_run_at',
+            'push_task_last_run_at', 'configure', 'iat', 'exp', 'jti'] as $key
+        ) {
             $this->assertArrayHasKey($key, $claims, "Claim {$key} went missing.");
         }
     }

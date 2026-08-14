@@ -72,20 +72,18 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
     }
 
     if ($oldversion < 2026080500) {
-        // Lock the mapped department field, so a learner cannot edit their own.
-        // Moodle then allows only moodle/user:update holders to change it.
-        //
-        // Belt and braces on purpose: a managed learner already takes their
-        // manager's department whatever their own value says, so this is what
-        // protects the learners nobody manages. It affects the edit form only,
-        // so an HR upload or a web service sync keeps writing normally.
-        $shortname = \local_reportlms\local\collector\org::fieldmap()['department'];
-        $field = $DB->get_record('user_info_field', ['shortname' => $shortname]);
-
-        if ($field && empty($field->locked)) {
-            $DB->set_field('user_info_field', 'locked', 1, ['id' => $field->id]);
-        }
-
+        /*
+         * This step used to lock the mapped department profile field, so a
+         * learner could not edit their own place in the organisation.
+         *
+         * Emptied rather than deleted, because deleting it would renumber
+         * nothing and confuse anybody reading the history. Two reasons it had
+         * to stop doing anything. Nothing derives a placement from a profile
+         * field any more, so editing one moves nobody. And it set the lock
+         * without recording that the plugin had set it, which is precisely the
+         * lock nothing can safely undo: the step below releases the locks the
+         * plugin wrote down, and it could never have released this one.
+         */
         upgrade_plugin_savepoint(true, 2026080500, 'local', 'reportlms');
     }
 
@@ -232,11 +230,46 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
 
     if ($oldversion < 2026081103) {
         // The cog now points at admin.php, which routes each viewer to the
-        // admin surface they may open. Stored markup, so a refresh — the same
+        // admin surface they may open. Stored markup, so a refresh, the same
         // step the two markup changes above needed.
         \local_reportlms\local\dashboard_block::refresh();
 
         upgrade_plugin_savepoint(true, 2026081103, 'local', 'reportlms');
+    }
+
+    if ($oldversion < 2026081401) {
+        /*
+         * Give back the profile field the plugin locked.
+         *
+         * It locked whichever field the department mapping pointed at, so a
+         * learner could not edit the value their place in the tree was derived
+         * from. Nothing is derived from a profile field now, so the lock
+         * protects nothing and stops an administrator editing a field that
+         * belongs to the customer, not to this plugin.
+         *
+         * Only the lock the plugin recorded as its own. A lock the customer set
+         * themselves is recorded nowhere and is therefore never touched, which
+         * is the same rule db/uninstall.php follows.
+         */
+        $locked = (string) get_config('local_reportlms', 'lockedfield');
+
+        if ($locked !== '') {
+            $field = $DB->get_record('user_info_field', ['shortname' => $locked], 'id, locked');
+
+            if ($field && !empty($field->locked)) {
+                $DB->set_field('user_info_field', 'locked', 0, ['id' => $field->id]);
+            }
+
+            unset_config('lockedfield', 'local_reportlms');
+        }
+
+        // The two settings that chose which fields the tree came from. The
+        // fields themselves stay: they hold the customer's own records.
+        unset_config('orgfield_sector', 'local_reportlms');
+        unset_config('orgfield_department', 'local_reportlms');
+        unset_config('managerfallback', 'local_reportlms');
+
+        upgrade_plugin_savepoint(true, 2026081401, 'local', 'reportlms');
     }
 
     return true;

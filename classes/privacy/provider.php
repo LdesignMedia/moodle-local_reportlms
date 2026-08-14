@@ -52,8 +52,9 @@ class provider implements
     \core_privacy\local\metadata\provider,
     \core_privacy\local\request\core_userlist_provider,
     \core_privacy\local\request\plugin\provider {
-
     /**
+     * Everything this plugin stores or sends, declared for the privacy registry.
+     *
      * @param collection $collection
      *
      * @return collection
@@ -131,6 +132,8 @@ class provider implements
     }
 
     /**
+     * Which users this plugin holds data about in one context.
+     *
      * @param userlist $userlist
      *
      * @return void
@@ -146,6 +149,8 @@ class provider implements
     }
 
     /**
+     * Hand one person everything this plugin holds about them.
+     *
      * @param approved_contextlist $contextlist
      *
      * @return void
@@ -204,6 +209,8 @@ class provider implements
     }
 
     /**
+     * Delete what this plugin holds for everybody in one context.
+     *
      * @param \context $context
      *
      * @return void
@@ -221,6 +228,8 @@ class provider implements
     }
 
     /**
+     * Delete what this plugin holds for one person.
+     *
      * @param approved_contextlist $contextlist
      *
      * @return void
@@ -234,6 +243,8 @@ class provider implements
     }
 
     /**
+     * Delete what this plugin holds for a named set of people.
+     *
      * @param approved_userlist $userlist
      *
      * @return void
@@ -273,6 +284,8 @@ class provider implements
     }
 
     /**
+     * Whether the system context is one of the contexts approved for export.
+     *
      * @param approved_contextlist $contextlist
      *
      * @return bool

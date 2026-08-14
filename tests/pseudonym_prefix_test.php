@@ -28,6 +28,8 @@ namespace local_reportlms;
 use local_reportlms\local\pseudonym;
 
 /**
+ * Every coded identifier says what kind of thing it is before it says which.
+ *
  * @covers \local_reportlms\local\pseudonym
  */
 final class pseudonym_prefix_test extends \advanced_testcase {

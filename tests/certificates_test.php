@@ -28,6 +28,8 @@ namespace local_reportlms;
 use local_reportlms\local\collector\certificates;
 
 /**
+ * What counts as having completed something, and when it stops counting.
+ *
  * @covers \local_reportlms\local\collector\certificates
  */
 final class certificates_test extends \advanced_testcase {

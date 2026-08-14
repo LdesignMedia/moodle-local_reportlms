@@ -26,9 +26,12 @@
 namespace local_reportlms;
 
 use local_reportlms\local\access;
-use local_reportlms\local\manager_resolver;
+use local_reportlms\local\capability_holders;
+use local_reportlms\local\mapping;
 
 /**
+ * Who may open the report, and which of its numbers they are served.
+ *
  * @covers \local_reportlms\local\access
  */
 final class access_test extends \advanced_testcase {
@@ -43,7 +46,8 @@ final class access_test extends \advanced_testcase {
         // resetAfterTest() rolls back the database and leaves static properties
         // alone, so without this the second test in this class resolves the
         // first test's managers against a database where they no longer exist.
-        manager_resolver::reset();
+        capability_holders::reset();
+        mapping::reset();
     }
 
     public function test_an_ordinary_user_may_not_open_the_report(): void {
@@ -66,9 +70,9 @@ final class access_test extends \advanced_testcase {
      * These capabilities default to the manager archetype, and Moodle's manager
      * role is normally assigned at a category or a course rather than at the
      * system. Asking for the capability at the system context therefore
-     * answered "no" for exactly the people the report was built for: a manager
-     * of one course, correctly identified as a manager by manager_resolver, was
-     * turned away at the door with "you do not currently have permissions".
+     * answered "no" for exactly the people the report was built for: somebody
+     * granted the capability on one course was turned away at the door with
+     * "you do not currently have permissions".
      */
     public function test_a_manager_assigned_at_a_course_may_open_the_report(): void {
         $course = $this->getDataGenerator()->create_course();
@@ -299,17 +303,12 @@ final class access_test extends \advanced_testcase {
      * about every other department on the site and be told what each is called.
      */
     public function test_a_manager_may_not_resolve_another_departments_name(): void {
-        $course = $this->getDataGenerator()->create_course();
         $manager = $this->getDataGenerator()->create_user();
-        $learner = $this->getDataGenerator()->create_user();
 
-        $this->set_department($manager->id, 'Rotterdam');
-        $this->set_department($learner->id, 'Utrecht');
-        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
-
-        $roleid = $this->getDataGenerator()->create_role();
-        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
-        role_assign($roleid, $manager->id, \context_course::instance($course->id)->id);
+        $nodeid = mapping::save_node('Rotterdam', 'department');
+        mapping::save_node('Elders', 'department');
+        mapping::add_manager($nodeid, (int) $manager->id, null);
+        mapping::reset();
 
         $mine = \local_reportlms\local\pseudonym::node('department', 'Rotterdam');
         $theirs = \local_reportlms\local\pseudonym::node('department', 'Elders');
@@ -323,21 +322,47 @@ final class access_test extends \advanced_testcase {
     }
 
     /**
+     * Holding the capability and being named nothing resolves nothing.
+     *
+     * The capability used to place its holder: whoever held :view on a course
+     * was read as managing its participants, and their own profile field became
+     * the department they could name. It now opens the door and says nothing
+     * about which room is theirs, so somebody nobody named is served no labels
+     * at all rather than the labels of a department guessed for them.
+     */
+    public function test_holding_the_capability_names_no_department(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $holder = $this->getDataGenerator()->create_user();
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        mapping::save_node('Rotterdam', 'department');
+        mapping::reset();
+
+        $roleid = $this->getDataGenerator()->create_role();
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
+        role_assign($roleid, $holder->id, \context_course::instance($course->id)->id);
+
+        capability_holders::reset();
+        $this->setUser($holder);
+
+        $this->assertTrue(access::can_view(), 'The door still opens.');
+        $this->assertSame([], access::visible_codes([
+            \local_reportlms\local\pseudonym::node('department', 'Rotterdam'),
+        ]));
+    }
+
+    /**
      * The sector above their department comes with it, because a picker that
      * cannot name the parent is broken.
      */
     public function test_the_sector_above_their_own_node_resolves(): void {
-        $course = $this->getDataGenerator()->create_course();
         $manager = $this->getDataGenerator()->create_user();
-        $learner = $this->getDataGenerator()->create_user();
 
-        $this->set_department($manager->id, 'Rotterdam');
-        $this->set_sector($manager->id, 'Operations');
-        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
-
-        $roleid = $this->getDataGenerator()->create_role();
-        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id, true);
-        role_assign($roleid, $manager->id, \context_course::instance($course->id)->id);
+        $sectorid = mapping::save_node('Operations', 'sector');
+        $nodeid = mapping::save_node('Rotterdam', 'department', $sectorid);
+        mapping::add_manager($nodeid, (int) $manager->id, null);
+        mapping::reset();
 
         $sector = \local_reportlms\local\pseudonym::node('sector', 'Operations');
 
@@ -383,67 +408,5 @@ final class access_test extends \advanced_testcase {
         $this->assertSame([], access::visible_codes([
             \local_reportlms\local\pseudonym::node('department', 'Anywhere'),
         ]));
-    }
-
-    /**
-     * @param int $userid
-     * @param string $value
-     */
-    private function set_department(int $userid, string $value): void {
-        $this->set_profile_field($userid, 'department', $value);
-    }
-
-    /**
-     * @param int $userid
-     * @param string $value
-     */
-    private function set_sector(int $userid, string $value): void {
-        $this->set_profile_field($userid, 'sector', $value);
-    }
-
-    /**
-     * @param int $userid
-     * @param string $level
-     * @param string $value
-     */
-    private function set_profile_field(int $userid, string $level, string $value): void {
-        global $DB;
-
-        $shortname = \local_reportlms\local\collector\org::fieldmap()[$level];
-        $field = $DB->get_record('user_info_field', ['shortname' => $shortname]);
-
-        if (!$field) {
-            // A full row, not a partial one. Moodle reads param1 and param2 for
-            // a text field and a half-built record resolves to nothing, which
-            // looks exactly like a user who has no department.
-            $categoryid = $DB->insert_record('user_info_category', (object) [
-                'name' => 'Report LMS ' . $shortname,
-                'sortorder' => 1,
-            ]);
-
-            $id = $DB->insert_record('user_info_field', (object) [
-                'shortname' => $shortname,
-                'name' => $shortname,
-                'categoryid' => $categoryid,
-                'datatype' => 'text',
-                'sortorder' => 1,
-                'required' => 0,
-                'locked' => 0,
-                'visible' => 2,
-                'forceunique' => 0,
-                'signup' => 0,
-                'param1' => 30,
-                'param2' => 2048,
-            ]);
-
-            $field = $DB->get_record('user_info_field', ['id' => $id]);
-        }
-
-        $DB->insert_record('user_info_data', (object) [
-            'userid' => $userid,
-            'fieldid' => $field->id,
-            'data' => $value,
-            'dataformat' => 0,
-        ]);
     }
 }

@@ -68,6 +68,7 @@ class dashboard_block {
     // Public because block_visibility gates its every-page callback on it:
     // these are the only pages the block can exist on, so they are the only
     // pages worth computing visibility CSS for.
+    /** @var string[] The page types the block is allowed to appear on. */
     public const PAGE_TYPES = ['site-index', 'my-index'];
 
     /**
@@ -80,10 +81,12 @@ class dashboard_block {
 
         $configdata = (string) get_config('local_reportlms', self::CONFIG_KEY);
 
-        if ($configdata !== '' && $DB->record_exists_sql(
-            'SELECT 1 FROM {block_instances} WHERE blockname = :name AND ' . self::configdata_match($DB),
-            ['name' => 'html', 'configdata' => $configdata],
-        )) {
+        if (
+            $configdata !== '' && $DB->record_exists_sql(
+                'SELECT 1 FROM {block_instances} WHERE blockname = :name AND ' . self::configdata_match($DB),
+                ['name' => 'html', 'configdata' => $configdata],
+            )
+        ) {
             return true;
         }
 

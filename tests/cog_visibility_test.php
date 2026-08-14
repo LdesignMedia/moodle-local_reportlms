@@ -49,7 +49,9 @@ final class cog_visibility_test extends \advanced_testcase {
         $PAGE->set_pagetype('my-index');
     }
 
-    /** All three keys, because is_connected() checks all three. */
+    /**      * Put the site in the connected state the cog is only shown in.
+     *
+All three keys, because is_connected() checks all three. */
     private function connect(): void {
         set_config('apikey', 'key-for-tests', 'local_reportlms');
         set_config('signingsecret', 'secret-for-tests', 'local_reportlms');
