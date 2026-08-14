@@ -96,6 +96,73 @@ final class structure_push_test extends \advanced_testcase {
     }
 
     /**
+     * Naming a manager reaches Report LMS without waiting for a learner.
+     *
+     * Naming somebody writes one row and marks nobody dirty, deliberately: a
+     * naming is not a fact about a learner, and the person named has not
+     * changed. It travels because it is part of the org state, and the org
+     * state has its own hash.
+     *
+     * Worth its own test because the two facts sit in different files. If
+     * managers ever stopped being hashed with the tree, nothing else here would
+     * fail, and a named manager would silently keep being counted among their
+     * own people until an unrelated learner happened to change.
+     */
+    public function test_naming_a_manager_travels_on_its_own(): void {
+        $this->pretend_everything_was_pushed();
+
+        $node = mapping::save_node('Rotterdam', 'department');
+        mapping::place((int) $this->learner->id, $node);
+        mapping::reset();
+
+        // Deliver that, so the naming below is the only thing left to send.
+        $this->pretend_everything_was_pushed();
+        $this->assertNull(batch_builder::structure_only(time()), 'Nothing outstanding yet.');
+
+        $manager = $this->getDataGenerator()->create_user();
+        mapping::add_manager($node, (int) $manager->id, null);
+        mapping::reset();
+
+        $chunk = batch_builder::structure_only(time());
+
+        $this->assertNotNull($chunk, 'A naming is part of the org state.');
+        $this->assertContains(
+            \local_reportlms\local\pseudonym::learner((int) $manager->id),
+            array_column($chunk->payload['org']['managers'] ?? [], 'manager_pid'),
+            'And the manager has to be in it.'
+        );
+    }
+
+    /**
+     * Taking a naming back travels the same way.
+     *
+     * The direction that matters more: while a removal is in transit the person
+     * still counts as a manager on the Report LMS side, and a removal that
+     * never travelled would leave them excluded from their own department's
+     * figures forever.
+     */
+    public function test_taking_a_naming_back_travels_on_its_own(): void {
+        $node = mapping::save_node('Rotterdam', 'department');
+        mapping::place((int) $this->learner->id, $node);
+
+        $manager = $this->getDataGenerator()->create_user();
+        mapping::add_manager($node, (int) $manager->id, null);
+        mapping::reset();
+
+        $this->pretend_everything_was_pushed();
+        $this->assertNull(batch_builder::structure_only(time()));
+
+        $rows = mapping::managers();
+        mapping::remove_manager((int) reset($rows)->id);
+        mapping::reset();
+
+        $chunk = batch_builder::structure_only(time());
+
+        $this->assertNotNull($chunk, 'A removal moves the org state too.');
+        $this->assertSame([], $chunk->payload['org']['managers'] ?? []);
+    }
+
+    /**
      * The batch carries no facts at all, and the receiving end accepts that:
      * its rule is that facts must be present and an array.
      */
