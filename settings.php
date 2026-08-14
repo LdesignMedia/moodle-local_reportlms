@@ -155,6 +155,30 @@ if ($hassiteconfig) {
             );
         }
 
+        /*
+         * A write-back level that was chosen and is being ignored.
+         *
+         * writeback::targets() refuses a field silently, because a sync is not
+         * a place to argue with configuration. Silently is fine as long as
+         * somewhere says so, and this is that somewhere.
+         */
+        $ignored = [];
+
+        foreach (\local_reportlms\local\writeback::targets() as $level => $target) {
+            $chosen = (string) get_config('local_reportlms', \local_reportlms\local\writeback::setting_for($level));
+
+            if ($chosen !== '' && $target === null) {
+                $ignored[] = $chosen;
+            }
+        }
+
+        if ($ignored) {
+            $status .= html_writer::div(
+                get_string('settings:writebackrefused', 'local_reportlms', implode(', ', $ignored)),
+                'alert alert-warning'
+            );
+        }
+
         // Connecting is not offered here. Setting a site up is a sequence,
         // licence, then reading what will leave the site, then the connection
         // itself, and only the report page shows where in that sequence a site
@@ -281,6 +305,26 @@ if ($hassiteconfig) {
             );
             $select->set_updatedcallback('local_reportlms_orgfield_updated');
             $settings->add($select);
+
+            /*
+             * Where the organisation is published, which is the other
+             * direction: the function field above is read, and these two are
+             * written on every sync.
+             *
+             * Two selects rather than one switch and two targets, because each
+             * answers its own question and either level can sensibly be off:
+             * a flat site with no sectors wants its departments published and
+             * nothing else.
+             */
+            foreach (\local_reportlms\local\writeback::OWN_FIELDS as $level => $ownfield) {
+                $settings->add(new admin_setting_configselect(
+                    'local_reportlms/' . \local_reportlms\local\writeback::setting_for($level),
+                    get_string('settings:writeback_' . $level, 'local_reportlms'),
+                    get_string('settings:writeback_' . $level . '_desc', 'local_reportlms'),
+                    $ownfield,
+                    \local_reportlms\local\profile_fields::writeback_options($ownfield)
+                ));
+            }
 
             // The editor lives on its own page rather than in settings: it
             // edits data, not configuration, and its own capability decides who

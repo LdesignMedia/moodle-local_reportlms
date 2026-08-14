@@ -35,10 +35,7 @@ use local_reportlms\local\profile_fields;
  */
 final class profile_fields_test extends \advanced_testcase {
     /** @var string[] The shortnames install creates. */
-    private const SHORTNAMES = ['rlms_function'];
-
-    /** @var string[] The two it used to create, and now leaves alone. */
-    private const RETIRED = ['rlms_sector', 'rlms_department'];
+    private const SHORTNAMES = ['rlms_sector', 'rlms_department', 'rlms_function'];
 
     protected function setUp(): void {
         parent::setUp();
@@ -49,7 +46,7 @@ final class profile_fields_test extends \advanced_testcase {
         // these exist before any test starts. Testing creation against a
         // baseline that contains the result tests nothing: start clean.
         global $DB;
-        [$insql, $params] = $DB->get_in_or_equal(array_merge(self::SHORTNAMES, self::RETIRED));
+        [$insql, $params] = $DB->get_in_or_equal(self::SHORTNAMES);
         $DB->delete_records_select('user_info_field', "shortname {$insql}", $params);
         $categoryid = (int) get_config('local_reportlms', 'profilecategoryid');
         if ($categoryid) {
@@ -58,7 +55,7 @@ final class profile_fields_test extends \advanced_testcase {
         unset_config('profilecategoryid', 'local_reportlms');
     }
 
-    public function test_ensure_creates_the_category_and_a_whole_field(): void {
+    public function test_ensure_creates_the_category_and_whole_fields(): void {
         global $DB;
 
         profile_fields::ensure();
@@ -90,7 +87,7 @@ final class profile_fields_test extends \advanced_testcase {
         profile_fields::ensure();
 
         [$insql, $params] = $DB->get_in_or_equal(self::SHORTNAMES);
-        $this->assertSame(1, $DB->count_records_select('user_info_field', "shortname {$insql}", $params));
+        $this->assertSame(3, $DB->count_records_select('user_info_field', "shortname {$insql}", $params));
         $this->assertSame(1, $DB->count_records('user_info_category', [
             'id' => (int) get_config('local_reportlms', 'profilecategoryid'),
         ]));
@@ -103,7 +100,7 @@ final class profile_fields_test extends \advanced_testcase {
         $DB->delete_records('user_info_category', ['id' => (int) get_config('local_reportlms', 'profilecategoryid')]);
         unset_config('profilecategoryid', 'local_reportlms');
 
-        // The field exists, so a second ensure() has nothing to create and
+        // Every field exists, so a second ensure() has nothing to create and
         // must not leave an empty category as its only trace.
         profile_fields::ensure();
 
@@ -134,14 +131,15 @@ final class profile_fields_test extends \advanced_testcase {
     }
 
     /**
-     * The two fields the organisation used to be derived from are not created
-     * and not deleted.
+     * The two fields the organisation is published into are created, and a
+     * site that already carries them keeps its values.
      *
-     * They hold a customer's own records, written by an HR export this plugin
-     * does not own, and deleting a profile field in Moodle deletes every value
-     * in it. So a site that has them keeps them, and a new site never gets them.
+     * They were retired for exactly one version, when nothing read them and
+     * nothing wrote them. Deleting a profile field in Moodle deletes every
+     * value in it, so the rule that mattered then still matters: a shortname
+     * that already exists is left exactly as it is.
      */
-    public function test_the_retired_fields_are_neither_created_nor_removed(): void {
+    public function test_the_published_fields_are_created_and_never_overwritten(): void {
         global $DB;
 
         $existingid = $DB->insert_record('user_info_field', (object) [
@@ -154,14 +152,21 @@ final class profile_fields_test extends \advanced_testcase {
 
         profile_fields::ensure();
 
-        $this->assertTrue($DB->record_exists('user_info_field', ['id' => $existingid]));
-        $this->assertFalse($DB->record_exists('user_info_field', ['shortname' => 'rlms_sector']));
+        $after = $DB->get_record('user_info_field', ['id' => $existingid], '*', MUST_EXIST);
+
+        $this->assertSame('Afdeling', $after->name, 'Their name, not ours.');
+        $this->assertSame(1, $DB->count_records('user_info_field', ['shortname' => 'rlms_department']));
+        $this->assertTrue($DB->record_exists('user_info_field', ['shortname' => 'rlms_sector']));
     }
 
     public function test_the_defaults_line_up_with_what_install_creates(): void {
         profile_fields::ensure();
 
         $this->assertContains(org::function_field(), self::SHORTNAMES);
+
+        foreach (\local_reportlms\local\writeback::OWN_FIELDS as $shortname) {
+            $this->assertContains($shortname, self::SHORTNAMES, 'Write-back publishes into a field install makes.');
+        }
         $this->assertSame([], profile_fields::missing_mappings());
     }
 

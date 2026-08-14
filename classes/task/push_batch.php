@@ -122,6 +122,21 @@ class push_batch extends \core\task\scheduled_task {
      * The push itself, under the lock.
      */
     protected function push(): void {
+        /*
+         * Before the empty-queue return, not after.
+         *
+         * The profile fields publish the organisation, and the organisation
+         * changes on a site where nobody is dirty: somebody renames a unit or
+         * moves a person, and no learner fact moved with them. Cheap when
+         * nothing differs, which is every run after the first.
+         */
+        \local_reportlms\local\writeback::follow_locks();
+        $published = \local_reportlms\local\writeback::apply();
+
+        if ($published) {
+            mtrace('Report LMS: published the organisation into ' . $published . ' profile value(s).');
+        }
+
         $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN);
 
         if ($userids) {

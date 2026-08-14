@@ -28,37 +28,45 @@ namespace local_reportlms\local;
 use local_reportlms\local\collector\org;
 
 /**
- * Creates and watches the rlms_function profile field.
+ * Creates and watches the three rlms_* profile fields.
  *
- * There used to be three. `rlms_sector` and `rlms_department` were what the
- * organisation tree was derived from, and the tree is now stated in the mapping
- * tables instead, so nothing reads them. They are not deleted: they hold a
- * customer's own records, written there by an HR export this plugin does not
- * own, and removing a profile field in Moodle removes every value with it. They
- * are simply no longer created, no longer locked and no longer read, and a site
- * that has them keeps them.
+ * Each has a direction, and the directions are the whole story:
  *
- * `rlms_function` stays because function is an attribute of a person rather
- * than a place in the tree: the aggregation slices by it and the organisation
- * does not depend on it.
+ * - `rlms_sector` and `rlms_department` are **written**. The organisation is
+ *   stated in the mapping tables, and {@see writeback} copies each person's
+ *   resolved unit into these, so the rest of the site agrees with the report.
+ * - `rlms_function` is **read**. Function is an attribute of a person rather
+ *   than a place in the tree: the aggregation slices by it and the organisation
+ *   does not depend on it.
+ *
+ * The two written ones were briefly retired, in the version that removed the
+ * derived organisation, because at that moment nothing read them and nothing
+ * wrote them. They are back with the opposite job to the one they had: they
+ * used to be where the tree came from, and they are now where it is published.
+ *
+ * They are created hidden, so a learner never sees a field the plugin
+ * overwrites. An administrator who would rather publish into a field their own
+ * site already maintains re-points either one in the advanced settings, and
+ * that is the only case where a lock matters. See {@see writeback}.
  *
  * The rlms_ prefix is the whole clash story: a customer site can hold any field
- * names it likes, and this one can never collide with them. An administrator
- * who prefers the site's own field re-maps in the advanced settings.
+ * names it likes, and these can never collide with them.
  *
- * A text field, deliberately: the plugin cannot know a customer's vocabulary,
- * so it cannot offer a menu. The cost is that a typo mints a new function
- * value, and the seed sites use menu fields and will not show that failure, so
- * do not let green QA there stand in for it.
+ * Text fields, deliberately: the plugin cannot know a customer's vocabulary, so
+ * it cannot offer a menu. The cost is that a typo mints a new function value,
+ * and the seed sites use menu fields and will not show that failure, so do not
+ * let green QA there stand in for it.
  */
 class profile_fields {
     /** @var array<string, string> Shortname to the lang key of its display name. */
     private const FIELDS = [
+        'rlms_sector' => 'profilefield:sector',
+        'rlms_department' => 'profilefield:department',
         'rlms_function' => 'profilefield:function',
     ];
 
     /**
-     * Create the category and the field, idempotently.
+     * Create the category and the fields, idempotently.
      *
      * A field whose shortname already exists is left exactly as it is: not
      * recreated, not retyped, and not locked.
@@ -100,12 +108,16 @@ class profile_fields {
              * this data is read), but PROFILE_VISIBLE_NONE does not impede
              * administrators: editability falls through to moodle/user:update.
              *
-             * **Created unlocked.** The plugin used to lock whichever field
-             * the department mapping pointed at, so a learner could not edit
-             * their own place in the organisation. Nothing derives a placement
-             * from a profile field any more, so editing one moves nobody, and a
-             * lock on a customer's field that the plugin cannot explain is
-             * exactly the debris an uninstall exists to prevent.
+             * **Created unlocked, and hidden.** A learner cannot see a
+             * PROFILE_VISIBLE_NONE field on their own profile, so there is
+             * nothing here for a lock to protect: hiding does the job locking
+             * used to.
+             *
+             * The lock belongs to {@see writeback}, and only when somebody
+             * points write-back at a field of their own that learners can see.
+             * It records that the lock is ours, so a later re-map can undo
+             * exactly what we did. That bookkeeping is what the previous
+             * version got wrong by locking here as well.
              */
             $DB->insert_record('user_info_field', (object) [
                 'shortname' => $shortname,
@@ -206,6 +218,53 @@ class profile_fields {
             $options[$configured] = $field
                 ? $field->name . ' (' . $field->shortname . ')'
                 : get_string('settings:orgfield_missing', 'local_reportlms', $configured);
+        }
+
+        return $options;
+    }
+
+    /**
+     * Options for one write-back select on the settings page.
+     *
+     * Deliberately not {@see field_options}, which reads the empty option as
+     * "the plugin's own field". Here empty means "write nothing", and one value
+     * meaning opposite things in two menus is how somebody turns a feature on
+     * by trying to turn it off.
+     *
+     * The plugin's own field is a real option with its own value rather than
+     * the default behind an empty string, so that what the select shows and
+     * what the config holds are the same thing.
+     *
+     * @param string $default The rlms_ field this level publishes into by default.
+     *
+     * @return array<string, string> value => label.
+     */
+    public static function writeback_options(string $default): array {
+        global $DB;
+
+        $options = ['' => get_string('settings:writeback_off', 'local_reportlms')];
+
+        $records = $DB->get_records_select(
+            'user_info_field',
+            "datatype NOT IN ('textarea', 'checkbox', 'datetime')",
+            null,
+            'name ASC',
+            'id, shortname, name'
+        );
+
+        foreach ($records as $record) {
+            $options[$record->shortname] = $record->name . ' (' . $record->shortname . ')';
+        }
+
+        /*
+         * The default must be selectable even when its field is missing.
+         *
+         * Otherwise a site whose rlms_ field was deleted opens this page with
+         * the browser silently selecting whatever sorted first, and pressing
+         * Save publishes every department into somebody's unrelated field.
+         */
+        if (!isset($options[$default])) {
+            $options[$default] = get_string('settings:orgfield_missing', 'local_reportlms', $default);
         }
 
         return $options;

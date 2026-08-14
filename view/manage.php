@@ -437,10 +437,28 @@ if ($openunit && isset($nodes[$openunit])) {
     // and textareas, none of which names a set of people.
     [$typesql, $typeparams] = $DB->get_in_or_equal(['text', 'menu'], SQL_PARAMS_NAMED, 'type');
 
+    /*
+     * Never a field the organisation is published into.
+     *
+     * Drawing a unit from a field write-back writes is a loop: Sales publishes
+     * "Sales", Support draws everybody whose value is "Sales", the person moves
+     * to Support, Support publishes "Support", and they move back. The
+     * function field stays offered, because it is read and never written and
+     * "everybody whose function is Driver" is a sentence somebody may mean.
+     */
+    $published = array_values(array_filter(\local_reportlms\local\writeback::targets()));
+    $excludesql = '';
+
+    if ($published) {
+        [$excludein, $excludeparams] = $DB->get_in_or_equal($published, SQL_PARAMS_NAMED, 'pub', false);
+        $excludesql = " AND f.shortname {$excludein}";
+        $typeparams += $excludeparams;
+    }
+
     $sql = "SELECT DISTINCT f.id AS fieldid, f.name AS fieldname, {$datacolumn} AS value
               FROM {user_info_data} d
               JOIN {user_info_field} f ON f.id = d.fieldid
-             WHERE f.datatype {$typesql} AND {$datacolumn} <> :empty
+             WHERE f.datatype {$typesql}{$excludesql} AND {$datacolumn} <> :empty
           ORDER BY f.name ASC, value ASC";
 
     $recordset = $DB->get_recordset_sql($sql, $typeparams + ['empty' => '']);

@@ -272,5 +272,34 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026081401, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026081402) {
+        /*
+         * The two fields the organisation is published into.
+         *
+         * They were retired one version ago, when nothing read them and nothing
+         * wrote them. They are back with the opposite job: the tree used to be
+         * derived from them, and it is now copied into them. ensure() skips a
+         * shortname that already exists, so a site that still carries its
+         * originals keeps them exactly as they are, values and all.
+         */
+        \local_reportlms\local\profile_fields::ensure();
+
+        /*
+         * The old single lock record becomes the department's.
+         *
+         * There was one lock and one field it could point at, and that field
+         * was the department. Two levels can each own one now, so a value left
+         * over from before belongs to the level it always meant.
+         */
+        $locked = (string) get_config('local_reportlms', 'lockedfield');
+
+        if ($locked !== '') {
+            set_config('lockedfield_department', $locked, 'local_reportlms');
+            unset_config('lockedfield', 'local_reportlms');
+        }
+
+        upgrade_plugin_savepoint(true, 2026081402, 'local', 'reportlms');
+    }
+
     return true;
 }

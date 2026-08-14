@@ -34,10 +34,17 @@
 function xmldb_local_reportlms_uninstall(): bool {
     global $DB;
 
-    $locked = (string) get_config('local_reportlms', 'lockedfield');
+    foreach (['lockedfield', 'lockedfield_sector', 'lockedfield_department'] as $configkey) {
+        // The unprefixed key is the pre-two-level record, kept here because an
+        // uninstall may run on a site that never upgraded past it.
+        $locked = (string) get_config('local_reportlms', $configkey);
 
-    if ($locked !== '') {
+        if ($locked === '') {
+            continue;
+        }
+
         $field = $DB->get_record('user_info_field', ['shortname' => $locked], 'id, locked');
+
         if ($field && !empty($field->locked)) {
             $DB->set_field('user_info_field', 'locked', 0, ['id' => $field->id]);
         }
