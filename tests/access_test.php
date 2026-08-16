@@ -372,6 +372,61 @@ final class access_test extends \advanced_testcase {
     }
 
     /**
+     * Managing a department does not hand over the sector it sits in.
+     *
+     * The leak this file exists to stop coming back. Report LMS expands every
+     * scope node to its subtree before serving anything, so a sector in the
+     * token is a grant over every department inside it. The sector was being
+     * added so the picker could show a parent's name, and a manager of one
+     * department could read the whole sector.
+     *
+     * It stayed invisible while the only managed units sat at the root, and
+     * appeared the day one of them was moved under a sector.
+     */
+    public function test_managing_a_department_does_not_grant_its_sector(): void {
+        $manager = $this->getDataGenerator()->create_user();
+
+        $sectorid = mapping::save_node('Operatie en Techniek', 'sector');
+        $mine = mapping::save_node('Flexpool A', 'department', $sectorid);
+        mapping::save_node('Sloterdijk Groep E', 'department', $sectorid);
+        mapping::add_manager($mine, (int) $manager->id, null);
+        mapping::reset();
+
+        $this->setUser($manager);
+
+        $scope = \local_reportlms\local\launch::viewer_scope();
+
+        $this->assertSame(
+            [\local_reportlms\local\pseudonym::node('department', 'Operatie en Techniek/Flexpool A')],
+            $scope,
+            'Their unit, and nothing above or beside it.'
+        );
+    }
+
+    /**
+     * They are still told what the sector is called, because a department drawn
+     * under an unnamed parent is a picker nobody can use.
+     *
+     * Knowing a name is not permission to read the numbers under it, which is
+     * the whole reason these are two different questions.
+     */
+    public function test_a_manager_is_told_the_name_of_the_sector_above_them(): void {
+        $manager = $this->getDataGenerator()->create_user();
+
+        $sectorid = mapping::save_node('Operatie en Techniek', 'sector');
+        $mine = mapping::save_node('Flexpool A', 'department', $sectorid);
+        mapping::add_manager($mine, (int) $manager->id, null);
+        mapping::reset();
+
+        $this->setUser($manager);
+
+        $sector = \local_reportlms\local\pseudonym::node('sector', 'Operatie en Techniek');
+
+        $this->assertContains($sector, access::visible_codes([$sector]));
+        $this->assertNotContains($sector, \local_reportlms\local\launch::viewer_scope());
+    }
+
+    /**
      * An unscoped viewer keeps naming everything, which is what viewall means.
      */
     public function test_viewall_resolves_anything(): void {

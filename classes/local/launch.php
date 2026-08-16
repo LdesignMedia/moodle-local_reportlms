@@ -194,29 +194,71 @@ class launch {
     /**
      * The coded nodes whose names this viewer may be told.
      *
-     * Kept as its own method because it used to be a wider and weaker thing
-     * than the scope: a manager was served their own department's numbers and
-     * no other, and was still told the name of the sector above it, because a
-     * department drawn under an unnamed parent is a picker nobody can use.
+     * Wider and weaker than the scope, and the difference is load-bearing.
      *
-     * The two answers are now the same, because {@see named_nodes} already
-     * carries the parents. It stays separate so the distinction survives if the
-     * label service ever needs to be more generous than the token.
+     * A manager is served their own unit's numbers and no other, and is still
+     * told the *name* of the sector above it, because a department drawn under
+     * an unnamed parent is a picker nobody can use. Knowing what a sector is
+     * called is not permission to read it.
+     *
+     * These were briefly the same method. A sector code in the token is not a
+     * label, it is a grant: Report LMS expands every scope node to its subtree
+     * before serving anything, so naming the parent handed the manager every
+     * department in it. Seen live, on a manager of one department who could
+     * suddenly read the whole sector.
      *
      * @return array<int, string>|null Null for a viewer who manages nothing.
      */
     public static function viewer_nameable(): ?array {
         $named = self::named_nodes();
 
-        return $named ?: null;
+        if (!$named) {
+            return null;
+        }
+
+        return array_values(array_unique(array_merge($named, self::parent_sector_codes())));
     }
 
     /**
-     * The coded units this viewer was named the manager of, plus their parents.
+     * The coded sectors above the units this viewer manages.
      *
-     * The whole of a manager's scope. Holding local/reportlms:view on a course
-     * puts nothing here: it lets somebody open a report, and what they see in
-     * it is the units they were named against, which may be none.
+     * Names only, never scope. See {@see viewer_nameable}.
+     *
+     * @return array<int, string>
+     */
+    protected static function parent_sector_codes(): array {
+        global $USER;
+
+        if (!isloggedin() || isguestuser()) {
+            return [];
+        }
+
+        $nodes = mapping::nodes();
+        $codes = [];
+
+        foreach (mapping::managed_nodes((int) $USER->id) as $nodeid) {
+            $parentid = $nodes[$nodeid]->parentid ?? null;
+
+            if ($parentid !== null && isset($nodes[$parentid])) {
+                $codes[] = pseudonym::node('sector', $nodes[$parentid]->name);
+            }
+        }
+
+        return $codes;
+    }
+
+    /**
+     * The coded units this viewer was named the manager of. Exactly those.
+     *
+     * The whole of a manager's scope, and nothing above it. Report LMS expands
+     * each of these to its subtree, so naming a sector here would hand over
+     * every department inside it: that is right when somebody was named against
+     * the sector, and a leak when the sector is merely the parent of the one
+     * department they run.
+     *
+     * Holding local/reportlms:view on a course puts nothing here either. It
+     * lets somebody open a report, and what they see in it is the units they
+     * were named against, which may be none.
      *
      * @return array<int, string>
      */
@@ -227,7 +269,6 @@ class launch {
             return [];
         }
 
-        $nodes = mapping::nodes();
         $codes = [];
 
         foreach (mapping::managed_nodes((int) $USER->id) as $nodeid) {
@@ -239,14 +280,6 @@ class launch {
 
             [$level, $value] = explode(':', $key, 2);
             $codes[] = pseudonym::node($level, $value);
-
-            // The sector above it, so a department is drawn under a named
-            // parent rather than under a hash.
-            $parentid = $nodes[$nodeid]->parentid ?? null;
-
-            if ($parentid !== null && isset($nodes[$parentid])) {
-                $codes[] = pseudonym::node('sector', $nodes[$parentid]->name);
-            }
         }
 
         return array_values(array_unique($codes));
