@@ -194,7 +194,29 @@ class place_person extends \moodleform {
         if (!empty($this->_customdata['nodeid'])) {
             $mform->addElement('hidden', 'nodeid', $this->_customdata['nodeid']);
             $mform->setType('nodeid', PARAM_INT);
+
+            /*
+             * The form opens holding what this unit was told, not what it
+             * currently contains.
+             *
+             * Person holds the names somebody typed. The four source pickers
+             * hold the sources somebody chose. Between them that is the whole
+             * of what was said about this unit, so saving it back unchanged
+             * changes nothing, which is the only way an editor can be safe to
+             * open.
+             *
+             * It used to open with Person holding every member, including the
+             * hundreds a course had drawn, and the source pickers empty. So the
+             * sentence somebody had said was invisible, and the box implied
+             * they had named four hundred people one at a time.
+             */
             $mform->setDefault('userid', $members);
+
+            foreach (['courseids', 'categoryids', 'cohortids', 'groupids', 'profilevalues'] as $picker) {
+                if (isset($this->_customdata['selected'][$picker])) {
+                    $mform->setDefault($picker, $this->_customdata['selected'][$picker]);
+                }
+            }
         } else {
             $mform->addElement('select', 'nodeid', get_string('manage:unit', 'local_reportlms'), $units);
         }

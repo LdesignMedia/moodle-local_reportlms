@@ -207,7 +207,7 @@ class writeback {
         global $DB;
 
         $nodes = mapping::nodes();
-        $placed = mapping::membership();
+        $placed = mapping::resolved_membership();
 
         $wanted = [];
         $userids = $DB->get_fieldset_select('user', 'id', 'deleted = 0 AND id > 2');

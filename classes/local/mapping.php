@@ -62,6 +62,29 @@ class mapping {
     /** @var array<int, int>|null Learner id to node id, manual rows only. */
     protected static $members = null;
 
+    /** @var array<int, int>|null Learner id to node id, sources and manual rows together. */
+    protected static $resolved = null;
+
+    /** @var array<int, true>|null Learners two units claim equally hard. */
+    protected static $contested = null;
+
+    /**
+     * Source kinds, narrowest first.
+     *
+     * This order decides who wins when two units claim one person, and it is a
+     * judgement about what people mean rather than a fact. A group is narrower
+     * than the course holding it, a course is narrower than the category
+     * holding it, and a cohort is a hand-kept list so it beats a whole
+     * category. Somebody drawn by Sales' group and Support's category belongs
+     * to Sales, which is what a person would say if asked.
+     *
+     * A name typed into the Person box beats all of them, and is not in this
+     * list because it is not a source: it is a row in the member table.
+     *
+     * @var string[]
+     */
+    public const SOURCE_KINDS = ['group', 'course', 'cohort', 'category', 'profilefield'];
+
     /**
      * Forget what was read.
      *
@@ -73,6 +96,8 @@ class mapping {
     public static function reset(): void {
         self::$nodes = null;
         self::$members = null;
+        self::$resolved = null;
+        self::$contested = null;
     }
 
     /**
@@ -108,6 +133,315 @@ class mapping {
         }
 
         return self::$members;
+    }
+
+    /**
+     * Who is in which unit, sources resolved and manual rows on top.
+     *
+     * The whole site in one pass, because the editor asks it once per unit
+     * while drawing a table and the collector asks it for every learner. Five
+     * queries, one per source kind, each covering every unit at once.
+     *
+     * Nothing here is stored. A unit holds the sentence "everybody on the
+     * induction course", not the list of people that sentence produced last
+     * time, so somebody enrolled tomorrow is in the unit tomorrow without
+     * anybody touching the editor.
+     *
+     * @return array<int, int> Learner user id to node id.
+     */
+    public static function resolved_membership(): array {
+        if (self::$resolved !== null) {
+            return self::$resolved;
+        }
+
+        $claims = self::source_claims();
+        $contested = [];
+        $resolved = [];
+
+        foreach ($claims as $userid => $byrank) {
+            ksort($byrank);
+            $best = reset($byrank);
+
+            /*
+             * Two units claiming one person at the same narrowness is a
+             * contradiction, not a puzzle: somebody said two incompatible
+             * things, and there is no honest way to pick.
+             *
+             * They land nowhere until it is resolved, and the editor counts
+             * them, because a person quietly assigned to whichever unit sorted
+             * first is how a department gains somebody else's people.
+             */
+            if (count($best) > 1) {
+                $contested[$userid] = true;
+
+                continue;
+            }
+
+            $resolved[$userid] = (int) reset($best);
+        }
+
+        // A name typed into the Person box is the last word, and it settles a
+        // contested learner too: it is somebody answering the question the
+        // sources disagreed about.
+        foreach (self::membership() as $userid => $nodeid) {
+            $resolved[(int) $userid] = (int) $nodeid;
+            unset($contested[(int) $userid]);
+        }
+
+        self::$contested = $contested;
+
+        return self::$resolved = $resolved;
+    }
+
+    /**
+     * Learners more than one unit claims, with nothing to separate the claims.
+     *
+     * @return array<int, int> User ids.
+     */
+    public static function contested(): array {
+        if (self::$contested === null) {
+            self::resolved_membership();
+        }
+
+        return array_keys(self::$contested);
+    }
+
+    /**
+     * Every claim a source makes, as user id => rank => [node ids].
+     *
+     * Rank is the position in {@see SOURCE_KINDS}, so a lower number is a
+     * narrower claim and sorting picks the winner.
+     *
+     * @return array<int, array<int, array<int, int>>>
+     */
+    protected static function source_claims(): array {
+        global $DB;
+
+        $rows = $DB->get_records('local_reportlms_source', null, 'itemtype, itemid');
+
+        if (!$rows) {
+            return [];
+        }
+
+        $bytype = [];
+
+        foreach ($rows as $row) {
+            $bytype[$row->itemtype][] = $row;
+        }
+
+        $ranks = array_flip(self::SOURCE_KINDS);
+        $claims = [];
+
+        foreach ($bytype as $itemtype => $typerows) {
+            $rank = $ranks[$itemtype] ?? count($ranks);
+
+            foreach (self::people_for($itemtype, $typerows) as $userid => $nodeids) {
+                foreach ($nodeids as $nodeid) {
+                    $claims[$userid][$rank][$nodeid] = $nodeid;
+                }
+            }
+        }
+
+        return $claims;
+    }
+
+    /**
+     * The people one kind of source draws, keyed by user id to node ids.
+     *
+     * One query per kind rather than one per source row: a site with 286 units
+     * would otherwise ask the database three hundred times to draw one table.
+     *
+     * @param string $itemtype
+     * @param array<int, \stdClass> $rows
+     *
+     * @return array<int, array<int, int>>
+     */
+    protected static function people_for(string $itemtype, array $rows): array {
+        global $DB;
+
+        $nodesfor = [];
+
+        foreach ($rows as $row) {
+            $nodesfor[(int) $row->itemid][] = (int) $row->nodeid;
+        }
+
+        $found = [];
+
+        if ($itemtype === 'category') {
+            // A category means the whole branch under it, so the courses are
+            // resolved first and then treated exactly like a course source.
+            foreach ($nodesfor as $categoryid => $nodeids) {
+                foreach (self::courses_under([$categoryid]) as $courseid) {
+                    foreach (self::participants_of([$courseid]) as $userid) {
+                        foreach ($nodeids as $nodeid) {
+                            $found[(int) $userid][$nodeid] = $nodeid;
+                        }
+                    }
+                }
+            }
+
+            return $found;
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal(array_keys($nodesfor), SQL_PARAMS_NAMED);
+
+        switch ($itemtype) {
+            case 'course':
+                $sql = "SELECT ue.id, ue.userid, e.courseid AS item
+                          FROM {user_enrolments} ue
+                          JOIN {enrol} e ON e.id = ue.enrolid
+                          JOIN {user} u ON u.id = ue.userid
+                         WHERE e.courseid {$insql} AND u.deleted = 0 AND u.id > 2";
+                break;
+
+            case 'group':
+                $sql = "SELECT gm.id, gm.userid, gm.groupid AS item
+                          FROM {groups_members} gm
+                          JOIN {user} u ON u.id = gm.userid
+                         WHERE gm.groupid {$insql} AND u.deleted = 0 AND u.id > 2";
+                break;
+
+            case 'cohort':
+                $sql = "SELECT cm.id, cm.userid, cm.cohortid AS item
+                          FROM {cohort_members} cm
+                          JOIN {user} u ON u.id = cm.userid
+                         WHERE cm.cohortid {$insql} AND u.deleted = 0 AND u.id > 2";
+                break;
+
+            case 'profilefield':
+                return self::people_for_profile_values($rows);
+
+            default:
+                return [];
+        }
+
+        foreach ($DB->get_recordset_sql($sql, $params) as $row) {
+            foreach ($nodesfor[(int) $row->item] ?? [] as $nodeid) {
+                $found[(int) $row->userid][$nodeid] = $nodeid;
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * The people a profile-value source draws.
+     *
+     * Its own method because the match is a field and a value rather than an
+     * id, so it cannot share the shape of the other four.
+     *
+     * @param array<int, \stdClass> $rows
+     *
+     * @return array<int, array<int, int>>
+     */
+    protected static function people_for_profile_values(array $rows): array {
+        global $DB;
+
+        $found = [];
+
+        foreach ($rows as $row) {
+            $sql = "SELECT d.id, d.userid
+                      FROM {user_info_data} d
+                      JOIN {user} u ON u.id = d.userid
+                     WHERE d.fieldid = :fieldid AND " . $DB->sql_compare_text('d.data', 255) . " = :value
+                       AND u.deleted = 0 AND u.id > 2";
+
+            foreach ($DB->get_records_sql($sql, ['fieldid' => (int) $row->itemid, 'value' => $row->itemvalue]) as $hit) {
+                $found[(int) $hit->userid][(int) $row->nodeid] = (int) $row->nodeid;
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * The people named into a unit by hand, and nobody a source drew.
+     *
+     * What the Person box holds. Opening it with the whole membership made a
+     * name and a sentence look the same: removing somebody a course had drawn
+     * put them back on the next read, and there was no way to say anything the
+     * sources did not already say.
+     *
+     * @param int $nodeid
+     *
+     * @return array<int, int> User ids.
+     */
+    public static function named_members_of(int $nodeid): array {
+        $ids = [];
+
+        foreach (self::membership() as $userid => $node) {
+            if ((int) $node === $nodeid) {
+                $ids[] = (int) $userid;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Where a unit draws its people from.
+     *
+     * @param int $nodeid
+     *
+     * @return array<int, \stdClass> {id, itemtype, itemid, itemvalue}
+     */
+    public static function sources_of(int $nodeid): array {
+        global $DB;
+
+        return $DB->get_records('local_reportlms_source', ['nodeid' => $nodeid], 'itemtype, itemid');
+    }
+
+    /**
+     * Replace what a unit draws from.
+     *
+     * Whole-list, because the editor shows the whole list: what comes back from
+     * the form is what the unit draws from, and a source that is gone from the
+     * form is one somebody removed.
+     *
+     * @param int $nodeid
+     * @param array $sources Keyed courses|categories|cohorts|groups|profilevalues.
+     *
+     * @return void
+     */
+    public static function save_sources(int $nodeid, array $sources): void {
+        global $DB, $USER;
+
+        $wanted = [];
+
+        foreach (['courses' => 'course', 'categories' => 'category', 'cohorts' => 'cohort', 'groups' => 'group'] as $key => $itemtype) {
+            foreach (array_filter(array_map('intval', $sources[$key] ?? [])) as $itemid) {
+                $wanted[$itemtype . ':' . $itemid . ':'] = [$itemtype, $itemid, ''];
+            }
+        }
+
+        foreach (self::profile_values($sources['profilevalues'] ?? []) as $fieldid => $values) {
+            foreach ($values as $value) {
+                $wanted['profilefield:' . $fieldid . ':' . $value] = ['profilefield', $fieldid, $value];
+            }
+        }
+
+        $existing = [];
+
+        foreach (self::sources_of($nodeid) as $row) {
+            $existing[$row->itemtype . ':' . $row->itemid . ':' . $row->itemvalue] = $row;
+        }
+
+        foreach (array_diff_key($existing, $wanted) as $row) {
+            $DB->delete_records('local_reportlms_source', ['id' => $row->id]);
+        }
+
+        foreach (array_diff_key($wanted, $existing) as [$itemtype, $itemid, $itemvalue]) {
+            $DB->insert_record('local_reportlms_source', (object) [
+                'nodeid' => $nodeid,
+                'itemtype' => $itemtype,
+                'itemid' => $itemid,
+                'itemvalue' => $itemvalue,
+                'timemodified' => time(),
+                'usermodified' => (int) $USER->id,
+            ]);
+        }
+
+        self::reset();
     }
 
     /**
@@ -181,17 +515,25 @@ class mapping {
     public static function unplaced_count(): int {
         global $DB;
 
-        return $DB->count_records_sql(
-            "SELECT COUNT(u.id)
-               FROM {user} u
-              WHERE u.deleted = 0
-                AND u.id > 2
-                AND NOT EXISTS (
-                    SELECT 1
-                      FROM {local_reportlms_member} m
-                     WHERE m.userid = u.id
-                )"
-        );
+        /*
+         * Resolved, not counted in SQL.
+         *
+         * Most people in a unit are there because of a source, and a source is
+         * a sentence rather than a row per person, so a query against the
+         * member table would report a site of thirteen thousand as thirteen
+         * thousand unplaced.
+         */
+        $placed = self::resolved_membership();
+
+        $count = 0;
+
+        foreach ($DB->get_fieldset_select('user', 'id', 'deleted = 0 AND id > 2') as $userid) {
+            if (!isset($placed[(int) $userid])) {
+                $count++;
+            }
+        }
+
+        return $count;
     }
 
     /**
@@ -260,7 +602,7 @@ class mapping {
     public static function members_of(int $nodeid): array {
         $ids = [];
 
-        foreach (self::membership() as $userid => $node) {
+        foreach (self::resolved_membership() as $userid => $node) {
             if ((int) $node === $nodeid) {
                 $ids[] = (int) $userid;
             }
@@ -407,6 +749,9 @@ class mapping {
 
         $DB->delete_records('local_reportlms_member', ['nodeid' => $nodeid]);
         $DB->delete_records('local_reportlms_manager', ['nodeid' => $nodeid]);
+        // And what it drew from, or the sources would keep resolving people
+        // into a unit nobody can see.
+        $DB->delete_records('local_reportlms_source', ['nodeid' => $nodeid]);
         $DB->set_field('local_reportlms_node', 'parentid', null, ['parentid' => $nodeid]);
         $DB->delete_records('local_reportlms_node', ['id' => $nodeid]);
 

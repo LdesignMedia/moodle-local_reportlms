@@ -301,5 +301,15 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026081402, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026081700) {
+        $table = new xmldb_table('local_reportlms_source');
+
+        if (!$dbman->table_exists($table)) {
+            $dbman->install_one_table_from_xmldb_file(__DIR__ . '/install.xml', 'local_reportlms_source');
+        }
+
+        upgrade_plugin_savepoint(true, 2026081700, 'local', 'reportlms');
+    }
+
     return true;
 }

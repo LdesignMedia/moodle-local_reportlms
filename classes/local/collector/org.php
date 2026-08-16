@@ -126,9 +126,15 @@ class org {
             $nodes[$key] = (object) ['key' => $key, 'parent' => $parent, 'kind' => $node->kind];
         }
 
-        // Resolved once for the whole site rather than per user: this is one
-        // query and the loop below runs for every account on the site.
-        $placed = mapping::membership();
+        /*
+         * Resolved once for the whole site rather than per user.
+         *
+         * The sources a unit draws from are read and turned into people here,
+         * not stored as membership, so somebody enrolled on a course a unit
+         * draws from is in that unit on the next push without anybody having
+         * touched the editor.
+         */
+        $placed = mapping::resolved_membership();
 
         /*
          * The function field, by id rather than by shortname in the join.

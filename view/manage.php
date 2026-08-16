@@ -131,59 +131,27 @@ if ($action !== '' && confirm_sesskey()) {
             }
 
             /*
-             * What is selected is who is in the unit.
+             * Two different statements, saved as two different things.
              *
-             * The picker opens holding the current membership, so saving it back
-             * unchanged changes nothing, adding a name puts somebody in, and
-             * taking one out takes them out. The sources add to that selection
-             * rather than replacing it: choosing a course means "these people as
-             * well", not "only these people".
+             * The sources are a sentence about the unit: "everybody enrolled on
+             * the induction course". They are stored as they were said and
+             * resolved every time somebody asks, so a person enrolled tomorrow
+             * is in the unit tomorrow.
+             *
+             * The Person box is a list of names, and it stays a list of names.
+             * It used to open holding everybody the unit contained, including
+             * the hundreds a course had drawn, which made the two
+             * indistinguishable: removing a name that a source had produced put
+             * it straight back on the next read, and the box could not be used
+             * to say anything the sources did not already say.
              */
+            mapping::save_sources($nodeid, $sources);
+
             $wanted = array_flip(array_filter($chosen));
-
-            foreach (mapping::candidates_from($sources, $nodeid) as $fromsource) {
-                $wanted[$fromsource] = true;
-            }
-
-            $current = array_flip(mapping::members_of($nodeid));
+            $current = array_flip(mapping::named_members_of($nodeid));
 
             $added = array_diff_key($wanted, $current);
             $removed = array_diff_key($current, $wanted);
-
-            if (count($added) > 1 && !optional_param('confirm', 0, PARAM_BOOL)) {
-                /*
-                 * Confirm more than one at a time, with the count in the
-                 * question.
-                 *
-                 * Placing is permanent until somebody undoes it, and a category
-                 * on a real site resolved to 1,487 people. The number is read
-                 * before it is agreed to rather than afterwards.
-                 */
-                $unit = mapping::nodes()[$nodeid] ?? null;
-                $back = new moodle_url($pageurl, [
-                    'action' => 'place',
-                    'nodeid' => $nodeid,
-                    'confirm' => 1,
-                    'sesskey' => sesskey(),
-                ]);
-
-                foreach (array_keys($wanted) as $index => $id) {
-                    $back->param('userid[' . $index . ']', $id);
-                }
-
-                echo $OUTPUT->header();
-                echo $OUTPUT->confirm(
-                    get_string('manage:placeconfirm', 'local_reportlms', (object) [
-                        'count' => count($added),
-                        'unit' => $unit ? format_string($unit->name) : '',
-                    ]),
-                    $back,
-                    $returnurl
-                );
-                echo $OUTPUT->footer();
-
-                exit;
-            }
 
             foreach (array_keys($added) as $id) {
                 mapping::place((int) $id, $nodeid);
@@ -193,17 +161,17 @@ if ($action !== '' && confirm_sesskey()) {
                 mapping::release((int) $id);
             }
 
-            if ($added || $removed) {
-                redirect(
-                    $returnurl,
-                    get_string('manage:placedpeople', 'local_reportlms', (object) [
-                        'added' => count($added),
-                        'removed' => count($removed),
-                    ]),
-                    null,
-                    \core\output\notification::NOTIFY_SUCCESS
-                );
-            }
+            mapping::reset();
+
+            redirect(
+                $returnurl,
+                get_string('manage:saved', 'local_reportlms', (object) [
+                    'people' => count(mapping::members_of($nodeid)),
+                    'sources' => count(mapping::sources_of($nodeid)),
+                ]),
+                null,
+                \core\output\notification::NOTIFY_SUCCESS
+            );
 
             break;
 
@@ -317,7 +285,15 @@ if ($openunit && isset($nodes[$openunit])) {
         echo html_writer::tag('p', get_string('manage:nobodyhere', 'local_reportlms'), ['class' => 'text-muted']);
     } else {
         $peopletable = new html_table();
-        $peopletable->head = [get_string('manage:person', 'local_reportlms'), ''];
+        $peopletable->head = [
+            get_string('manage:person', 'local_reportlms'),
+            get_string('manage:why', 'local_reportlms'),
+            '',
+        ];
+
+        // Who is here because somebody typed their name, as opposed to because
+        // a source drew them. Only the first kind can be removed one at a time.
+        $named = array_flip(mapping::named_members_of($openunit));
 
         foreach ($inunit as $userid) {
             $release = new moodle_url($pageurl, [
@@ -338,9 +314,24 @@ if ($openunit && isset($nodes[$openunit])) {
                 );
             }
 
+            /*
+             * Why they are here, and whether it can be undone from this row.
+             *
+             * Somebody a course drew cannot be removed one at a time: the next
+             * read would put them straight back, because the unit still says
+             * "everybody on that course". The honest answer is to say where
+             * they came from and point at the source that would change it.
+             */
+            $bysource = !isset($named[$userid]);
+
             $peopletable->data[] = [
                 $name,
-                html_writer::link($release, get_string('manage:release', 'local_reportlms')),
+                $bysource
+                    ? html_writer::span(get_string('manage:why:source', 'local_reportlms'), 'text-muted')
+                    : get_string('manage:why:named', 'local_reportlms'),
+                $bysource
+                    ? ''
+                    : html_writer::link($release, get_string('manage:release', 'local_reportlms')),
             ];
         }
 
@@ -492,9 +483,44 @@ if ($openunit && isset($nodes[$openunit])) {
 
     $recordset->close();
 
+    /*
+     * What this unit already draws from, so the pickers open holding it.
+     *
+     * Without this the sources were write-only: chosen once, applied, and then
+     * invisible, so the only way to see what a unit drew from was to notice
+     * people in it nobody had named.
+     */
+    $selectedsources = [
+        'courseids' => [],
+        'categoryids' => [],
+        'cohortids' => [],
+        'groupids' => [],
+        'profilevalues' => [],
+    ];
+
+    foreach (mapping::sources_of($openunit) as $source) {
+        switch ($source->itemtype) {
+            case 'course':
+                $selectedsources['courseids'][] = (int) $source->itemid;
+                break;
+            case 'category':
+                $selectedsources['categoryids'][] = (int) $source->itemid;
+                break;
+            case 'cohort':
+                $selectedsources['cohortids'][] = (int) $source->itemid;
+                break;
+            case 'group':
+                $selectedsources['groupids'][] = (int) $source->itemid;
+                break;
+            case 'profilefield':
+                $selectedsources['profilevalues'][] = $source->itemid . ':' . $source->itemvalue;
+                break;
+        }
+    }
+
     (new \local_reportlms\form\place_person($pageurl->out(false), [
         'nodeid' => $openunit,
-        'members' => $inunit,
+        'members' => mapping::named_members_of($openunit),
         'courses' => $courseoptions,
         'categories' => $categoryoptions,
         'cohorts' => $cohortoptions,
@@ -502,6 +528,7 @@ if ($openunit && isset($nodes[$openunit])) {
         'toomanygroups' => $toomanygroups,
         'profilevalues' => $profilevalues,
         'toomanyvalues' => $toomanyvalues,
+        'selected' => $selectedsources,
     ]))->display();
 
     echo html_writer::link(
@@ -525,6 +552,29 @@ echo html_writer::tag('h3', get_string('manage:units', 'local_reportlms'));
 if (!$nodes) {
     echo html_writer::tag('p', get_string('manage:nounits', 'local_reportlms'), ['class' => 'text-muted']);
 } else {
+    /*
+     * A page at a time, because a real tree is not a short list.
+     *
+     * Measured on a connected site: 284 units, each row counting its own
+     * members, which is 284 membership lookups and a table nobody scrolls to
+     * the end of. Fifty is about a screen and a half.
+     *
+     * Only the rows are paged. Everything below this table, the sector picker
+     * and the manager register, still reads the whole tree: a unit you cannot
+     * see on page one is still a unit you may put somebody in.
+     */
+    $unitsperpage = 50;
+    $unitpage = optional_param('page', 0, PARAM_INT);
+    $totalunits = count($nodes);
+
+    if ($unitpage * $unitsperpage >= $totalunits) {
+        // A stale page number, after deleting the last unit on the last page.
+        // Landing on an empty table reads as the tree having vanished.
+        $unitpage = 0;
+    }
+
+    $shownnodes = array_slice($nodes, $unitpage * $unitsperpage, $unitsperpage, true);
+
     $table = new html_table();
     $table->head = [
         get_string('manage:unit', 'local_reportlms'),
@@ -534,11 +584,12 @@ if (!$nodes) {
         '',
     ];
 
-    foreach ($nodes as $node) {
+    foreach ($shownnodes as $node) {
         $delete = new moodle_url($pageurl, [
             'action' => 'deletenode',
             'nodeid' => $node->id,
             'sesskey' => sesskey(),
+            'page' => $unitpage,
         ]);
 
         /*
@@ -578,6 +629,7 @@ if (!$nodes) {
     }
 
     echo html_writer::table($table);
+    echo $OUTPUT->paging_bar($totalunits, $unitpage, $unitsperpage, $pageurl);
 
     /*
      * Names that appear twice, said once above the table.
