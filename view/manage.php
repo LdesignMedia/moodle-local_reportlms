@@ -291,9 +291,11 @@ if ($openunit && isset($nodes[$openunit])) {
             '',
         ];
 
-        // Who is here because somebody typed their name, as opposed to because
-        // a source drew them. Only the first kind can be removed one at a time.
+        // Three ways to be here, and the row has to say which: a name somebody
+        // typed, a placement the migration left behind, or a source drawing
+        // them. Only the first two are rows, so only they can be removed.
         $named = array_flip(mapping::named_members_of($openunit));
+        $adopted = mapping::adopted_membership();
 
         foreach ($inunit as $userid) {
             $release = new moodle_url($pageurl, [
@@ -322,13 +324,21 @@ if ($openunit && isset($nodes[$openunit])) {
              * "everybody on that course". The honest answer is to say where
              * they came from and point at the source that would change it.
              */
-            $bysource = !isset($named[$userid]);
+            $isnamed = isset($named[$userid]);
+            $isadopted = !$isnamed && (int) ($adopted[$userid] ?? 0) === $openunit;
+            $bysource = !$isnamed && !$isadopted;
+
+            if ($isnamed) {
+                $why = get_string('manage:why:named', 'local_reportlms');
+            } else if ($isadopted) {
+                $why = html_writer::span(get_string('manage:why:adopted', 'local_reportlms'), 'text-muted');
+            } else {
+                $why = html_writer::span(get_string('manage:why:source', 'local_reportlms'), 'text-muted');
+            }
 
             $peopletable->data[] = [
                 $name,
-                $bysource
-                    ? html_writer::span(get_string('manage:why:source', 'local_reportlms'), 'text-muted')
-                    : get_string('manage:why:named', 'local_reportlms'),
+                $why,
                 $bysource
                     ? ''
                     : html_writer::link($release, get_string('manage:release', 'local_reportlms')),

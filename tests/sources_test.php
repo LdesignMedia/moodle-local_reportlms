@@ -194,6 +194,92 @@ final class sources_test extends \advanced_testcase {
     }
 
     /**
+     * A source beats what the migration left behind.
+     *
+     * The migration wrote one row per learner to reproduce a tree that had been
+     * worked out from profile fields, and stored it the only way there was at
+     * the time: as though somebody had typed every name. Left at that rank it
+     * outranked every source, so on a migrated site a course could draw nobody,
+     * because all 3,262 people were already spoken for.
+     */
+    public function test_a_source_beats_a_placement_the_migration_left(): void {
+        global $DB;
+
+        $course = $this->getDataGenerator()->create_course();
+        $learner = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        $old = mapping::save_node('Where they were', 'department');
+        $new = mapping::save_node('Where the course says', 'department');
+
+        $DB->insert_record('local_reportlms_member', (object) [
+            'nodeid' => $old,
+            'userid' => $learner->id,
+            'source' => mapping::ADOPTED,
+            'timemodified' => time(),
+            'usermodified' => 0,
+        ]);
+
+        mapping::save_sources($new, ['courses' => [$course->id]]);
+
+        $this->assertSame($new, mapping::resolved_membership()[(int) $learner->id]);
+    }
+
+    /**
+     * With no source saying otherwise, the migration's placement stands. It is
+     * the whole organisation on a site that has not started using sources.
+     */
+    public function test_the_migration_stands_where_no_source_speaks(): void {
+        global $DB;
+
+        $learner = $this->getDataGenerator()->create_user();
+        $node = mapping::save_node('Where they were', 'department');
+
+        $DB->insert_record('local_reportlms_member', (object) [
+            'nodeid' => $node,
+            'userid' => $learner->id,
+            'source' => mapping::ADOPTED,
+            'timemodified' => time(),
+            'usermodified' => 0,
+        ]);
+
+        mapping::reset();
+
+        $this->assertSame($node, mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame([], mapping::named_members_of($node), 'Not a name anybody typed.');
+    }
+
+    /**
+     * Two sources shouting over each other leaves the migration's answer
+     * standing, because it is at least an answer.
+     */
+    public function test_a_contested_learner_keeps_what_the_migration_said(): void {
+        global $DB;
+
+        $course = $this->getDataGenerator()->create_course();
+        $learner = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        $was = mapping::save_node('Where they were', 'department');
+        $sales = mapping::save_node('Sales', 'department');
+        $support = mapping::save_node('Support', 'department');
+
+        $DB->insert_record('local_reportlms_member', (object) [
+            'nodeid' => $was,
+            'userid' => $learner->id,
+            'source' => mapping::ADOPTED,
+            'timemodified' => time(),
+            'usermodified' => 0,
+        ]);
+
+        mapping::save_sources($sales, ['courses' => [$course->id]]);
+        mapping::save_sources($support, ['courses' => [$course->id]]);
+
+        $this->assertSame($was, mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame([(int) $learner->id], mapping::contested(), 'Still worth saying out loud.');
+    }
+
+    /**
      * A typed name beats any source, however narrow.
      */
     public function test_a_named_person_beats_a_source(): void {

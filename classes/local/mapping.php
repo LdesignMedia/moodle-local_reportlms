@@ -53,6 +53,23 @@ class mapping {
     /** @var string A row somebody typed. Survives every push. */
     public const MANUAL = 'manual';
 
+    /**
+     * A placement the migration wrote, rather than one a person typed.
+     *
+     * The weakest claim there is, weaker than any source. The migration
+     * reproduced a tree that had been worked out from profile fields, one row
+     * per learner, and stored it the only way there was at the time: as though
+     * somebody had named all 3,262 of them by hand.
+     *
+     * Left as `manual` it outranked every source, so on a migrated site a
+     * course could never draw anybody: they were all already spoken for. It is
+     * a mechanical reproduction of an old guess, and it yields to anything
+     * somebody has since said deliberately.
+     *
+     * @var string
+     */
+    public const ADOPTED = 'adopted';
+
     /** @var string A row derived from a profile field. Rebuilt on every push. */
     public const AUTO = 'auto';
 
@@ -64,6 +81,9 @@ class mapping {
 
     /** @var array<int, int>|null Learner id to node id, sources and manual rows together. */
     protected static $resolved = null;
+
+    /** @var array<int, int>|null Learner id to node id, what the migration left. */
+    protected static $adopted = null;
 
     /** @var array<int, true>|null Learners two units claim equally hard. */
     protected static $contested = null;
@@ -98,6 +118,7 @@ class mapping {
         self::$members = null;
         self::$resolved = null;
         self::$contested = null;
+        self::$adopted = null;
     }
 
     /**
@@ -156,7 +177,14 @@ class mapping {
 
         $claims = self::source_claims();
         $contested = [];
-        $resolved = [];
+
+        /*
+         * The migration's placements, underneath everything.
+         *
+         * Weakest, so a source somebody chose deliberately moves people the
+         * migration merely carried over. See {@see ADOPTED}.
+         */
+        $resolved = self::adopted_membership();
 
         foreach ($claims as $userid => $byrank) {
             ksort($byrank);
@@ -174,6 +202,8 @@ class mapping {
             if (count($best) > 1) {
                 $contested[$userid] = true;
 
+                // Whatever the migration said stands, because it is at least an
+                // answer, and two sources shouting over each other is not.
                 continue;
             }
 
@@ -352,6 +382,28 @@ class mapping {
         }
 
         return $found;
+    }
+
+    /**
+     * The placements the migration wrote.
+     *
+     * @return array<int, int> Learner user id to node id.
+     */
+    public static function adopted_membership(): array {
+        global $DB;
+
+        if (self::$adopted === null) {
+            // Cast, because get_records_menu hands back strings and this feeds
+            // the resolver directly, where every other value is an int.
+            self::$adopted = array_map('intval', $DB->get_records_menu(
+                'local_reportlms_member',
+                ['source' => self::ADOPTED],
+                '',
+                'userid, nodeid'
+            ));
+        }
+
+        return self::$adopted;
     }
 
     /**
@@ -803,7 +855,9 @@ class mapping {
     public static function release(int $userid): void {
         global $DB;
 
-        $DB->delete_records('local_reportlms_member', ['userid' => $userid, 'source' => self::MANUAL]);
+        // Both kinds of stored row: a name somebody typed and a placement the
+        // migration left behind are both things Remove is expected to remove.
+        $DB->delete_records('local_reportlms_member', ['userid' => $userid]);
 
         self::reset();
         userstate::mark_dirty($userid);
