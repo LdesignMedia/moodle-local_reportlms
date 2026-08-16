@@ -150,6 +150,106 @@ final class mapping_test extends \advanced_testcase {
     }
 
     /**
+     * Two units with one name under one parent would be one unit on the wire.
+     *
+     * Not tidiness. A unit's key is its name and its parent's, so a second
+     * `Flexpool A` under `Operatie en Techniek` keys identically to the first,
+     * Report LMS holds one node for that key, and their people merge into
+     * whichever the payload mentioned last. Two rows in the editor, one row on
+     * the dashboard, and nothing on either screen explaining the difference.
+     */
+    public function test_two_units_cannot_share_a_name_under_one_parent(): void {
+        $sector = mapping::save_node('Operatie en Techniek', 'sector');
+        $first = mapping::save_node('Flexpool A', 'department', $sector);
+        mapping::reset();
+
+        $this->assertSame(
+            mapping::nodekey($first),
+            'department:Operatie en Techniek/Flexpool A',
+            'The key a second one would collide with.'
+        );
+
+        $this->expectException(\moodle_exception::class);
+
+        mapping::save_node('Flexpool A', 'department', $sector);
+    }
+
+    /**
+     * Case does not rescue it, because a person reads "Sales" and "sales" as
+     * one department and the key folds them together anyway.
+     */
+    public function test_a_different_case_is_the_same_name(): void {
+        mapping::save_node('Sales', 'department');
+        mapping::reset();
+
+        $this->assertTrue(mapping::name_taken('sales', 'department', null));
+        $this->assertTrue(mapping::name_taken('  SALES  ', 'department', null));
+    }
+
+    /**
+     * The same name under a different parent is a different unit, and stays
+     * allowed. This is the rule the whole node-key design rests on.
+     */
+    public function test_the_same_name_under_another_parent_is_allowed(): void {
+        $transport = mapping::save_node('Transport', 'sector');
+        $office = mapping::save_node('Office', 'sector');
+        mapping::reset();
+
+        $here = mapping::save_node('HR', 'department', $transport);
+        $there = mapping::save_node('HR', 'department', $office);
+        mapping::reset();
+
+        $this->assertNotSame($here, $there);
+        $this->assertSame('department:Transport/HR', mapping::nodekey($here));
+        $this->assertSame('department:Office/HR', mapping::nodekey($there));
+    }
+
+    /**
+     * A sector and a department may share a name, which is what the connected
+     * site actually does: `Commercie` the sector holds `Commercie` the
+     * department. Different kinds, different keys, real data.
+     */
+    public function test_a_sector_and_a_department_may_share_a_name(): void {
+        $sector = mapping::save_node('Commercie', 'sector');
+        $department = mapping::save_node('Commercie', 'department', $sector);
+        mapping::reset();
+
+        $this->assertSame('sector:Commercie', mapping::nodekey($sector));
+        $this->assertSame('department:Commercie/Commercie', mapping::nodekey($department));
+    }
+
+    /**
+     * Renaming a unit to what it is already called is not a collision with
+     * itself.
+     */
+    public function test_a_unit_may_keep_its_own_name(): void {
+        $node = mapping::save_node('Sales', 'department');
+        mapping::reset();
+
+        mapping::save_node('Sales', 'department', null, $node);
+        mapping::reset();
+
+        $this->assertCount(1, mapping::nodes());
+    }
+
+    /**
+     * A name used twice in different places is reported, so the table can say
+     * so rather than leaving two identical rows unexplained.
+     */
+    public function test_a_name_used_twice_is_reported(): void {
+        $transport = mapping::save_node('Transport', 'sector');
+        $office = mapping::save_node('Office', 'sector');
+        mapping::reset();
+
+        mapping::save_node('HR', 'department', $transport);
+        mapping::save_node('HR', 'department', $office);
+        mapping::save_node('Payroll', 'department', $office);
+        mapping::reset();
+
+        $this->assertSame(['HR'], mapping::repeated_names());
+    }
+
+    /**
      * Deleting a unit does not delete the people in it.
      */
     public function test_deleting_a_unit_hands_its_people_back(): void {

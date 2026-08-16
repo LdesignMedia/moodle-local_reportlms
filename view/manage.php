@@ -74,13 +74,26 @@ if ($action !== '' && confirm_sesskey()) {
     switch ($action) {
         case 'addnode':
             $name = trim(required_param('name', PARAM_TEXT));
+            $kind = required_param('kind', PARAM_ALPHA);
+            $parentid = optional_param('parentid', 0, PARAM_INT) ?: null;
 
             if ($name !== '') {
-                mapping::save_node(
-                    $name,
-                    required_param('kind', PARAM_ALPHA),
-                    optional_param('parentid', 0, PARAM_INT) ?: null
-                );
+                /*
+                 * Checked here so the person gets a sentence, rather than
+                 * letting save_node() throw. The exception behind it stays,
+                 * because this is not the only caller and a duplicate name
+                 * produces two units with one key.
+                 */
+                if (mapping::name_taken($name, $kind === 'sector' ? 'sector' : 'department', $parentid)) {
+                    redirect(
+                        $returnurl,
+                        get_string('manage:nametaken', 'local_reportlms', s($name)),
+                        null,
+                        \core\output\notification::NOTIFY_ERROR
+                    );
+                }
+
+                mapping::save_node($name, $kind, $parentid);
             }
             break;
 
@@ -565,6 +578,24 @@ if (!$nodes) {
     }
 
     echo html_writer::table($table);
+
+    /*
+     * Names that appear twice, said once above the table.
+     *
+     * Legal and confusing, which is exactly the combination worth a sentence:
+     * `HR` under Transport and `HR` under Office are two different groups of
+     * people, and two identical-looking rows. The Parent column tells them
+     * apart once somebody knows to look at it, and this is what makes them
+     * know.
+     */
+    $repeated = mapping::repeated_names();
+
+    if ($repeated) {
+        echo html_writer::div(
+            get_string('manage:repeatednames', 'local_reportlms', s(implode(', ', $repeated))),
+            'text-muted small mt-2'
+        );
+    }
 }
 
 $sectors = [0 => get_string('manage:nosector', 'local_reportlms')];

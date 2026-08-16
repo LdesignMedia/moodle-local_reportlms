@@ -291,6 +291,24 @@ class mapping {
             'usermodified' => (int) $USER->id,
         ];
 
+        /*
+         * One name per parent, and this is not a matter of tidiness.
+         *
+         * A unit's key is its name and its parent's: two departments called
+         * Flexpool A under one sector produce the identical key
+         * `department:Operatie en Techniek/Flexpool A`. Report LMS holds one
+         * node for that key, so their people silently merge into whichever the
+         * payload mentioned last, and the two rows in the editor disagree with
+         * the one row on the dashboard with nothing to explain the difference.
+         *
+         * Refused rather than merged, because the editor cannot know which of
+         * the two the person meant, and quietly folding one into the other is
+         * how somebody loses a department they were halfway through building.
+         */
+        if (self::name_taken($record->name, $record->kind, $record->parentid, $id)) {
+            throw new \moodle_exception('manage:nametaken', 'local_reportlms', '', $record->name);
+        }
+
         if ($id !== null) {
             $record->id = $id;
             $DB->update_record('local_reportlms_node', $record);
@@ -301,6 +319,76 @@ class mapping {
         self::reset();
 
         return $id;
+    }
+
+    /**
+     * Whether a unit of this kind and name already sits under this parent.
+     *
+     * Case-insensitive, because "Sales" and "sales" are one department to
+     * everybody except a database, and they key the same way once the name is
+     * read back out.
+     *
+     * @param string $name
+     * @param string $kind
+     * @param int|null $parentid
+     * @param int|null $exceptid The unit being renamed, which may keep its own name.
+     *
+     * @return bool
+     */
+    public static function name_taken(string $name, string $kind, ?int $parentid, ?int $exceptid = null): bool {
+        $wanted = \core_text::strtolower(trim($name));
+
+        foreach (self::nodes() as $node) {
+            if ($exceptid !== null && (int) $node->id === $exceptid) {
+                continue;
+            }
+
+            if ($node->kind !== $kind) {
+                continue;
+            }
+
+            $nodeparent = $node->parentid === null ? null : (int) $node->parentid;
+
+            if ($nodeparent !== ($parentid === null ? null : (int) $parentid)) {
+                continue;
+            }
+
+            if (\core_text::strtolower(trim($node->name)) === $wanted) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Unit names used more than once anywhere in the tree.
+     *
+     * Not an error, and worth saying out loud. `HR` under Transport and `HR`
+     * under Office are two real groups of people with two different keys, so
+     * the tree allows them. They are also two identical-looking rows in a
+     * table, and somebody reading it has no way to tell which is which without
+     * opening both.
+     *
+     * @return array<int, string> The repeated names, as first written.
+     */
+    public static function repeated_names(): array {
+        $seen = [];
+        $repeated = [];
+
+        foreach (self::nodes() as $node) {
+            $key = $node->kind . ':' . \core_text::strtolower(trim($node->name));
+
+            if (isset($seen[$key])) {
+                $repeated[$key] = $seen[$key];
+
+                continue;
+            }
+
+            $seen[$key] = $node->name;
+        }
+
+        return array_values($repeated);
     }
 
     /**
