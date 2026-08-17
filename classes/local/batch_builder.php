@@ -81,19 +81,29 @@ class batch_builder {
          * blocks together, so a manager cannot vanish from the enrolment
          * counts yet linger in the attempts bands.
          *
-         * This governs what is written from here on; the SaaS deletes nothing
-         * on its own, so rows pushed before this rule existed stay until the
-         * environment is reset or fact removal grows contract semantics.
+         * The enrolments block is the one exception, and deliberately so: see
+         * the flag below. Every other block is still gated here.
          */
         $countable = gradable::pairs($userids);
 
         foreach (enrolments::collect($userids) as $row) {
-            if (!isset($countable[$row->userid][(int) $row->courseid])) {
-                continue;
-            }
             /*
-             * The deadline rides with the enrolment, not with the completion.
+             * Sent whether or not it counts, and flagged rather than dropped.
              *
+             * Dropping a non-gradable enrolment made the slice lie about the
+             * learner: somebody promoted to course Manager disappeared from
+             * their own block while still being enrolled, so the row already on
+             * the SaaS had nothing to overwrite it and stayed countable
+             * forever. That is open issue #13, and it is also what stopped the
+             * SaaS reading a slice as the whole truth about a learner — the
+             * absence of a course could mean unenrolled or merely not gradable,
+             * and no reader can tell those apart.
+             *
+             * With the flag it can. `counted` carries the gradable-role rule,
+             * the aggregation filters on it exactly where it used to rely on
+             * the row not being there, and no figure moves.
+             *
+             * The deadline rides with the enrolment, not with the completion.
              * Everybody enrolled has an enrolment; only somebody who has
              * started has a completion row. Carrying the deadline on the
              * completion would mean a learner who never opened the course could
@@ -105,6 +115,7 @@ class batch_builder {
                 'enrolled_at' => self::iso((int) $row->enrolled_at),
                 'active' => (bool) $row->active,
                 'due_at' => $row->due_at !== null ? self::iso((int) $row->due_at) : null,
+                'counted' => isset($countable[$row->userid][(int) $row->courseid]),
             ];
         }
         foreach (completion::collect($userids) as $row) {
