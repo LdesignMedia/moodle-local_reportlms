@@ -187,6 +187,39 @@ if ($action !== '' && confirm_sesskey()) {
 
             break;
 
+        case 'addmanager':
+            /*
+             * Always a person. The role option is gone; see name_manager.
+             *
+             * manageruserid, not userid: the person form on this same page owns
+             * userid, and name_manager renames its field to keep the two
+             * autocompletes from colliding on one element id.
+             */
+            mapping::add_manager(
+                required_param('nodeid', PARAM_INT),
+                optional_param('manageruserid', 0, PARAM_INT) ?: null,
+                null
+            );
+            break;
+
+        case 'namehere':
+            // Promoting somebody the capability already found into somebody the
+            // register states outright. Same act as the form below, reached from
+            // the row that made it obvious.
+            mapping::add_manager(
+                required_param('nodeid', PARAM_INT),
+                required_param('userid', PARAM_INT),
+                null
+            );
+            break;
+
+        case 'movemanager':
+            mapping::move_manager(
+                required_param('id', PARAM_INT),
+                required_param('nodeid', PARAM_INT)
+            );
+            break;
+
         case 'removemanager':
             mapping::remove_manager(required_param('id', PARAM_INT));
             break;
