@@ -361,6 +361,25 @@ if ($openunit && isset($nodes[$openunit])) {
         }
     }
 
+    /*
+     * The way back, above the list rather than under it.
+     *
+     * A unit of four hundred people put this button four hundred rows down, so
+     * leaving meant scrolling past everything you had just finished reading, or
+     * reaching for the browser's own back button, which loses the filter the
+     * units table was under. It is the first control on the page because it is
+     * the one somebody wants the moment they are done.
+     */
+    echo html_writer::div(
+        html_writer::link(
+            // The filter the table was under, minus the unit that was open.
+            new moodle_url($pageurl, $filterparams),
+            get_string('manage:backtounits', 'local_reportlms'),
+            ['class' => 'btn btn-secondary']
+        ),
+        'mb-3'
+    );
+
     echo html_writer::tag('h3', get_string(
         'manage:peoplein',
         'local_reportlms',
@@ -663,12 +682,6 @@ if ($openunit && isset($nodes[$openunit])) {
         'toomanyvalues' => $toomanyvalues,
         'selected' => $selectedsources,
     ]))->display();
-
-    echo html_writer::link(
-        $pageurl,
-        get_string('manage:backtounits', 'local_reportlms'),
-        ['class' => 'btn btn-secondary']
-    );
 
     echo $OUTPUT->footer();
 
