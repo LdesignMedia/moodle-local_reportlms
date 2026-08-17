@@ -78,7 +78,7 @@
         <FIELD NAME="nodeid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="itemtype" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false" COMMENT="course, category, group, cohort or profilefield. Also the specificity order: a group is narrower than the course holding it."/>
         <FIELD NAME="itemid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="course.id, course_categories.id, groups.id, cohort.id, or user_info_field.id for a profile value."/>
-        <FIELD NAME="itemvalue" TYPE="char" LENGTH="255" NOTNULL="true" DEFAULT="" SEQUENCE="false" COMMENT="The profile value for itemtype=profilefield, empty for the rest. Empty rather than null so the unique index treats two of them as the same row."/>
+        <FIELD NAME="itemvalue" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="The profile value for itemtype=profilefield, empty for the rest. Empty rather than null so the unique index treats two of them as the same row. No column default: every writer states the value, and XMLDB rejects an empty string as a default."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="usermodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
