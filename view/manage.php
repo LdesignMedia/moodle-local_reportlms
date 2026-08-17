@@ -70,6 +70,34 @@ $action = optional_param('action', '', PARAM_ALPHA);
 $openunit = optional_param('people', 0, PARAM_INT);
 $returnurl = $openunit ? new moodle_url($pageurl, ['people' => $openunit]) : $pageurl;
 
+/**
+ * What a multi-select holds, for a box that may have been left alone.
+ *
+ * An autocomplete with multiple => true posts a scalar empty string when
+ * nothing is selected, rather than an empty array, and optional_param_array()
+ * reports that as a notice for every such box on the page.
+ *
+ * The notices are harmless on their own. What they cost is the redirect: output
+ * before redirect() makes Moodle abandon it and print "Error output, so
+ * disabling automatic redirect" instead, so a save that worked ends on a page
+ * of warnings that has to be clicked through. Reading the raw value only to ask
+ * whether it is an array keeps the cleaning where it belongs.
+ *
+ * @param string $name
+ * @param string $type A PARAM_* constant.
+ *
+ * @return array
+ */
+function local_reportlms_multiselect_param(string $name, string $type): array {
+    $raw = $_POST[$name] ?? $_GET[$name] ?? null;
+
+    if (!is_array($raw)) {
+        return [];
+    }
+
+    return optional_param_array($name, [], $type);
+}
+
 if ($action !== '' && confirm_sesskey()) {
     switch ($action) {
         case 'addnode':
@@ -103,13 +131,13 @@ if ($action !== '' && confirm_sesskey()) {
 
         case 'place':
             $nodeid = optional_param('nodeid', 0, PARAM_INT);
-            $chosen = optional_param_array('userid', [], PARAM_INT);
+            $chosen = local_reportlms_multiselect_param('userid', PARAM_INT);
             $sources = [
-                'courses' => optional_param_array('courseids', [], PARAM_INT),
-                'categories' => optional_param_array('categoryids', [], PARAM_INT),
-                'cohorts' => optional_param_array('cohortids', [], PARAM_INT),
-                'groups' => optional_param_array('groupids', [], PARAM_INT),
-                'profilevalues' => optional_param_array('profilevalues', [], PARAM_TEXT),
+                'courses' => local_reportlms_multiselect_param('courseids', PARAM_INT),
+                'categories' => local_reportlms_multiselect_param('categoryids', PARAM_INT),
+                'cohorts' => local_reportlms_multiselect_param('cohortids', PARAM_INT),
+                'groups' => local_reportlms_multiselect_param('groupids', PARAM_INT),
+                'profilevalues' => local_reportlms_multiselect_param('profilevalues', PARAM_TEXT),
             ];
 
             /*
