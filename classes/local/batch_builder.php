@@ -91,11 +91,20 @@ class batch_builder {
             if (!isset($countable[$row->userid][(int) $row->courseid])) {
                 continue;
             }
+            /*
+             * The deadline rides with the enrolment, not with the completion.
+             *
+             * Everybody enrolled has an enrolment; only somebody who has
+             * started has a completion row. Carrying the deadline on the
+             * completion would mean a learner who never opened the course could
+             * not be late for it, which is the case the tile exists to show.
+             */
             $peruser[$row->userid]['enrolments'][] = [
                 'learner_pid' => pseudonym::learner($row->userid),
                 'course_ref' => pseudonym::course((int) $row->courseid),
                 'enrolled_at' => self::iso((int) $row->enrolled_at),
                 'active' => (bool) $row->active,
+                'due_at' => $row->due_at !== null ? self::iso((int) $row->due_at) : null,
             ];
         }
         foreach (completion::collect($userids) as $row) {

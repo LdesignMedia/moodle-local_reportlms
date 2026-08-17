@@ -49,7 +49,8 @@ class enrolments {
      *
      * @param array<int, int> $userids Real user ids, already exclusion-filtered.
      *
-     * @return array<int, \stdClass> Rows: userid, courseid, enrolled_at (unix), active (0/1).
+     * @return array<int, \stdClass> Rows: userid, courseid, enrolled_at (unix), active (0/1),
+     *         due_at (unix|null, the enrolment's end where every method has one).
      */
     public static function collect(array $userids): array {
         global $DB;
@@ -60,12 +61,24 @@ class enrolments {
 
         [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
 
-        // CASE picks the intended start when set, falling back to the moment
-        // the enrolment was created. MIN/MAX collapse multiple enrolment
-        // methods into the single row the contract expects.
+        /*
+         * CASE picks the intended start when set, falling back to the moment
+         * the enrolment was created. MIN/MAX collapse multiple enrolment
+         * methods into the single row the contract expects.
+         *
+         * The two deadline columns are a pair, and neither is the answer alone.
+         * timeend = 0 means unlimited, which is an absence of a deadline rather
+         * than a deadline in 1970, so MAX(timeend) on its own is wrong in the
+         * one direction that matters: a learner holding an unlimited enrolment
+         * and a bounded one can always finish, and would have been handed the
+         * bounded date. allbounded answers "is every one of them bounded", and
+         * only then does latestend mean anything.
+         */
         $sql = "SELECT ue.userid, e.courseid,
                        MIN(CASE WHEN ue.timestart > 0 THEN ue.timestart ELSE ue.timecreated END) AS enrolled_at,
-                       MAX(CASE WHEN ue.status = 0 AND e.status = 0 THEN 1 ELSE 0 END) AS active
+                       MAX(CASE WHEN ue.status = 0 AND e.status = 0 THEN 1 ELSE 0 END) AS active,
+                       MIN(CASE WHEN ue.timeend > 0 THEN 1 ELSE 0 END) AS allbounded,
+                       MAX(ue.timeend) AS latestend
                   FROM {user_enrolments} ue
                   JOIN {enrol} e ON e.id = ue.enrolid
                   JOIN {user} u ON u.id = ue.userid
@@ -81,6 +94,20 @@ class enrolments {
         $rows = [];
         $recordset = $DB->get_recordset_sql($sql, $params);
         foreach ($recordset as $record) {
+            /*
+             * The deadline, folded down to the one field the contract carries.
+             *
+             * Done here rather than in SQL because "every enrolment is bounded"
+             * and "the latest of them" are two facts that only mean something
+             * together, and a database expression saying so would be read as a
+             * puzzle rather than as a rule.
+             */
+            $record->due_at = (int) $record->allbounded === 1 && (int) $record->latestend > 0
+                ? (int) $record->latestend
+                : null;
+
+            unset($record->allbounded, $record->latestend);
+
             $rows[] = $record;
         }
         $recordset->close();
