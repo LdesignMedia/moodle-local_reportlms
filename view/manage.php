@@ -68,7 +68,33 @@ $action = optional_param('action', '', PARAM_ALPHA);
  * four placements should not have to click the number four times.
  */
 $openunit = optional_param('people', 0, PARAM_INT);
-$returnurl = $openunit ? new moodle_url($pageurl, ['people' => $openunit]) : $pageurl;
+
+/*
+ * What the units table is filtered to, read up here so an action can hand it
+ * back.
+ *
+ * Deleting a unit out of a filtered table used to drop you into the unfiltered
+ * one, which on a tree of 284 is the same as losing your place. The filter is a
+ * question somebody asked, and answering a different one because they clicked
+ * Delete is not an answer.
+ *
+ * `manager` is a user id, with two values that are not: 0 for anybody, and -1
+ * for the units nobody runs, which is the one people actually go looking for.
+ */
+$unitsearch = trim(optional_param('q', '', PARAM_TEXT));
+$managerfilter = optional_param('manager', 0, PARAM_INT);
+
+$filterparams = [];
+
+if ($unitsearch !== '') {
+    $filterparams['q'] = $unitsearch;
+}
+
+if ($managerfilter !== 0) {
+    $filterparams['manager'] = $managerfilter;
+}
+
+$returnurl = new moodle_url($pageurl, $filterparams + ($openunit ? ['people' => $openunit] : []));
 
 /**
  * What a multi-select holds, for a box that may have been left alone.
@@ -251,6 +277,19 @@ if ($action !== '' && confirm_sesskey()) {
         case 'removemanager':
             mapping::remove_manager(required_param('id', PARAM_INT));
             break;
+
+        /*
+         * An action nobody handles is a bug, and it has to say so.
+         *
+         * Three cases were lost in a rewrite of the one above them, and the page
+         * went on offering them: the form submitted, the switch matched nothing,
+         * the redirect below ran, and the page came back looking exactly as it
+         * does after a save. Adding a manager did nothing at all for as long as
+         * it took somebody to notice, because a silent fall-through and a
+         * success are the same picture.
+         */
+        default:
+            throw new coding_exception('Unhandled action on the organisation editor: ' . $action);
     }
 
     redirect($returnurl);
@@ -643,9 +682,126 @@ echo html_writer::tag('p', get_string('manage:intro', 'local_reportlms'), ['clas
 
 echo html_writer::tag('h3', get_string('manage:units', 'local_reportlms'));
 
+/*
+ * Who runs each unit, worked out once for the table and the filter both.
+ *
+ * Roles are skipped. A role names a set that changes on its own, so "filter by
+ * manager" cannot mean a role without meaning something different tomorrow;
+ * the register below still lists them, because there it is a fact about access
+ * rather than a person to filter by.
+ */
+$managerof = [];
+$managernames = [];
+
+foreach (mapping::managers() as $managerrow) {
+    if ($managerrow->roleid) {
+        continue;
+    }
+
+    $manageruser = core_user::get_user((int) $managerrow->userid);
+    $managername = $manageruser
+        ? fullname($manageruser)
+        : get_string('manage:goneuser', 'local_reportlms');
+
+    $managerof[(int) $managerrow->nodeid][(int) $managerrow->userid] = $managername;
+    $managernames[(int) $managerrow->userid] = $managername;
+}
+
+\core_collator::asort($managernames);
+
 if (!$nodes) {
     echo html_writer::tag('p', get_string('manage:nounits', 'local_reportlms'), ['class' => 'text-muted']);
 } else {
+    /*
+     * The filter, and it runs here rather than in the browser.
+     *
+     * The table pages at fifty. A filter that hid rows on the page you happen
+     * to be on would answer "no units match" while the match sat on page four,
+     * which is a wrong answer delivered instantly. So the whole tree is
+     * narrowed first and the pager runs over what is left.
+     */
+    $filterform = html_writer::start_tag('form', [
+        'method' => 'get',
+        'action' => $pageurl->out_omit_querystring(),
+        'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3',
+    ]);
+
+    $filterform .= html_writer::empty_tag('input', [
+        'type' => 'text',
+        'name' => 'q',
+        'value' => $unitsearch,
+        'placeholder' => get_string('manage:search', 'local_reportlms'),
+        'aria-label' => get_string('manage:search', 'local_reportlms'),
+        'class' => 'form-control d-inline-block w-auto',
+    ]);
+
+    $managerchoices = [
+        0 => get_string('manage:anymanager', 'local_reportlms'),
+        -1 => get_string('manage:nomanager', 'local_reportlms'),
+    ] + $managernames;
+
+    $filterform .= html_writer::select(
+        $managerchoices,
+        'manager',
+        $managerfilter,
+        false,
+        ['class' => 'form-select d-inline-block w-auto', 'aria-label' => get_string('manage:manager', 'local_reportlms')]
+    );
+
+    $filterform .= html_writer::tag('button', get_string('search'), [
+        'type' => 'submit',
+        'class' => 'btn btn-secondary',
+    ]);
+
+    if ($filterparams) {
+        $filterform .= html_writer::link(
+            $pageurl,
+            get_string('manage:showall', 'local_reportlms'),
+            ['class' => 'btn btn-link']
+        );
+    }
+
+    $filterform .= html_writer::end_tag('form');
+
+    echo $filterform;
+
+    $shownodes = $nodes;
+
+    if ($filterparams) {
+        $needle = \core_text::strtolower($unitsearch);
+
+        $shownodes = array_filter($nodes, static function ($node) use ($nodes, $needle, $managerfilter, $managerof) {
+            if ($needle !== '') {
+                /*
+                 * The parent counts as part of the name.
+                 *
+                 * Two units may legally be called HR, one under Transport and
+                 * one under Office, and the only thing that tells them apart is
+                 * the sector above them. Searching "transport" should find the
+                 * one that lives there.
+                 */
+                $parent = $node->parentid && isset($nodes[$node->parentid])
+                    ? $nodes[$node->parentid]->name
+                    : '';
+
+                // Deliberately strpos and not str_contains: $plugin->requires
+                // still names Moodle 3.9, which runs on PHP 7.
+                if (strpos(\core_text::strtolower($node->name . ' ' . $parent), $needle) === false) {
+                    return false;
+                }
+            }
+
+            if ($managerfilter === -1) {
+                return empty($managerof[(int) $node->id]);
+            }
+
+            if ($managerfilter > 0) {
+                return isset($managerof[(int) $node->id][$managerfilter]);
+            }
+
+            return true;
+        });
+    }
     /*
      * A page at a time, because a real tree is not a short list.
      *
@@ -659,15 +815,16 @@ if (!$nodes) {
      */
     $unitsperpage = 50;
     $unitpage = optional_param('page', 0, PARAM_INT);
-    $totalunits = count($nodes);
+    $totalunits = count($shownodes);
 
     if ($unitpage * $unitsperpage >= $totalunits) {
-        // A stale page number, after deleting the last unit on the last page.
-        // Landing on an empty table reads as the tree having vanished.
+        // A stale page number, after deleting the last unit on the last page or
+        // after a filter that leaves fewer pages than you were on. Landing on an
+        // empty table reads as the tree having vanished.
         $unitpage = 0;
     }
 
-    $shownnodes = array_slice($nodes, $unitpage * $unitsperpage, $unitsperpage, true);
+    $shownnodes = array_slice($shownodes, $unitpage * $unitsperpage, $unitsperpage, true);
 
     // Every unit's headcount in one pass, rather than walking the whole site's
     // membership once per row.
@@ -678,12 +835,13 @@ if (!$nodes) {
         get_string('manage:unit', 'local_reportlms'),
         get_string('manage:kind', 'local_reportlms'),
         get_string('manage:parent', 'local_reportlms'),
+        get_string('manage:manager', 'local_reportlms'),
         get_string('manage:people', 'local_reportlms'),
         '',
     ];
 
     foreach ($shownnodes as $node) {
-        $delete = new moodle_url($pageurl, [
+        $delete = new moodle_url($returnurl, [
             'action' => 'deletenode',
             'nodeid' => $node->id,
             'sesskey' => sesskey(),
@@ -691,15 +849,16 @@ if (!$nodes) {
         ]);
 
         /*
-         * The count is the way in to the people behind it.
+         * The count is a number, and only that.
          *
-         * There used to be a second table further down listing every
-         * placed person on the site, which answered "who is placed" and
-         * not "who is in this unit", and grew a unit column to compensate. The
-         * number was already on this row; it just was not clickable.
+         * It used to be a link on the rows that had people and plain text on the
+         * rows that did not, so the same column meant two different things down
+         * one table, and the row with nobody in it, the one most in need of the
+         * way in, was the row that did not offer it. The people button on the
+         * right is that way in, on every row.
          */
         $placed = $membercounts[(int) $node->id] ?? 0;
-        $peopleurl = new moodle_url($pageurl, ['people' => $node->id]);
+        $peopleurl = new moodle_url($returnurl, ['people' => $node->id]);
 
         /*
          * An icon on every row, not only on the rows that already have people.
@@ -717,17 +876,57 @@ if (!$nodes) {
             ]
         );
 
+        /*
+         * A sector and a department, told apart before the Level column is read.
+         *
+         * Layers for the thing that holds other units, a folder for the thing
+         * that holds people. The word stays in its own column: the icon is how
+         * the eye sorts a screen of fifty rows, not how anybody finds out what
+         * the row is.
+         */
+        $kindlabel = get_string('manage:kind:' . $node->kind, 'local_reportlms');
+        $kindicon = $OUTPUT->pix_icon(
+            $node->kind === 'sector' ? 'e/layers' : 'i/folder',
+            $kindlabel,
+            'moodle',
+            ['class' => 'me-2 text-muted']
+        );
+
+        $managers = $managerof[(int) $node->id] ?? [];
+
         $table->data[] = [
-            s($node->name),
-            get_string('manage:kind:' . $node->kind, 'local_reportlms'),
+            $kindicon . s($node->name),
+            $kindlabel,
             $node->parentid && isset($nodes[$node->parentid]) ? s($nodes[$node->parentid]->name) : '-',
-            $placed ? html_writer::link($peopleurl, $placed) : $placed,
+            $managers
+                ? s(implode(', ', $managers))
+                : html_writer::tag(
+                    'span',
+                    get_string('manage:nomanager', 'local_reportlms'),
+                    ['class' => 'text-muted']
+                ),
+            $placed,
             $peoplelink . ' &nbsp; ' . html_writer::link($delete, get_string('delete'), ['class' => 'text-danger']),
         ];
     }
 
-    echo html_writer::table($table);
-    echo $OUTPUT->paging_bar($totalunits, $unitpage, $unitsperpage, $pageurl);
+    if ($table->data) {
+        echo html_writer::table($table);
+        echo $OUTPUT->paging_bar($totalunits, $unitpage, $unitsperpage, $returnurl);
+    } else {
+        /*
+         * An empty filtered table says why it is empty.
+         *
+         * A table with a heading and no rows is the same picture as a tree that
+         * has been deleted, and the filter that caused it is two controls up
+         * the page where somebody who has scrolled cannot see it.
+         */
+        echo html_writer::div(
+            get_string('manage:nomatch', 'local_reportlms')
+            . ' ' . html_writer::link($pageurl, get_string('manage:showall', 'local_reportlms')),
+            'alert alert-info'
+        );
+    }
 
     /*
      * Names that appear twice, said once above the table.
