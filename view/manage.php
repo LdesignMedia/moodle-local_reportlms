@@ -147,8 +147,20 @@ if ($action !== '' && confirm_sesskey()) {
              */
             mapping::save_sources($nodeid, $sources);
 
+            /*
+             * Compared against every row this unit holds, not only the typed
+             * ones.
+             *
+             * A row the migration left behind is in the box, so it has to be in
+             * the comparison too: measured against typed names alone, every one
+             * of them looked like a name the person had just added, and saving
+             * an untouched form would have rewritten them all.
+             *
+             * A row that survives is left exactly as it is, keeping whatever
+             * rank it had. Only what somebody adds becomes a typed name.
+             */
             $wanted = array_flip(array_filter($chosen));
-            $current = array_flip(mapping::named_members_of($nodeid));
+            $current = array_flip(mapping::placed_members_of($nodeid));
 
             $added = array_diff_key($wanted, $current);
             $removed = array_diff_key($current, $wanted);
@@ -541,7 +553,7 @@ if ($openunit && isset($nodes[$openunit])) {
 
     (new \local_reportlms\form\place_person($pageurl->out(false), [
         'nodeid' => $openunit,
-        'members' => mapping::named_members_of($openunit),
+        'members' => mapping::placed_members_of($openunit),
         'courses' => $courseoptions,
         'categories' => $categoryoptions,
         'cohorts' => $cohortoptions,

@@ -368,6 +368,89 @@ final class sources_test extends \advanced_testcase {
     }
 
     /**
+     * The Person box holds every individual placement, whoever made it.
+     *
+     * A row the migration carried over is still a statement about one person,
+     * still visible in the people list and still removable, so it belongs in
+     * the box that lists individuals. Only the people a source drew are absent,
+     * because taking one of those out of the box would not remove them.
+     */
+    public function test_the_person_box_holds_migrated_placements_too(): void {
+        global $DB;
+
+        $course = $this->getDataGenerator()->create_course();
+        $drawn = $this->getDataGenerator()->create_user();
+        $typed = $this->getDataGenerator()->create_user();
+        $carried = $this->getDataGenerator()->create_user();
+
+        $this->getDataGenerator()->enrol_user($drawn->id, $course->id);
+
+        $node = mapping::save_node('Flexpool A', 'department');
+        mapping::save_sources($node, ['courses' => [$course->id]]);
+        mapping::place((int) $typed->id, $node);
+
+        $DB->insert_record('local_reportlms_member', (object) [
+            'nodeid' => $node,
+            'userid' => $carried->id,
+            'source' => mapping::ADOPTED,
+            'timemodified' => time(),
+            'usermodified' => 0,
+        ]);
+
+        mapping::reset();
+
+        $inbox = mapping::placed_members_of($node);
+        sort($inbox);
+
+        $expected = [(int) $typed->id, (int) $carried->id];
+        sort($expected);
+
+        $this->assertSame($expected, $inbox);
+        $this->assertNotContains((int) $drawn->id, $inbox, 'A source is not an individual.');
+
+        // And the unit still holds all three.
+        $this->assertCount(3, mapping::members_of($node));
+    }
+
+    /**
+     * Saving an untouched form changes nothing, and in particular does not
+     * promote a migrated placement into a typed one.
+     *
+     * Promotion would be silent and one-way: those rows outrank every source
+     * once they are typed names, so a unit that had merely been opened would
+     * stop responding to the sources somebody adds to it afterwards.
+     */
+    public function test_a_migrated_placement_survives_being_saved_back(): void {
+        global $DB;
+
+        $carried = $this->getDataGenerator()->create_user();
+        $node = mapping::save_node('Flexpool A', 'department');
+
+        $DB->insert_record('local_reportlms_member', (object) [
+            'nodeid' => $node,
+            'userid' => $carried->id,
+            'source' => mapping::ADOPTED,
+            'timemodified' => time(),
+            'usermodified' => 0,
+        ]);
+
+        mapping::reset();
+
+        // What the editor does with a form nobody edited: the box came back
+        // holding exactly what it opened with, so nothing is added or removed.
+        $wanted = array_flip(mapping::placed_members_of($node));
+        $current = array_flip(mapping::placed_members_of($node));
+
+        $this->assertSame([], array_diff_key($wanted, $current));
+        $this->assertSame([], array_diff_key($current, $wanted));
+
+        $this->assertSame(
+            mapping::ADOPTED,
+            $DB->get_field('local_reportlms_member', 'source', ['nodeid' => $node, 'userid' => $carried->id])
+        );
+    }
+
+    /**
      * The headcount beside a course is the number choosing it would draw.
      *
      * A promise counted differently from the thing it describes is worse than

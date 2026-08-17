@@ -407,6 +407,37 @@ class mapping {
     }
 
     /**
+     * Everybody this unit holds by a row of their own, however it got there.
+     *
+     * What the Person box holds, and what saving the form compares against.
+     * A name somebody typed and a placement the migration carried over are both
+     * statements about one person, both visible in the people list, and both
+     * removable, so the box that lists individuals lists both.
+     *
+     * Only the people a source drew are absent, because they are not
+     * individuals to this unit: they are a consequence of a sentence, and
+     * taking one out of the box would not remove them.
+     *
+     * Kept apart from {@see named_members_of}, which is manual rows only and
+     * answers the different question the people list asks: not "is this person
+     * placed" but "why".
+     *
+     * @param int $nodeid
+     *
+     * @return array<int, int> User ids.
+     */
+    public static function placed_members_of(int $nodeid): array {
+        global $DB;
+
+        return array_map('intval', $DB->get_fieldset_select(
+            'local_reportlms_member',
+            'userid',
+            'nodeid = :nodeid',
+            ['nodeid' => $nodeid]
+        ));
+    }
+
+    /**
      * How many people each unit holds, in one pass.
      *
      * The units table asks this for every row it draws, and members_of() walks
