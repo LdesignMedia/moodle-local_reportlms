@@ -428,6 +428,10 @@ if ($openunit && isset($nodes[$openunit])) {
         $named = array_flip(mapping::named_members_of($openunit));
         $adopted = mapping::adopted_membership();
 
+        // Which of this unit's sources produced each drawn row, by name. What
+        // somebody has to go and change is the source, so the row names it.
+        $drawnby = mapping::drawn_by($openunit);
+
         foreach ($inunit as $userid) {
             $release = new moodle_url($pageurl, [
                 'action' => 'place',
@@ -464,7 +468,31 @@ if ($openunit && isset($nodes[$openunit])) {
             } else if ($isadopted) {
                 $why = html_writer::span(get_string('manage:why:adopted', 'local_reportlms'), 'text-muted');
             } else {
-                $why = html_writer::span(get_string('manage:why:source', 'local_reportlms'), 'text-muted');
+                /*
+                 * Named sources where they can be worked out, the general
+                 * sentence where they cannot.
+                 *
+                 * They cannot when the thing behind the source has been deleted
+                 * since it drew somebody, which is a state the next read clears
+                 * up by itself, so the fallback is a sentence rather than a
+                 * warning about it.
+                 */
+                $reasons = [];
+
+                foreach ($drawnby[$userid] ?? [] as $source) {
+                    $reasons[] = get_string(
+                        'manage:source:' . $source['kind'],
+                        'local_reportlms',
+                        s($source['name'])
+                    );
+                }
+
+                $why = html_writer::span(
+                    $reasons
+                        ? get_string('manage:why:drawnby', 'local_reportlms', implode(', ', $reasons))
+                        : get_string('manage:why:source', 'local_reportlms'),
+                    'text-muted'
+                );
             }
 
             $peopletable->data[] = [

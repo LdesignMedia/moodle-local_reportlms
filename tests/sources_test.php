@@ -518,6 +518,76 @@ final class sources_test extends \advanced_testcase {
     }
 
     /**
+     * A drawn row says which source drew it, by name.
+     *
+     * The editor used to print "drawn by a source" on every one of these, which
+     * names our concept instead of answering the question: somebody who cannot
+     * remove the row needs to know what to go and change.
+     */
+    public function test_a_drawn_person_names_the_source_that_drew_them(): void {
+        $course = $this->getDataGenerator()->create_course(['fullname' => 'VCA basis']);
+        $learner = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+
+        $node = mapping::save_node('Transport', 'department');
+        mapping::save_sources($node, ['courses' => [$course->id]]);
+        mapping::reset();
+
+        $drawn = mapping::drawn_by($node);
+
+        $this->assertSame(
+            [['kind' => 'course', 'name' => 'VCA basis']],
+            $drawn[(int) $learner->id]
+        );
+    }
+
+    /**
+     * Two sources drawing one person name both, because either one would have to
+     * change to move them.
+     */
+    public function test_somebody_two_sources_draw_names_both(): void {
+        $course = $this->getDataGenerator()->create_course(['fullname' => 'BHV Basis']);
+        $cohort = $this->getDataGenerator()->create_cohort(['name' => 'Nieuwe medewerkers']);
+        $learner = $this->getDataGenerator()->create_user();
+
+        $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        cohort_add_member($cohort->id, $learner->id);
+
+        $node = mapping::save_node('Warehouse', 'department');
+        mapping::save_sources($node, ['courses' => [$course->id], 'cohorts' => [$cohort->id]]);
+        mapping::reset();
+
+        $named = array_column(mapping::drawn_by($node)[(int) $learner->id], 'name');
+        sort($named);
+
+        $this->assertSame(['BHV Basis', 'Nieuwe medewerkers'], $named);
+    }
+
+    /**
+     * A source belonging to another unit says nothing about this one's rows.
+     */
+    public function test_it_only_names_this_units_own_sources(): void {
+        $ours = $this->getDataGenerator()->create_course(['fullname' => 'Ours']);
+        $theirs = $this->getDataGenerator()->create_course(['fullname' => 'Theirs']);
+        $learner = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
+
+        $this->getDataGenerator()->enrol_user($learner->id, $ours->id);
+        $this->getDataGenerator()->enrol_user($other->id, $theirs->id);
+
+        $mine = mapping::save_node('Mine', 'department');
+        $yours = mapping::save_node('Yours', 'department');
+        mapping::save_sources($mine, ['courses' => [$ours->id]]);
+        mapping::save_sources($yours, ['courses' => [$theirs->id]]);
+        mapping::reset();
+
+        $drawn = mapping::drawn_by($mine);
+
+        $this->assertSame([['kind' => 'course', 'name' => 'Ours']], $drawn[(int) $learner->id]);
+        $this->assertArrayNotHasKey((int) $other->id, $drawn);
+    }
+
+    /**
      * A text profile field.
      *
      * @param string $shortname

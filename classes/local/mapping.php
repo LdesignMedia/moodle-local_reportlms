@@ -511,6 +511,218 @@ class mapping {
     }
 
     /**
+     * Which of a unit's sources drew each person, named.
+     *
+     * The editor's people list used to say "drawn by a source" on every such
+     * row, which is our word for the thing rather than an answer: somebody who
+     * cannot remove a row needs to know what to go and change, and one unit can
+     * draw from five courses, three cohorts and a profile value at once. So each
+     * row names the ones that actually produced it.
+     *
+     * Names come from the site rather than from the source row, because a course
+     * that has been renamed since somebody chose it should read as it reads
+     * everywhere else. An id whose thing has been deleted is skipped: the row it
+     * produced cannot exist any more either, so saying so would be describing a
+     * state that is already gone.
+     *
+     * @param int $nodeid
+     *
+     * @return array<int, array<int, array{kind: string, name: string}>> User id to sources.
+     */
+    public static function drawn_by(int $nodeid): array {
+        global $DB;
+
+        $rows = self::sources_of($nodeid);
+
+        if (!$rows) {
+            return [];
+        }
+
+        $bytype = [];
+
+        foreach ($rows as $row) {
+            $bytype[$row->itemtype][] = $row;
+        }
+
+        $drawn = [];
+
+        foreach ($bytype as $itemtype => $typerows) {
+            $names = self::source_names($itemtype, $typerows);
+
+            foreach (self::people_by_source($itemtype, $typerows) as $userid => $sourceids) {
+                foreach ($sourceids as $sourceid) {
+                    if (!isset($names[$sourceid])) {
+                        // Its course, cohort or group is gone. So is the row it
+                        // drew, on the next read.
+                        continue;
+                    }
+
+                    $drawn[(int) $userid][] = ['kind' => $itemtype, 'name' => $names[$sourceid]];
+                }
+            }
+        }
+
+        return $drawn;
+    }
+
+    /**
+     * The people each individual source row draws, keyed by source row id.
+     *
+     * {@see people_for()} answers the question resolution asks, which unit
+     * claims this person, and throws away which of the unit's sources did it.
+     * This keeps that, because the editor has to name it on the row.
+     *
+     * @param string $itemtype
+     * @param array<int, \stdClass> $rows Source rows of one kind, one unit.
+     *
+     * @return array<int, array<int, int>> User id to source row ids.
+     */
+    protected static function people_by_source(string $itemtype, array $rows): array {
+        global $DB;
+
+        $found = [];
+
+        if ($itemtype === 'profilefield') {
+            foreach ($rows as $row) {
+                $sql = "SELECT d.id, d.userid
+                          FROM {user_info_data} d
+                          JOIN {user} u ON u.id = d.userid
+                         WHERE d.fieldid = :fieldid AND " . $DB->sql_compare_text('d.data', 255) . " = :value
+                           AND u.deleted = 0 AND u.id > 2";
+
+                foreach ($DB->get_records_sql($sql, ['fieldid' => (int) $row->itemid, 'value' => $row->itemvalue]) as $hit) {
+                    $found[(int) $hit->userid][] = (int) $row->id;
+                }
+            }
+
+            return $found;
+        }
+
+        // Which source rows point at each item. Two rows of one unit naming the
+        // same course would be one source twice, but the read is written to
+        // survive it rather than assume it cannot happen.
+        $rowsfor = [];
+
+        foreach ($rows as $row) {
+            $rowsfor[(int) $row->itemid][] = (int) $row->id;
+        }
+
+        if ($itemtype === 'category') {
+            foreach ($rowsfor as $categoryid => $sourceids) {
+                foreach (self::courses_under([$categoryid]) as $courseid) {
+                    foreach (self::participants_of([$courseid]) as $userid) {
+                        foreach ($sourceids as $sourceid) {
+                            $found[(int) $userid][] = $sourceid;
+                        }
+                    }
+                }
+            }
+
+            return $found;
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal(array_keys($rowsfor), SQL_PARAMS_NAMED);
+
+        switch ($itemtype) {
+            case 'course':
+                $sql = "SELECT ue.id, ue.userid, e.courseid AS item
+                          FROM {user_enrolments} ue
+                          JOIN {enrol} e ON e.id = ue.enrolid
+                          JOIN {user} u ON u.id = ue.userid
+                         WHERE e.courseid {$insql} AND u.deleted = 0 AND u.id > 2";
+                break;
+
+            case 'group':
+                $sql = "SELECT gm.id, gm.userid, gm.groupid AS item
+                          FROM {groups_members} gm
+                          JOIN {user} u ON u.id = gm.userid
+                         WHERE gm.groupid {$insql} AND u.deleted = 0 AND u.id > 2";
+                break;
+
+            case 'cohort':
+                $sql = "SELECT cm.id, cm.userid, cm.cohortid AS item
+                          FROM {cohort_members} cm
+                          JOIN {user} u ON u.id = cm.userid
+                         WHERE cm.cohortid {$insql} AND u.deleted = 0 AND u.id > 2";
+                break;
+
+            default:
+                return [];
+        }
+
+        foreach ($DB->get_recordset_sql($sql, $params) as $row) {
+            foreach ($rowsfor[(int) $row->item] ?? [] as $sourceid) {
+                $found[(int) $row->userid][] = $sourceid;
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * The display name behind each source row, keyed by source row id.
+     *
+     * Names come off the site rather than out of the source row, so a course
+     * renamed since somebody chose it reads here as it reads everywhere else.
+     *
+     * @param string $itemtype
+     * @param array<int, \stdClass> $rows Source rows of one kind.
+     *
+     * @return array<int, string> Source row id to name.
+     */
+    protected static function source_names(string $itemtype, array $rows): array {
+        global $DB;
+
+        if ($itemtype === 'profilefield') {
+            // The value is the interesting half: a unit drawing "Transport" out
+            // of a department field is described by "Transport", not by the name
+            // of the field it came from.
+            $names = [];
+
+            foreach ($rows as $row) {
+                $names[(int) $row->id] = (string) $row->itemvalue;
+            }
+
+            return $names;
+        }
+
+        $tables = [
+            'course' => ['course', 'fullname'],
+            'category' => ['course_categories', 'name'],
+            'cohort' => ['cohort', 'name'],
+            'group' => ['groups', 'name'],
+        ];
+
+        if (!isset($tables[$itemtype])) {
+            return [];
+        }
+
+        [$tablename, $field] = $tables[$itemtype];
+
+        $ids = [];
+
+        foreach ($rows as $row) {
+            $ids[(int) $row->itemid] = (int) $row->itemid;
+        }
+
+        $bynames = [];
+
+        foreach ($DB->get_records_list($tablename, 'id', $ids, '', "id, {$field}") as $record) {
+            $bynames[(int) $record->id] = format_string($record->{$field});
+        }
+
+        $names = [];
+
+        foreach ($rows as $row) {
+            if (isset($bynames[(int) $row->itemid])) {
+                $names[(int) $row->id] = $bynames[(int) $row->itemid];
+            }
+        }
+
+        return $names;
+    }
+
+    /**
      * Where a unit draws its people from.
      *
      * @param int $nodeid
