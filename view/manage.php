@@ -366,12 +366,23 @@ if ($openunit && isset($nodes[$openunit])) {
      */
     $courseoptions = [];
 
+    /*
+     * The headcount beside each course, because choosing one is a decision
+     * about how many people move.
+     *
+     * A course on a real site drew 1,200 people into a department in one press,
+     * and the picker had said nothing about that beforehand. The number is the
+     * warning.
+     */
+    $participantcounts = mapping::participant_counts();
+
     foreach (get_courses('all', 'c.shortname ASC', 'c.id, c.shortname, c.fullname') as $course) {
         if ((int) $course->id === SITEID) {
             continue;
         }
 
-        $courseoptions[$course->id] = format_string($course->fullname);
+        $courseoptions[$course->id] = format_string($course->fullname)
+            . ' (' . ($participantcounts[(int) $course->id] ?? 0) . ')';
     }
 
     /*
@@ -585,6 +596,10 @@ if (!$nodes) {
 
     $shownnodes = array_slice($nodes, $unitpage * $unitsperpage, $unitsperpage, true);
 
+    // Every unit's headcount in one pass, rather than walking the whole site's
+    // membership once per row.
+    $membercounts = mapping::member_counts();
+
     $table = new html_table();
     $table->head = [
         get_string('manage:unit', 'local_reportlms'),
@@ -610,7 +625,7 @@ if (!$nodes) {
          * not "who is in this unit", and grew a unit column to compensate. The
          * number was already on this row; it just was not clickable.
          */
-        $placed = count(mapping::members_of((int) $node->id));
+        $placed = $membercounts[(int) $node->id] ?? 0;
         $peopleurl = new moodle_url($pageurl, ['people' => $node->id]);
 
         /*

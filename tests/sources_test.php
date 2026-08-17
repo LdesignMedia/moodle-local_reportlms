@@ -368,6 +368,54 @@ final class sources_test extends \advanced_testcase {
     }
 
     /**
+     * The headcount beside a course is the number choosing it would draw.
+     *
+     * A promise counted differently from the thing it describes is worse than
+     * no number, so this asserts the two against each other rather than against
+     * a literal.
+     */
+    public function test_the_course_headcount_matches_what_it_would_draw(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $quiet = $this->getDataGenerator()->create_course();
+
+        foreach (range(1, 3) as $ignored) {
+            $learner = $this->getDataGenerator()->create_user();
+            $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        }
+
+        $counts = mapping::participant_counts();
+
+        $this->assertSame(3, $counts[(int) $course->id]);
+        $this->assertSame(count(mapping::participants_of([(int) $course->id])), $counts[(int) $course->id]);
+        $this->assertArrayNotHasKey((int) $quiet->id, $counts, 'A course nobody is on has no entry.');
+    }
+
+    /**
+     * The units table counts the people a unit actually holds, sources and
+     * names together, and counts them the same way opening the unit does.
+     */
+    public function test_the_unit_headcount_matches_the_people_behind_it(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $drawn = $this->getDataGenerator()->create_user();
+        $named = $this->getDataGenerator()->create_user();
+
+        $this->getDataGenerator()->enrol_user($drawn->id, $course->id);
+
+        $node = mapping::save_node('Onboarding', 'department');
+        $empty = mapping::save_node('Nobody here', 'department');
+
+        mapping::save_sources($node, ['courses' => [$course->id]]);
+        mapping::place((int) $named->id, $node);
+        mapping::reset();
+
+        $counts = mapping::member_counts();
+
+        $this->assertSame(2, $counts[$node], 'One drawn by the course, one named.');
+        $this->assertSame(count(mapping::members_of($node)), $counts[$node]);
+        $this->assertArrayNotHasKey($empty, $counts, 'An empty unit is absent, and reads as zero.');
+    }
+
+    /**
      * The reported node of one learner.
      *
      * @param int $userid

@@ -407,6 +407,55 @@ class mapping {
     }
 
     /**
+     * How many people each unit holds, in one pass.
+     *
+     * The units table asks this for every row it draws, and members_of() walks
+     * the whole site's resolved membership each time it is called: fifty rows
+     * against thirteen thousand learners is 650,000 comparisons to render one
+     * table. This walks it once.
+     *
+     * @return array<int, int> Node id to headcount. A unit with nobody is absent.
+     */
+    public static function member_counts(): array {
+        $counts = [];
+
+        foreach (self::resolved_membership() as $nodeid) {
+            $counts[(int) $nodeid] = ($counts[(int) $nodeid] ?? 0) + 1;
+        }
+
+        return $counts;
+    }
+
+    /**
+     * How many people are on each course.
+     *
+     * Counted the same way {@see participants_of} draws them, deliberately: the
+     * number beside a course in the picker is a promise about what choosing it
+     * will do, and a promise counted differently from the thing it describes is
+     * worse than no number at all.
+     *
+     * @return array<int, int> Course id to headcount.
+     */
+    public static function participant_counts(): array {
+        global $DB;
+
+        $sql = "SELECT e.courseid, COUNT(DISTINCT ue.userid) headcount
+                  FROM {user_enrolments} ue
+                  JOIN {enrol} e ON e.id = ue.enrolid
+                  JOIN {user} u ON u.id = ue.userid
+                 WHERE u.deleted = 0 AND u.id > 2
+              GROUP BY e.courseid";
+
+        $counts = [];
+
+        foreach ($DB->get_records_sql($sql) as $row) {
+            $counts[(int) $row->courseid] = (int) $row->headcount;
+        }
+
+        return $counts;
+    }
+
+    /**
      * The people named into a unit by hand, and nobody a source drew.
      *
      * What the Person box holds. Opening it with the whole membership made a
