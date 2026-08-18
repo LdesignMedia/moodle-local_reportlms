@@ -217,6 +217,24 @@ class batch_builder {
             if ($i === 0 && $dimensions !== null) {
                 $payload['dimensions'] = $dimensions['section'];
             }
+            /*
+             * Who this chunk is a complete statement about.
+             *
+             * The facts alone cannot say it. A learner who has just been taken
+             * off every course sends no enrolment rows at all, so reading the
+             * roster out of the blocks would make the one case that matters —
+             * somebody with nothing left — indistinguishable from somebody who
+             * was never in this chunk.
+             *
+             * Named here, so the SaaS can treat their slice as the whole truth
+             * and retire whatever it holds for them that this push does not
+             * mention. Chunking already guarantees a learner is never split
+             * across two chunks, which is what makes the claim safe to make.
+             */
+            $payload['learners'] = array_values(array_map(
+                static fn(int $userid): string => pseudonym::learner($userid),
+                $chunk['userids']
+            ));
             $payload['facts'] = array_filter($chunk['facts']);
             $result[] = (object) [
                 'payload' => $payload,
