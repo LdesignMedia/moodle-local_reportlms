@@ -988,12 +988,18 @@ if (!$nodes) {
     }
 }
 
-$sectors = [0 => get_string('manage:nosector', 'local_reportlms')];
+/*
+ * What a new unit can sit under: any department, at any depth.
+ *
+ * This offered only sectors, because the tree was two fixed levels — sectors
+ * holding departments. It is not any more: a department nests inside a
+ * department, as deep as somebody needs, so every unit is a candidate parent
+ * and the level picker has nothing left to ask.
+ */
+$parents = [0 => get_string('manage:noparent', 'local_reportlms')];
 
 foreach ($nodes as $node) {
-    if ($node->kind === 'sector') {
-        $sectors[$node->id] = $node->name;
-    }
+    $parents[$node->id] = $node->name;
 }
 
 echo html_writer::start_tag('form', ['method' => 'post', 'action' => $pageurl->out(false), 'class' => 'mb-4']);
@@ -1006,17 +1012,10 @@ echo html_writer::empty_tag('input', [
     'placeholder' => get_string('manage:unitname', 'local_reportlms'),
     'class' => 'form-control d-inline-block w-auto me-2',
 ]);
-echo html_writer::select(
-    [
-        'department' => get_string('manage:kind:department', 'local_reportlms'),
-        'sector' => get_string('manage:kind:sector', 'local_reportlms'),
-    ],
-    'kind',
-    'department',
-    false,
-    ['class' => 'form-select d-inline-block w-auto me-2']
-);
-echo html_writer::select($sectors, 'parentid', 0, false, ['class' => 'form-select d-inline-block w-auto me-2']);
+// Every unit is a department. The kind still travels, because the tree stores
+// it and the roll-up rules read it; it is just no longer a question.
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'kind', 'value' => 'department']);
+echo html_writer::select($parents, 'parentid', 0, false, ['class' => 'form-select d-inline-block w-auto me-2']);
 echo html_writer::tag('button', get_string('add'), ['type' => 'submit', 'class' => 'btn btn-primary']);
 echo html_writer::end_tag('form');
 
