@@ -51,7 +51,9 @@ class reconcile_userstate extends \core\task\scheduled_task {
      * @return array<string, array{table: string, column: string, userfield: string}>
      */
     protected function sources(): array {
-        return [
+        global $DB;
+
+        $sources = [
             'user' => ['table' => 'user', 'column' => 'timemodified', 'userfield' => 'id'],
             'enrolments' => ['table' => 'user_enrolments', 'column' => 'timemodified', 'userfield' => 'userid'],
             'completion' => ['table' => 'course_completions', 'column' => 'timecompleted', 'userfield' => 'userid'],
@@ -65,6 +67,43 @@ class reconcile_userstate extends \core\task\scheduled_task {
             // those, which is why the pair matters here too.
             'roles' => ['table' => 'role_assignments', 'column' => 'timemodified', 'userfield' => 'userid'],
         ];
+
+        /*
+         * Certificates, which nothing else reliably notices.
+         *
+         * mod_customcert raises no event when it issues one — its events cover
+         * templates, pages and elements, which are authoring actions rather
+         * than a learner receiving anything. db/events.php said the reconcile
+         * sweep was the fallback for that, and docs/known-issues.md said the
+         * fallback worked; neither was true, because no certificate table was
+         * ever listed here. A customcert issue reached Report LMS only when the
+         * learner happened to be marked dirty for some unrelated reason, so on
+         * a site that issues certificates and little else the tile could stay
+         * wrong indefinitely.
+         *
+         * Both tables are optional, and appended rather than woven in: the
+         * sweep loop has no error handling, so an unguarded read of a table
+         * that is not installed would throw and abandon every source after it.
+         * Guarded and last, the worst case is that these two are missing.
+         *
+         * tool_certificate does raise events and is observed, so sweeping it is
+         * belt and braces. It costs one query per sweep and closes the same gap
+         * if an event is ever missed.
+         */
+        $manager = $DB->get_manager();
+
+        $certificates = [
+            'customcertissues' => ['table' => 'customcert_issues', 'column' => 'timecreated', 'userfield' => 'userid'],
+            'toolcertissues' => ['table' => 'tool_certificate_issues', 'column' => 'timecreated', 'userfield' => 'userid'],
+        ];
+
+        foreach ($certificates as $key => $source) {
+            if ($manager->table_exists($source['table'])) {
+                $sources[$key] = $source;
+            }
+        }
+
+        return $sources;
     }
 
     /**

@@ -77,6 +77,12 @@ $observers = [
      * learner receiving anything. So a customcert issue is picked up by the
      * reconcile task rather than the moment it happens, and that is a property
      * of the plugin rather than something this observer list can fix.
+     *
+     * That was written before the sweep could do it. reconcile_userstate had no
+     * certificate table until 2026-08-19, so this note described a fallback
+     * that did not exist and a customcert issue reached Report LMS only if the
+     * learner was marked dirty for some unrelated reason. The sweep reads both
+     * issue tables now, so the sentence above is true as well as intended.
      */
     ['eventname' => '\tool_certificate\event\certificate_issued', 'callback' => $callback],
     ['eventname' => '\tool_certificate\event\certificate_revoked', 'callback' => $callback],
