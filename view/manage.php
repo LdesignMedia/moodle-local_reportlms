@@ -750,9 +750,140 @@ foreach (mapping::managers() as $managerrow) {
 
 \core_collator::asort($managernames);
 
+/*
+ * What a new unit can sit under: any department, at any depth.
+ *
+ * This offered only sectors, because the tree was two fixed levels — sectors
+ * holding departments. It is not any more: a department nests inside a
+ * department, as deep as somebody needs, so every unit is a candidate parent
+ * and the level picker has nothing left to ask.
+ */
+$parents = [0 => get_string('manage:noparent', 'local_reportlms')];
+
+foreach ($nodes as $node) {
+    $parents[$node->id] = $node->name;
+}
+
+/*
+ * The form sits above the list, and that is the whole point of the panel.
+ *
+ * It used to sit underneath, which meant the thing you came to the page to do
+ * moved further down the screen the more you had used the page: five units is a
+ * scroll, forty is off the bottom entirely. A list is a record of what you have
+ * made, so it belongs after the making.
+ */
+echo html_writer::start_tag('div', ['class' => 'card mb-4']);
+echo html_writer::div(
+    html_writer::tag('strong', get_string('manage:addunit', 'local_reportlms')),
+    'card-header py-2'
+);
+echo html_writer::start_tag('div', ['class' => 'card-body py-3']);
+echo html_writer::start_tag('form', [
+    'method' => 'post',
+    'action' => $pageurl->out(false),
+    'class' => 'd-flex flex-wrap align-items-center gap-2 mb-0',
+]);
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'addnode']);
+echo html_writer::empty_tag('input', [
+    'type' => 'text',
+    'name' => 'name',
+    'required' => 'required',
+    'placeholder' => get_string('manage:unitname', 'local_reportlms'),
+    'class' => 'form-control d-inline-block w-auto',
+]);
+// Every unit is a department. The kind still travels, because the tree stores
+// it and the roll-up rules read it; it is just no longer a question.
+echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'kind', 'value' => 'department']);
+echo html_writer::select($parents, 'parentid', 0, false, ['class' => 'form-select d-inline-block w-auto']);
+echo html_writer::tag('button', get_string('manage:addunit', 'local_reportlms'), [
+    'type' => 'submit',
+    'class' => 'btn btn-primary',
+]);
+echo html_writer::end_tag('form');
+echo html_writer::end_tag('div');
+echo html_writer::end_tag('div');
+
+
 if (!$nodes) {
     echo html_writer::tag('p', get_string('manage:nounits', 'local_reportlms'), ['class' => 'text-muted']);
 } else {
+    $membercounts = mapping::member_counts();
+
+    /*
+     * The tree, as a tree.
+     *
+     * The table used to say the shape in two columns — a Level that read
+     * "Department" on every row once sectors were removed, and a "Sector above
+     * it" naming a parent that is now itself a department. Indentation says the
+     * same thing in no columns at all, and it is the shape somebody is actually
+     * building.
+     */
+    $childrenof = [];
+
+    foreach ($nodes as $node) {
+        $childrenof[(int) ($node->parentid ?? 0)][] = $node;
+    }
+
+    /*
+     * What the dashboard would say about this unit.
+     *
+     * The count was direct members only, so Operations read 0 on this page
+     * while its report read 22 — the people are in the departments underneath
+     * it. Two screens, one tree, two answers, and no way to tell which was
+     * lying. Summing rather than counting distinct is safe because a person
+     * belongs to exactly one unit: resolved_membership() is a userid => nodeid
+     * map, so there is nobody to count twice.
+     */
+    $rolledup = [];
+
+    $rollup = function (int $nodeid) use (&$rollup, &$rolledup, $childrenof, $membercounts): int {
+        $total = $membercounts[$nodeid] ?? 0;
+
+        foreach ($childrenof[$nodeid] ?? [] as $child) {
+            $total += $rollup((int) $child->id);
+        }
+
+        return $rolledup[$nodeid] = $total;
+    };
+
+    foreach ($childrenof[0] ?? [] as $root) {
+        $rollup((int) $root->id);
+    }
+
+    // Depth per unit, for the indent. Walked from the roots so a unit whose
+    // parent has been filtered away still gets a number rather than a warning.
+    $depthof = [];
+
+    $walk = function (int $parentid, int $depth) use (&$walk, &$depthof, $childrenof): void {
+        foreach ($childrenof[$parentid] ?? [] as $node) {
+            $depthof[(int) $node->id] = $depth;
+            $walk((int) $node->id, $depth + 1);
+        }
+    };
+
+    $walk(0, 0);
+
+    /*
+     * Rows in tree order, so the indent above lands under the right parent.
+     * mapping::nodes() sorts by name, which reads as a flat alphabetical list
+     * and puts a child three rows from its parent.
+     */
+    $treeorder = [];
+
+    $order = function (int $parentid) use (&$order, &$treeorder, $childrenof): void {
+        foreach ($childrenof[$parentid] ?? [] as $node) {
+            $treeorder[(int) $node->id] = $node;
+            $order((int) $node->id);
+        }
+    };
+
+    $order(0);
+
+    // Anything the walk could not reach — a unit whose parent row has gone —
+    // still belongs on the page rather than disappearing from it.
+    $treeorder += $nodes;
+
     /*
      * The filter, and it runs here rather than in the browser.
      *
@@ -804,14 +935,25 @@ if (!$nodes) {
 
     $filterform .= html_writer::end_tag('form');
 
-    echo $filterform;
+    /*
+     * Search, once there is something to search.
+     *
+     * Above five rows it is a row of screen that answers a question nobody has:
+     * the whole list is already visible. It appears past a screenful, and
+     * whenever a filter is already on, or there would be no way to clear one.
+     */
+    if (count($nodes) > 10 || $filterparams) {
+        echo $filterform;
+    }
 
-    $shownodes = $nodes;
+    // Tree order, so a child sits under its parent rather than wherever the
+    // alphabet put it. Filtering keeps that order; it just shows fewer rows.
+    $shownodes = $treeorder;
 
     if ($filterparams) {
         $needle = \core_text::strtolower($unitsearch);
 
-        $shownodes = array_filter($nodes, static function ($node) use ($nodes, $needle, $managerfilter, $managerof) {
+        $shownodes = array_filter($treeorder, static function ($node) use ($nodes, $needle, $managerfilter, $managerof) {
             if ($needle !== '') {
                 /*
                  * The parent counts as part of the name.
@@ -867,15 +1009,9 @@ if (!$nodes) {
 
     $shownnodes = array_slice($shownodes, $unitpage * $unitsperpage, $unitsperpage, true);
 
-    // Every unit's headcount in one pass, rather than walking the whole site's
-    // membership once per row.
-    $membercounts = mapping::member_counts();
-
     $table = new html_table();
     $table->head = [
         get_string('manage:unit', 'local_reportlms'),
-        get_string('manage:kind', 'local_reportlms'),
-        get_string('manage:parent', 'local_reportlms'),
         get_string('manage:manager', 'local_reportlms'),
         get_string('manage:people', 'local_reportlms'),
         '',
@@ -917,28 +1053,64 @@ if (!$nodes) {
             ]
         );
 
+        $kindicon = $OUTPUT->pix_icon('i/folder', '', 'moodle', ['class' => 'me-2 text-muted']);
+
         /*
-         * A sector and a department, told apart before the Level column is read.
+         * The indent, and the one case it cannot be trusted.
          *
-         * Layers for the thing that holds other units, a folder for the thing
-         * that holds people. The word stays in its own column: the icon is how
-         * the eye sorts a screen of fifty rows, not how anybody finds out what
-         * the row is.
+         * A filtered table shows a unit whose parent may not be on screen, so
+         * an indent would place it under whatever happens to be above it. There
+         * the parent is named beside it instead — the only place that column
+         * still earns its width.
          */
-        $kindlabel = get_string('manage:kind:' . $node->kind, 'local_reportlms');
-        $kindicon = $OUTPUT->pix_icon(
-            $node->kind === 'sector' ? 'e/layers' : 'i/folder',
-            $kindlabel,
-            'moodle',
-            ['class' => 'me-2 text-muted']
-        );
+        $depth = $depthof[(int) $node->id] ?? 0;
+        $parentname = $node->parentid && isset($nodes[$node->parentid])
+            ? $nodes[$node->parentid]->name
+            : null;
+
+        if ($filterparams) {
+            $unitcell = $kindicon . s($node->name);
+
+            if ($parentname !== null) {
+                $unitcell .= ' ' . html_writer::tag(
+                    'span',
+                    get_string('manage:insideof', 'local_reportlms', s($parentname)),
+                    ['class' => 'text-muted small']
+                );
+            }
+        } else {
+            $unitcell = html_writer::tag(
+                'span',
+                $kindicon . s($node->name),
+                // Bootstrap's own spacing scale, which Boost already ships, so
+                // this needs no stylesheet of its own. Capped at four so a deep
+                // tree does not walk the name off the side of the table.
+                ['class' => 'd-inline-block ps-' . min(4, $depth * 2)]
+            );
+        }
 
         $managers = $managerof[(int) $node->id] ?? [];
 
+        /*
+         * The rolled-up number first, because it is the one the report shows.
+         *
+         * The direct count follows only where the two differ, which is exactly
+         * the case that used to read as a bug: a unit holding no one itself but
+         * three departments' worth of people underneath it.
+         */
+        $total = $rolledup[(int) $node->id] ?? $placed;
+        $peoplecell = (string) $total;
+
+        if ($total !== $placed) {
+            $peoplecell .= ' ' . html_writer::tag(
+                'span',
+                get_string('manage:peopledirect', 'local_reportlms', $placed),
+                ['class' => 'text-muted small']
+            );
+        }
+
         $table->data[] = [
-            $kindicon . s($node->name),
-            $kindlabel,
-            $node->parentid && isset($nodes[$node->parentid]) ? s($nodes[$node->parentid]->name) : '-',
+            $unitcell,
             $managers
                 ? s(implode(', ', $managers))
                 : html_writer::tag(
@@ -946,7 +1118,7 @@ if (!$nodes) {
                     get_string('manage:nomanager', 'local_reportlms'),
                     ['class' => 'text-muted']
                 ),
-            $placed,
+            $peoplecell,
             $peoplelink . ' &nbsp; ' . html_writer::link($delete, get_string('delete'), ['class' => 'text-danger']),
         ];
     }
@@ -987,37 +1159,6 @@ if (!$nodes) {
         );
     }
 }
-
-/*
- * What a new unit can sit under: any department, at any depth.
- *
- * This offered only sectors, because the tree was two fixed levels — sectors
- * holding departments. It is not any more: a department nests inside a
- * department, as deep as somebody needs, so every unit is a candidate parent
- * and the level picker has nothing left to ask.
- */
-$parents = [0 => get_string('manage:noparent', 'local_reportlms')];
-
-foreach ($nodes as $node) {
-    $parents[$node->id] = $node->name;
-}
-
-echo html_writer::start_tag('form', ['method' => 'post', 'action' => $pageurl->out(false), 'class' => 'mb-4']);
-echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
-echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'addnode']);
-echo html_writer::empty_tag('input', [
-    'type' => 'text',
-    'name' => 'name',
-    'required' => 'required',
-    'placeholder' => get_string('manage:unitname', 'local_reportlms'),
-    'class' => 'form-control d-inline-block w-auto me-2',
-]);
-// Every unit is a department. The kind still travels, because the tree stores
-// it and the roll-up rules read it; it is just no longer a question.
-echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'kind', 'value' => 'department']);
-echo html_writer::select($parents, 'parentid', 0, false, ['class' => 'form-select d-inline-block w-auto me-2']);
-echo html_writer::tag('button', get_string('add'), ['type' => 'submit', 'class' => 'btn btn-primary']);
-echo html_writer::end_tag('form');
 
 // ------------------------------------------------------------- managers ----
 

@@ -70,6 +70,13 @@ $string['manage:kind:department'] = 'Department';
 $string['manage:parent'] = 'Sector above it';
 $string['manage:nosector'] = 'No sector above it';
 $string['manage:noparent'] = 'No department above it';
+$string['manage:addunit'] = 'Add a unit';
+// The parent, named beside a unit only in a filtered list, where the indent
+// that normally says it cannot be trusted.
+$string['manage:insideof'] = 'in {$a}';
+// Shown after the rolled-up headcount, and only where the two differ: a unit
+// holding nobody itself but several departments' worth of people underneath.
+$string['manage:peopledirect'] = '· {$a} direct';
 $string['manage:people'] = 'People';
 $string['manage:nounits'] = 'No units have been typed in. The tree is entirely worked out from profile fields.';
 $string['manage:search'] = 'Search units';
