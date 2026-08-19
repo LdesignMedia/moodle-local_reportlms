@@ -34,10 +34,16 @@ namespace local_reportlms\local\collector;
  * enrolments minus completion rows, which is exactly why the enrolments
  * block exists.
  *
- * due_at is the per-course deadline. The deadline resolver (relative or
- * fixed date per course) has no admin configuration yet, so it is null for
- * now: per the plan, no deadline set means never overdue. The resolver slots
- * in here once the settings exist.
+ * due_at is always null here, and stays that way. A deadline is the
+ * enrolment's end date and nothing else — decided by Nihaal on 2026-08-19 —
+ * so it belongs on the enrolment row, which every learner has, rather than on
+ * a completion row, which only somebody who has started has. See the
+ * enrolments collector, which resolves it.
+ *
+ * This reverses the TD's v1.0 plan for a per-course resolver with relative and
+ * fixed modes. That is not deferred, it is dropped: a site that sets no
+ * enrolment durations reads no overdue, and setting them is the customer's
+ * side of the contract.
  */
 class completion {
     /**
