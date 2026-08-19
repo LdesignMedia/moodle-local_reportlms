@@ -108,6 +108,22 @@ class userstate {
         $DB->set_field(self::TABLE, 'dirty', 1, []);
         $DB->execute('UPDATE {' . self::TABLE . '} SET timechanged = ?', [time()]);
 
+        /*
+         * Deleted users are not backfilled, and that is deliberate.
+         *
+         * The removal-semantics plan called for this filter to go, so that
+         * departures could be reported. It only needs to go for people the SaaS
+         * has facts about, and this query is the opposite case: it adds rows for
+         * users who have never been tracked. Somebody deleted before the plugin
+         * was installed has no enrolments, no completions and no history on the
+         * far side, so marking them departed would create a learner who appears
+         * in no course, no department and no figure — noise standing in for
+         * information.
+         *
+         * Deletions that matter are learned from the user_deleted event while
+         * the plugin is running, and those users already have a row here, which
+         * the statement above marks dirty like any other.
+         */
         $sql = 'INSERT INTO {' . self::TABLE . '} (userid, dirty, timechanged, timepushed)
                 SELECT u.id, 1, ?, 0
                   FROM {user} u

@@ -52,6 +52,36 @@ class batch_builder {
     public const MAX_FACT_ROWS = 5000;
 
     /**
+     * Which of these users Moodle now reports deleted.
+     *
+     * Asked of the user table rather than tracked, because deletion is Moodle's
+     * fact and the plugin's own tracking table only ever learns about it
+     * second-hand. A user row survives deletion — it is flagged, not removed —
+     * which is also why their coded id can still be computed for the block.
+     *
+     * @param array<int, int> $userids
+     *
+     * @return array<int, int> User ids, in the order they were given.
+     */
+    protected static function departed(array $userids): array {
+        global $DB;
+
+        if ($userids === []) {
+            return [];
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
+
+        return array_map('intval', array_keys($DB->get_records_select(
+            'user',
+            "deleted = 1 AND id $insql",
+            $params,
+            'id ASC',
+            'id'
+        )));
+    }
+
+    /**
      * Build the payload chunks for a set of dirty learners.
      *
      * @param array<int, int> $userids Real user ids, already exclusion-filtered.
@@ -62,6 +92,19 @@ class batch_builder {
      */
     public static function build(array $userids, int $snapshotat): array {
         sort($userids);
+
+        /*
+         * The departed, taken out before anything else looks at them.
+         *
+         * A deleted user has no enrolments left in Moodle and no profile
+         * fields, so every collector below would return nothing for them and
+         * they would arrive as a learner whose slice is empty — which the SaaS
+         * reads as "taken off every course", not as "gone". The two are
+         * different states and the second one cannot be inferred from an
+         * absence, so it is stated in its own block instead.
+         */
+        $departed = self::departed($userids);
+        $userids = array_values(array_diff($userids, $departed));
 
         // One collector pass for the whole set, then regroup per learner so
         // the chunker can keep slices whole.
@@ -203,6 +246,19 @@ class batch_builder {
             $chunks[] = $current;
         }
 
+        /*
+         * A push made entirely of departures still has to go.
+         *
+         * Delete a handful of accounts on a quiet site and every dirty learner
+         * is one of them, leaving no chunk to carry the news. Without this the
+         * departures are built and then dropped, the flags are never cleared
+         * because nothing was accepted, and the same silent push is retried
+         * every fifteen minutes for as long as the site runs.
+         */
+        if ($chunks === [] && $departed !== []) {
+            $chunks[] = ['userids' => [], 'facts' => [], 'rows' => 0];
+        }
+
         // Wrap each chunk in the envelope; the org tree and the dimensions
         // catalogue ride in the first chunk only, and only when they changed.
         $orgsection = self::org_section_if_changed();
@@ -235,10 +291,31 @@ class batch_builder {
                 static fn(int $userid): string => pseudonym::learner($userid),
                 $chunk['userids']
             ));
+            /*
+             * Departures ride in the first chunk, like the org tree: they are a
+             * statement about the site rather than about this chunk's learners,
+             * and repeating them per chunk would say the same thing many times.
+             */
+            if ($i === 0 && $departed !== []) {
+                $payload['departures'] = array_values(array_map(
+                    static fn(int $userid): string => pseudonym::learner($userid),
+                    $departed
+                ));
+            }
             $payload['facts'] = array_filter($chunk['facts']);
             $result[] = (object) [
                 'payload' => $payload,
-                'userids' => $chunk['userids'],
+                /*
+                 * Whose dirty flag this chunk clears, which is not the same as
+                 * whose slice it carries.
+                 *
+                 * The departed are deliberately absent from `learners` above —
+                 * that list is a claim to have sent somebody's whole state, and
+                 * for them there is none. They are still waiting on a flag,
+                 * though, and leaving it set retries the same departure every
+                 * fifteen minutes forever.
+                 */
+                'userids' => $i === 0 ? array_merge($chunk['userids'], $departed) : $chunk['userids'],
                 'factrows' => $chunk['rows'],
                 // For the push task to remember after a 202, never before.
                 'dimhash' => ($i === 0 && $dimensions !== null) ? $dimensions['hash'] : null,
