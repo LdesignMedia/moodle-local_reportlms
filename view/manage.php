@@ -1177,6 +1177,42 @@ echo html_writer::tag('h3', get_string('manage:managers', 'local_reportlms'));
 echo html_writer::tag('p', get_string('manage:managers_help', 'local_reportlms'), ['class' => 'text-muted']);
 
 /*
+ * Naming somebody comes before the register of who is already named, for the
+ * same reason it does in the units section above: the register grows, the form
+ * does not, and the thing you came here to do should not move.
+ */
+if ($nodes) {
+    echo html_writer::start_tag('div', ['class' => 'card mb-4']);
+    echo html_writer::div(
+        html_writer::tag('strong', get_string('manage:addmanager', 'local_reportlms')),
+        'card-header py-2'
+    );
+    echo html_writer::start_tag('div', ['class' => 'card-body py-3']);
+
+    (new \local_reportlms\form\name_manager($pageurl->out(false), [
+        'units' => $unitoptions,
+    ]))->display();
+
+    echo html_writer::end_tag('div');
+    echo html_writer::end_tag('div');
+} else {
+    /*
+     * Say why there is no form here.
+     *
+     * There used to be nothing: a heading, a line saying nobody manages
+     * anything, and then blank page where the controls belong. A control that
+     * is absent for a good reason looks exactly like one that is broken, and
+     * the reader has no way to tell which. This is the same fault the report
+     * page had when it showed zeros with no explanation.
+     */
+    echo html_writer::tag(
+        'p',
+        get_string('manage:needunitformanager', 'local_reportlms'),
+        ['class' => 'alert alert-info']
+    );
+}
+
+/*
  * The register, and it has to be one.
  *
  * Being a manager is data here rather than a role assignment, so an
@@ -1380,25 +1416,5 @@ if ($alsogranted) {
     );
 }
 
-if ($nodes) {
-    (new \local_reportlms\form\name_manager($pageurl->out(false), [
-        'units' => $unitoptions,
-    ]))->display();
-} else {
-    /*
-     * Say why there is no form here.
-     *
-     * There used to be nothing: a heading, a line saying nobody manages
-     * anything, and then blank page where the controls belong. A control that
-     * is absent for a good reason looks exactly like one that is broken, and
-     * the reader has no way to tell which. This is the same fault the report
-     * page had when it showed zeros with no explanation.
-     */
-    echo html_writer::tag(
-        'p',
-        get_string('manage:needunitformanager', 'local_reportlms'),
-        ['class' => 'alert alert-info']
-    );
-}
 
 echo $OUTPUT->footer();

@@ -71,6 +71,7 @@ $string['manage:parent'] = 'Sector above it';
 $string['manage:nosector'] = 'No sector above it';
 $string['manage:noparent'] = 'No department above it';
 $string['manage:addunit'] = 'Add a unit';
+$string['manage:addmanager'] = 'Put someone in charge';
 // The parent, named beside a unit only in a filtered list, where the indent
 // that normally says it cannot be trusted.
 $string['manage:insideof'] = 'in {$a}';
