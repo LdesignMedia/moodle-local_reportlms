@@ -216,17 +216,27 @@ class launch {
             return null;
         }
 
-        return array_values(array_unique(array_merge($named, self::parent_sector_codes())));
+        return array_values(array_unique(array_merge($named, self::parent_node_codes())));
     }
 
     /**
-     * The coded sectors above the units this viewer manages.
+     * The coded units directly above the ones this viewer manages.
      *
      * Names only, never scope. See {@see viewer_nameable}.
      *
+     * The parent's own kind, not an assumed one. This read `'sector'` outright,
+     * from when a parent could only be a sector, and a code is built from the
+     * kind and the name together — so once a department could sit under another
+     * department, the code minted for such a parent matched nothing the SaaS
+     * held. It failed silently, the way a wrong hash does: the parent was simply
+     * never nameable, with nothing logged and nothing to see but a code.
+     *
+     * Sites still have sectors, so this is not the removal of a concept; it is
+     * the difference between reading the parent's kind and guessing it.
+     *
      * @return array<int, string>
      */
-    protected static function parent_sector_codes(): array {
+    protected static function parent_node_codes(): array {
         global $USER;
 
         if (!isloggedin() || isguestuser()) {
@@ -239,9 +249,19 @@ class launch {
         foreach (mapping::managed_nodes((int) $USER->id) as $nodeid) {
             $parentid = $nodes[$nodeid]->parentid ?? null;
 
-            if ($parentid !== null && isset($nodes[$parentid])) {
-                $codes[] = pseudonym::node('sector', $nodes[$parentid]->name);
+            if ($parentid === null || !isset($nodes[$parentid])) {
+                continue;
             }
+
+            $parent = $nodes[$parentid];
+
+            // A node with no kind is not guessed at either: an unnameable
+            // parent is a cosmetic loss, and a wrong code is a silent one.
+            if (($parent->kind ?? '') === '') {
+                continue;
+            }
+
+            $codes[] = pseudonym::node($parent->kind, $parent->name);
         }
 
         return $codes;
