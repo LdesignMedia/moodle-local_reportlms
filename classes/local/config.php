@@ -36,7 +36,7 @@ namespace local_reportlms\local;
  */
 class config {
     /** @var string Report LMS service the plugin talks to unless an admin overrides it. */
-    public const DEFAULT_BASEURL = 'https://reportlms.example.com';
+    public const DEFAULT_BASEURL = 'https://reportlms.com';
 
     /** @var string Batch push endpoint on the Report LMS host. */
     public const DEFAULT_PUSHPATH = '/api/v1/push/batch';
