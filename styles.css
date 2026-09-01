@@ -342,3 +342,19 @@ body.local-reportlms-branded .local-reportlms-btn-icon {
 body.local-reportlms-branded .local-reportlms-btn-icon .icon {
     margin: 0;
 }
+
+/* Delete borrows the icon button's shape and none of its colour. It sits next
+   to the way into a unit, and two buttons in one cell that look alike are how
+   somebody deletes the thing they meant to open. */
+body.local-reportlms-branded .local-reportlms-btn-danger,
+body.local-reportlms-branded .local-reportlms-btn-danger:visited {
+    border-color: #d64550;
+    color: #d64550;
+}
+
+body.local-reportlms-branded .local-reportlms-btn-danger:hover,
+body.local-reportlms-branded .local-reportlms-btn-danger:focus {
+    background: #d64550;
+    border-color: #d64550;
+    color: #fff;
+}

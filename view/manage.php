@@ -1076,6 +1076,32 @@ if (!$nodes) {
             ]
         );
 
+        /*
+         * Delete as an icon, matching the people button it sits beside.
+         *
+         * The word set the column's width against a control nobody uses often,
+         * and two different shapes in one cell read as two different kinds of
+         * thing. The unit's name is in the label rather than in the cell, so
+         * the icon still announces which row it would delete.
+         */
+        /*
+         * Asked first, because the icon does not warn the way the word did.
+         *
+         * The link deleted on the press, which the word Delete at least
+         * announced. A glyph beside the glyph that opens a unit does not, and
+         * there is nothing to undo it with, so the question is the warning now.
+         */
+        $deletelink = $OUTPUT->action_link(
+            $delete,
+            $OUTPUT->pix_icon('t/delete', get_string('manage:deleteunit', 'local_reportlms', $node->name)),
+            new confirm_action(get_string('manage:deleteunitconfirm', 'local_reportlms', $node->name)),
+            [
+                'class' => 'btn local-reportlms-btn local-reportlms-btn-icon '
+                    . 'local-reportlms-btn-danger text-danger',
+                'title' => get_string('manage:deleteunit', 'local_reportlms', $node->name),
+            ]
+        );
+
         $kindicon = $OUTPUT->pix_icon('i/folder', '', 'moodle', ['class' => 'me-2 text-muted']);
 
         /*
@@ -1142,7 +1168,7 @@ if (!$nodes) {
                     ['class' => 'text-muted']
                 ),
             $peoplecell,
-            $peoplelink . ' &nbsp; ' . html_writer::link($delete, get_string('delete'), ['class' => 'text-danger']),
+            $peoplelink . ' ' . $deletelink,
         ];
     }
 
@@ -1271,6 +1297,9 @@ foreach (mapping::managers() as $row) {
     if ($row->roleid) {
         $register['role:' . $row->id] = (object) [
             'who' => get_string('manage:everyoneholding', 'local_reportlms', $roles[$row->roleid] ?? $row->roleid),
+            // The same name without the markup, for the confirmation, which is
+            // a dialog and cannot carry a link.
+            'whoplain' => get_string('manage:everyoneholding', 'local_reportlms', $roles[$row->roleid] ?? $row->roleid),
             'unit' => isset($nodes[$row->nodeid]) ? $nodes[$row->nodeid]->name : '-',
             'nodeid' => (int) $row->nodeid,
             'userid' => 0,
@@ -1285,6 +1314,7 @@ foreach (mapping::managers() as $row) {
 
     $register['u:' . $row->userid . ':' . $row->nodeid] = (object) [
         'who' => $personlink($user, get_string('manage:goneuser', 'local_reportlms')),
+        'whoplain' => $user ? fullname($user) : get_string('manage:goneuser', 'local_reportlms'),
         'unit' => isset($nodes[$row->nodeid]) ? $nodes[$row->nodeid]->name : '-',
         'nodeid' => (int) $row->nodeid,
         'userid' => (int) $row->userid,
@@ -1308,6 +1338,7 @@ foreach (capability_holders::holders() as $userid) {
 
     $register[$key] = $register[$key] ?? (object) [
         'who' => $personlink($user, (string) $userid),
+        'whoplain' => $user ? fullname($user) : (string) $userid,
         'unit' => '-',
         'nodeid' => 0,
         'userid' => (int) $userid,
@@ -1362,7 +1393,20 @@ foreach ($register as $entry) {
          * and the button says which one it is taking so that looks deliberate
          * rather than broken.
          */
-        $actions[] = html_writer::link(
+        /*
+         * Asked first, and the question differs by what is left afterwards.
+         *
+         * Removing a naming from somebody who also holds the capability leaves
+         * them on this list with one route; removing the only route takes the
+         * unit's report away from them. Those are two different answers to
+         * "what happens if I press this", so they are two different questions.
+         */
+        $removeargs = (object) [
+            'who' => $entry->whoplain,
+            'unit' => $entry->unit,
+        ];
+
+        $actions[] = $OUTPUT->action_link(
             new moodle_url($pageurl, [
                 'action' => 'removemanager',
                 'id' => $entry->mappingid,
@@ -1371,6 +1415,11 @@ foreach ($register as $entry) {
             $entry->capability
                 ? get_string('manage:removenaming', 'local_reportlms')
                 : get_string('remove'),
+            new confirm_action(get_string(
+                $entry->capability ? 'manage:removenamingconfirm' : 'manage:removemanagerconfirm',
+                'local_reportlms',
+                $removeargs
+            )),
             ['class' => 'text-danger']
         );
     } else if ($entry->userid && $entry->nodeid) {
