@@ -698,6 +698,21 @@ if ($openunit && isset($nodes[$openunit])) {
         }
     }
 
+    /*
+     * What the pickers below decide, said before somebody uses them.
+     *
+     * Choosing two courses reads as "report on these two courses" and it is
+     * not: it is "everybody on either course belongs to this unit", and their
+     * report then covers every course they are on. Somebody who picks a course
+     * expecting the first meaning gets numbers they cannot explain, so the
+     * sentence goes above the pickers rather than in a help icon beside one.
+     */
+    echo html_writer::tag('h4', get_string('manage:sources', 'local_reportlms'), ['class' => 'mt-4']);
+    echo html_writer::div(
+        get_string('manage:sources_help', 'local_reportlms'),
+        'alert alert-info'
+    );
+
     (new \local_reportlms\form\place_person($pageurl->out(false), [
         'nodeid' => $openunit,
         'members' => mapping::placed_members_of($openunit),
@@ -781,7 +796,10 @@ echo html_writer::start_tag('div', ['class' => 'card-body py-3']);
 echo html_writer::start_tag('form', [
     'method' => 'post',
     'action' => $pageurl->out(false),
-    'class' => 'd-flex flex-wrap align-items-center gap-2 mb-0',
+    // gap-2 is Bootstrap 5 and the themes here are Bootstrap 4, so it did
+    // nothing and the three controls sat flush against each other. The margins
+    // below are on the controls themselves, which works in both.
+    'class' => 'd-flex flex-wrap align-items-center mb-0',
 ]);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'action', 'value' => 'addnode']);
@@ -790,15 +808,17 @@ echo html_writer::empty_tag('input', [
     'name' => 'name',
     'required' => 'required',
     'placeholder' => get_string('manage:unitname', 'local_reportlms'),
-    'class' => 'form-control d-inline-block w-auto',
+    'class' => 'form-control d-inline-block w-auto mr-2 me-2 mb-2',
 ]);
 // Every unit is a department. The kind still travels, because the tree stores
 // it and the roll-up rules read it; it is just no longer a question.
 echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'kind', 'value' => 'department']);
-echo html_writer::select($parents, 'parentid', 0, false, ['class' => 'form-select d-inline-block w-auto']);
+echo html_writer::select($parents, 'parentid', 0, false, [
+    'class' => 'form-select custom-select d-inline-block w-auto mr-2 me-2 mb-2',
+]);
 echo html_writer::tag('button', get_string('manage:addunit', 'local_reportlms'), [
     'type' => 'submit',
-    'class' => 'btn btn-primary',
+    'class' => 'btn btn-primary mb-2',
 ]);
 echo html_writer::end_tag('form');
 echo html_writer::end_tag('div');
@@ -895,7 +915,7 @@ if (!$nodes) {
     $filterform = html_writer::start_tag('form', [
         'method' => 'get',
         'action' => $pageurl->out_omit_querystring(),
-        'class' => 'd-flex flex-wrap align-items-center gap-2 mb-3',
+        'class' => 'd-flex flex-wrap align-items-center mb-3',
     ]);
 
     $filterform .= html_writer::empty_tag('input', [
@@ -904,7 +924,7 @@ if (!$nodes) {
         'value' => $unitsearch,
         'placeholder' => get_string('manage:search', 'local_reportlms'),
         'aria-label' => get_string('manage:search', 'local_reportlms'),
-        'class' => 'form-control d-inline-block w-auto',
+        'class' => 'form-control d-inline-block w-auto mr-2 me-2 mb-2',
     ]);
 
     $managerchoices = [
@@ -917,19 +937,22 @@ if (!$nodes) {
         'manager',
         $managerfilter,
         false,
-        ['class' => 'form-select d-inline-block w-auto', 'aria-label' => get_string('manage:manager', 'local_reportlms')]
+        [
+            'class' => 'form-select custom-select d-inline-block w-auto mr-2 me-2 mb-2',
+            'aria-label' => get_string('manage:manager', 'local_reportlms'),
+        ]
     );
 
     $filterform .= html_writer::tag('button', get_string('search'), [
         'type' => 'submit',
-        'class' => 'btn btn-secondary',
+        'class' => 'btn btn-secondary mb-2',
     ]);
 
     if ($filterparams) {
         $filterform .= html_writer::link(
             $pageurl,
             get_string('manage:showall', 'local_reportlms'),
-            ['class' => 'btn btn-link']
+            ['class' => 'btn btn-link mb-2']
         );
     }
 
