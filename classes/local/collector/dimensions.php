@@ -57,19 +57,40 @@ class dimensions {
      * tracking, plus the main (completion-gating) activity, which is also
      * the one flagged summative, mirroring the attempts collector's rule.
      *
-     * @return \stdClass {courses: [{courseid, title, active}],
+     * @return \stdClass {courses: [{courseid, title, active, measurable}],
      *                    activities: [{cmid, courseid, title, kind, summative}]}
      */
-    public static function collect(): \stdClass {
-        global $CFG, $DB;
+    /**
+     * Course ids holding at least one completion criterion, as a lookup.
+     *
+     * One query for the site rather than one per course: this is read while
+     * walking every reportable course.
+     *
+     * @return array<int, int> courseid => position, for isset() tests.
+     */
+    private static function courses_with_criteria(): array {
+        global $DB;
 
-        require_once($CFG->libdir . '/completionlib.php');
+        $ids = $DB->get_fieldset_sql('SELECT DISTINCT course FROM {course_completion_criteria}');
 
-        $courses = [];
-        $activities = [];
+        return array_flip(array_map('intval', $ids));
+    }
 
-        $courserecords = $DB->get_records_sql(
-            "SELECT c.id, c.fullname, c.visible
+    /**
+     * The courses this site reports on: anything with an enrolment or a
+     * completion behind it.
+     *
+     * Shared with unmeasurable_courses() so the page that tells an
+     * administrator which courses are missing a rule cannot come to a
+     * different answer than the collector that hid them.
+     *
+     * @return array<int, \stdClass> id, fullname, visible, enablecompletion.
+     */
+    private static function reportable_courses(): array {
+        global $DB;
+
+        return $DB->get_records_sql(
+            "SELECT c.id, c.fullname, c.visible, c.enablecompletion
                FROM {course} c
               WHERE c.id > 1
                 AND (
@@ -87,12 +108,79 @@ class dimensions {
                 )
            ORDER BY c.id"
         );
+    }
+
+    /**
+     * Reportable courses that can never complete anybody, for the manage page.
+     *
+     * The report drops these, so somebody has to be told which they are and
+     * where to go. It has to be said here rather than on the dashboard: course
+     * identifiers reach the SaaS as one-way pseudonyms, so it can count these
+     * courses and can never name one or link to it.
+     *
+     * @return array<int, string> courseid => course fullname.
+     */
+    public static function unmeasurable_courses(): array {
+        $withcriteria = self::courses_with_criteria();
+        $unmeasurable = [];
+
+        foreach (self::reportable_courses() as $course) {
+            if (!$course->enablecompletion || !isset($withcriteria[(int) $course->id])) {
+                $unmeasurable[(int) $course->id] = trim($course->fullname);
+            }
+        }
+
+        // Sorted here rather than in the query, which is shared with collect()
+        // whose output is hashed to decide whether the catalogue changed.
+        // Reordering it there would re-push the whole catalogue for nothing.
+        \core_collator::asort($unmeasurable);
+
+        return $unmeasurable;
+    }
+
+    public static function collect(): \stdClass {
+        global $CFG, $DB;
+
+        require_once($CFG->libdir . '/completionlib.php');
+
+        $courses = [];
+        $activities = [];
+
+        /*
+         * Which courses Moodle is able to complete anybody on.
+         *
+         * A course states what finishing means through its completion criteria.
+         * Without any, Moodle never writes a course_completions row however
+         * well somebody scores, so the course cannot report completion, cannot
+         * report overdue (nothing unfinished can ever become finished), and
+         * yields no grade or attempt rows either: both of those collectors find
+         * the main activity by joining course_completion_criteria.
+         *
+         * Such a course still has enrolments, so left alone it puts people in
+         * the denominator who can never reach the numerator, and one of them
+         * holds a whole department at nought per cent.
+         *
+         * Collected in one query rather than per course: this runs over every
+         * reportable course on the site.
+         */
+        $withcriteria = self::courses_with_criteria();
+        $courserecords = self::reportable_courses();
 
         foreach ($courserecords as $course) {
             $courses[] = (object) [
                 'courseid' => (int) $course->id,
                 'title' => trim($course->fullname),
                 'active' => (bool) $course->visible,
+                /*
+                 * Both halves are required and they fail the same way.
+                 *
+                 * Tracking switched off is the obvious case. Tracking on with
+                 * no criteria behind it is the one that fools people, because
+                 * the course looks configured and Moodle's own completion
+                 * report refuses to run for it.
+                 */
+                'measurable' => (bool) $course->enablecompletion
+                    && isset($withcriteria[(int) $course->id]),
             ];
 
             // The completion-gating activities, summative by the same rule

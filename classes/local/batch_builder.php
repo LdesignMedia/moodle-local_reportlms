@@ -402,6 +402,10 @@ class batch_builder {
                 'course_ref' => pseudonym::course($course->courseid),
                 'title' => \core_text::substr($course->title, 0, 255),
                 'active' => $course->active,
+                // Whether the course can complete anybody at all. Sent on every
+                // dimension push, never once at discovery: a course gains and
+                // loses criteria over its life and the report has to follow.
+                'measurable' => $course->measurable,
             ];
         }
         foreach ($dims->activities as $activity) {

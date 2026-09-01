@@ -734,6 +734,60 @@ if ($openunit && isset($nodes[$openunit])) {
 echo html_writer::tag('p', get_string('manage:intro', 'local_reportlms'), ['class' => 'text-muted']);
 
 
+// ------------------------------------------------------ unmeasurable ----
+
+/*
+ * The courses the report cannot say anything about, named, with the way to fix
+ * each one.
+ *
+ * A course with no completion criteria never completes anybody, so it is left
+ * out of the report entirely. The dashboard can only say how many were left
+ * out: course identifiers reach it as one-way pseudonyms, so it cannot name a
+ * course or link to it. Here both are possible, which is why the list lives on
+ * this page and not on the dashboard.
+ *
+ * Absent entirely when there are none, rather than an empty panel announcing a
+ * problem nobody has.
+ */
+$unmeasurable = \local_reportlms\local\collector\dimensions::unmeasurable_courses();
+
+if ($unmeasurable) {
+    echo html_writer::start_tag('div', ['class' => 'card mb-4 border-warning']);
+    echo html_writer::div(
+        html_writer::tag('strong', get_string(
+            'manage:unmeasurable',
+            'local_reportlms',
+            count($unmeasurable)
+        )),
+        'card-header py-2'
+    );
+    echo html_writer::start_tag('div', ['class' => 'card-body py-3']);
+
+    echo html_writer::tag(
+        'p',
+        get_string('manage:unmeasurable_help', 'local_reportlms'),
+        ['class' => 'text-muted']
+    );
+
+    echo html_writer::start_tag('ul', ['class' => 'mb-0']);
+
+    foreach ($unmeasurable as $courseid => $coursename) {
+        echo html_writer::tag(
+            'li',
+            s($coursename) . ' ' . html_writer::link(
+                new moodle_url('/course/completion.php', ['id' => $courseid]),
+                get_string('manage:setcompletion', 'local_reportlms'),
+                ['class' => 'ml-2 ms-2']
+            )
+        );
+    }
+
+    echo html_writer::end_tag('ul');
+    echo html_writer::end_tag('div');
+    echo html_writer::end_tag('div');
+}
+
+
 // ---------------------------------------------------------------- units ----
 
 echo html_writer::tag('h3', get_string('manage:units', 'local_reportlms'));
