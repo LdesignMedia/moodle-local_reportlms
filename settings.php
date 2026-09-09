@@ -326,6 +326,26 @@ if ($hassiteconfig) {
                 ));
             }
 
+            // The editor lives on its own page rather than in settings: it
+            // edits data, not configuration, and its own capability decides who
+            // may open it.
+            $settings->add(new admin_setting_description(
+                'local_reportlms/manageorg',
+                get_string('manage:title', 'local_reportlms'),
+                html_writer::link(
+                    new moodle_url('/local/reportlms/view/manage.php'),
+                    get_string('manage:open', 'local_reportlms'),
+                    ['class' => 'btn btn-secondary']
+                )
+            ));
+
+            $settings->add(new admin_setting_configcheckbox(
+                'local_reportlms/enabled',
+                get_string('settings:enabled', 'local_reportlms'),
+                get_string('settings:enabled_desc', 'local_reportlms'),
+                1
+            ));
+
             /*
              * What counts as late.
              *
@@ -345,6 +365,12 @@ if ($hassiteconfig) {
              * What counts as late is a policy about the report, not a fact
              * about this LMS, so it travels with the next sync and the report
              * decides; a second platform sends the same one field.
+             *
+             * Last on the page, and that is load-bearing. A heading claims
+             * every setting after it until the next one, so putting this in the
+             * middle swept the organisation editor's link and the send-data
+             * switch under it, and the page read as though turning off sending
+             * were something to do with deadlines.
              */
             $settings->add(new admin_setting_heading(
                 'local_reportlms/deadlineheading',
@@ -369,26 +395,6 @@ if ($hassiteconfig) {
                 get_string('settings:deadline_days_desc', 'local_reportlms'),
                 '30',
                 PARAM_INT
-            ));
-
-            // The editor lives on its own page rather than in settings: it
-            // edits data, not configuration, and its own capability decides who
-            // may open it.
-            $settings->add(new admin_setting_description(
-                'local_reportlms/manageorg',
-                get_string('manage:title', 'local_reportlms'),
-                html_writer::link(
-                    new moodle_url('/local/reportlms/view/manage.php'),
-                    get_string('manage:open', 'local_reportlms'),
-                    ['class' => 'btn btn-secondary']
-                )
-            ));
-
-            $settings->add(new admin_setting_configcheckbox(
-                'local_reportlms/enabled',
-                get_string('settings:enabled', 'local_reportlms'),
-                get_string('settings:enabled_desc', 'local_reportlms'),
-                1
             ));
         }
     }
