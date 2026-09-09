@@ -363,14 +363,13 @@ if ($hassiteconfig) {
                 ]
             ));
 
-            $months = new admin_setting_configtext(
-                'local_reportlms/deadline_months',
-                get_string('settings:deadline_months', 'local_reportlms'),
-                get_string('settings:deadline_months_desc', 'local_reportlms'),
-                '12',
+            $settings->add(new admin_setting_configtext(
+                'local_reportlms/deadline_days',
+                get_string('settings:deadline_days', 'local_reportlms'),
+                get_string('settings:deadline_days_desc', 'local_reportlms'),
+                '30',
                 PARAM_INT
-            );
-            $settings->add($months);
+            ));
 
             // The editor lives on its own page rather than in settings: it
             // edits data, not configuration, and its own capability decides who

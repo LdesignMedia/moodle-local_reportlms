@@ -361,7 +361,7 @@ class batch_builder {
      * policy, not a deadline computed here, so a second platform sends the same
      * pair and the rule itself stays in one place.
      *
-     * @return array{deadline_source: string, deadline_months: int|null}
+     * @return array{deadline_source: string, deadline_days: int|null}
      */
     public static function settings_section(): array {
         $source = (string) get_config('local_reportlms', 'deadline_source');
@@ -369,18 +369,18 @@ class batch_builder {
         // Anything unrecognised, including a site that has never opened the
         // setting, means the behaviour the report has always had.
         if ($source !== 'period') {
-            return ['deadline_source' => 'enrolment_end', 'deadline_months' => null];
+            return ['deadline_source' => 'enrolment_end', 'deadline_days' => null];
         }
 
-        $months = (int) get_config('local_reportlms', 'deadline_months');
+        $days = (int) get_config('local_reportlms', 'deadline_days');
 
         // A period of nothing is not a deadline. Rather than send a rule the
         // report would have to second-guess, say the other thing plainly.
-        if ($months < 1 || $months > 120) {
-            return ['deadline_source' => 'enrolment_end', 'deadline_months' => null];
+        if ($days < 1 || $days > 3650) {
+            return ['deadline_source' => 'enrolment_end', 'deadline_days' => null];
         }
 
-        return ['deadline_source' => 'period', 'deadline_months' => $months];
+        return ['deadline_source' => 'period', 'deadline_days' => $days];
     }
 
     public static function structure_only(int $snapshotat): ?\stdClass {
