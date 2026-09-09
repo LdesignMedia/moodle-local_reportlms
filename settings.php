@@ -326,6 +326,52 @@ if ($hassiteconfig) {
                 ));
             }
 
+            /*
+             * What counts as late.
+             *
+             * An enrolment's end date is the only deadline an LMS hands over
+             * for free, and it is the wrong field to fill in for the purpose:
+             * in Moodle timeend does not mark a deadline, it ends the
+             * enrolment, so past it the learner cannot open the course. Sites
+             * that set end dates to make the overdue figure work were locking
+             * people out of the training it said they were late on.
+             *
+             * A period after enrolment says what compliance training means,
+             * needs nothing entered per learner, and touches nobody's access.
+             * Both are offered because a site that already uses end dates
+             * deliberately should keep them.
+             *
+             * Stored here and applied in the report rather than computed here.
+             * What counts as late is a policy about the report, not a fact
+             * about this LMS, so it travels with the next sync and the report
+             * decides; a second platform sends the same one field.
+             */
+            $settings->add(new admin_setting_heading(
+                'local_reportlms/deadlineheading',
+                get_string('settings:deadlineheading', 'local_reportlms'),
+                get_string('settings:deadlineintro', 'local_reportlms')
+            ));
+
+            $settings->add(new admin_setting_configselect(
+                'local_reportlms/deadline_source',
+                get_string('settings:deadline_source', 'local_reportlms'),
+                get_string('settings:deadline_source_desc', 'local_reportlms'),
+                'enrolment_end',
+                [
+                    'enrolment_end' => get_string('settings:deadline_enrolment_end', 'local_reportlms'),
+                    'period' => get_string('settings:deadline_period', 'local_reportlms'),
+                ]
+            ));
+
+            $months = new admin_setting_configtext(
+                'local_reportlms/deadline_months',
+                get_string('settings:deadline_months', 'local_reportlms'),
+                get_string('settings:deadline_months_desc', 'local_reportlms'),
+                '12',
+                PARAM_INT
+            );
+            $settings->add($months);
+
             // The editor lives on its own page rather than in settings: it
             // edits data, not configuration, and its own capability decides who
             // may open it.

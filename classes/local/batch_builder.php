@@ -273,6 +273,9 @@ class batch_builder {
             if ($i === 0 && $dimensions !== null) {
                 $payload['dimensions'] = $dimensions['section'];
             }
+            if ($i === 0) {
+                $payload['settings'] = self::settings_section();
+            }
             /*
              * Who this chunk is a complete statement about.
              *
@@ -347,15 +350,61 @@ class batch_builder {
      *
      * @return \stdClass|null One chunk, shaped exactly like {@see build} returns.
      */
+    /**
+     * What this site counts as late, for the report to apply.
+     *
+     * Sent every time rather than only on change: it is two scalars, the
+     * saving would be a hash to keep in step with them, and a setting that
+     * silently fails to travel is worse than a few bytes on every push.
+     *
+     * The report decides what to do with it. This is a statement of the site's
+     * policy, not a deadline computed here, so a second platform sends the same
+     * pair and the rule itself stays in one place.
+     *
+     * @return array{deadline_source: string, deadline_months: int|null}
+     */
+    public static function settings_section(): array {
+        $source = (string) get_config('local_reportlms', 'deadline_source');
+
+        // Anything unrecognised, including a site that has never opened the
+        // setting, means the behaviour the report has always had.
+        if ($source !== 'period') {
+            return ['deadline_source' => 'enrolment_end', 'deadline_months' => null];
+        }
+
+        $months = (int) get_config('local_reportlms', 'deadline_months');
+
+        // A period of nothing is not a deadline. Rather than send a rule the
+        // report would have to second-guess, say the other thing plainly.
+        if ($months < 1 || $months > 120) {
+            return ['deadline_source' => 'enrolment_end', 'deadline_months' => null];
+        }
+
+        return ['deadline_source' => 'period', 'deadline_months' => $months];
+    }
+
     public static function structure_only(int $snapshotat): ?\stdClass {
         $orgsection = self::org_section_if_changed();
         $dimensions = self::dimensions_section_if_changed();
+        $settings = self::settings_section();
 
-        if ($orgsection === null && $dimensions === null) {
+        /*
+         * The deadline rule is a reason to push on its own.
+         *
+         * Without this, an administrator who changes only that setting waits
+         * for some unrelated learner or course to change before the report
+         * hears about it. On a site that has finished its training that is
+         * never, and the setting would look broken rather than slow.
+         */
+        $settingshash = sha1(json_encode($settings));
+        $settingschanged = $settingshash !== (string) get_config('local_reportlms', 'lastsettingshash');
+
+        if ($orgsection === null && $dimensions === null && !$settingschanged) {
             return null;
         }
 
         $payload = self::envelope($snapshotat);
+        $payload['settings'] = $settings;
 
         if ($orgsection !== null) {
             $payload['org'] = $orgsection;
@@ -375,6 +424,7 @@ class batch_builder {
             'userids' => [],
             'factrows' => 0,
             'dimhash' => $dimensions !== null ? $dimensions['hash'] : null,
+            'settingshash' => $settingshash,
         ];
     }
 

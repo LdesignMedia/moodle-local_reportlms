@@ -247,6 +247,15 @@ class push_batch extends \core\task\scheduled_task {
             if (!empty($chunk->dimhash)) {
                 set_config('lastdimhash', $chunk->dimhash, 'local_reportlms');
             }
+            /*
+             * And for the deadline rule, remembered only after the SaaS has
+             * taken it. Storing it before would mark a setting as delivered
+             * that a refusal had thrown away, and the next run would see no
+             * change and never send it again.
+             */
+            if (!empty($chunk->settingshash)) {
+                set_config('lastsettingshash', $chunk->settingshash, 'local_reportlms');
+            }
 
             $sent += count($chunk->userids);
             mtrace("chunk $i: $chunk->factrows fact rows for " . count($chunk->userids)
