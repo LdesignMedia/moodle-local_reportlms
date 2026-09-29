@@ -214,11 +214,16 @@ class writeback {
 
         foreach ($userids as $userid) {
             $userid = (int) $userid;
-            $sector = '';
-            $department = '';
-            $node = isset($placed[$userid]) ? ($nodes[$placed[$userid]] ?? null) : null;
+            $sectors = [];
+            $departments = [];
 
-            if ($node !== null) {
+            foreach ($placed[$userid] ?? [] as $nodeid) {
+                $node = $nodes[$nodeid] ?? null;
+
+                if ($node === null) {
+                    continue;
+                }
+
                 /*
                  * The name, never the key.
                  *
@@ -230,15 +235,25 @@ class writeback {
                 if ($node->kind === 'sector') {
                     // Placed on a sector directly, which is a real if unusual
                     // shape: a unit that has people and no departments yet.
-                    $sector = $node->name;
+                    $sectors[$node->name] = $node->name;
                 } else {
-                    $department = $node->name;
+                    $departments[$node->name] = $node->name;
 
                     if ($node->parentid !== null && isset($nodes[$node->parentid])) {
-                        $sector = $nodes[$node->parentid]->name;
+                        $sectors[$nodes[$node->parentid]->name] = $nodes[$node->parentid]->name;
                     }
                 }
             }
+
+            /*
+             * Every unit the person is in, named once each and in a stable
+             * order, so a field that does not change is not rewritten. One
+             * unit reads exactly as it always did.
+             */
+            \core_collator::asort($sectors);
+            \core_collator::asort($departments);
+            $sector = implode(', ', $sectors);
+            $department = implode(', ', $departments);
 
             $wanted[] = [
                 'userid' => $userid,

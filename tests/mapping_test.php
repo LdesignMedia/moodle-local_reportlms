@@ -127,17 +127,16 @@ final class mapping_test extends \advanced_testcase {
 
         $node = mapping::save_node('Rotterdam', 'department');
         mapping::place((int) $learner->id, $node);
-        mapping::release((int) $learner->id);
+        mapping::release((int) $learner->id, $node);
 
         $this->assertSame('department:Unassigned', $this->node_of($learner->id));
     }
 
     /**
-     * One unit per learner. Placing somewhere new moves them rather than
-     * adding a second claim, because the tree cannot express two and storing
-     * it would mean writing data nothing can read.
+     * A person can be in several units. Placing somewhere new adds that unit
+     * and leaves the first one alone; it used to move them.
      */
-    public function test_placing_a_learner_twice_moves_them(): void {
+    public function test_placing_a_learner_twice_puts_them_in_both(): void {
         $learner = $this->getDataGenerator()->create_user();
 
         $first = mapping::save_node('Rotterdam', 'department');
@@ -146,7 +145,22 @@ final class mapping_test extends \advanced_testcase {
         mapping::place((int) $learner->id, $first);
         mapping::place((int) $learner->id, $second);
 
-        $this->assertSame([(int) $learner->id => $second], array_map('intval', mapping::membership()));
+        $this->assertSame([(int) $learner->id => [$first => $first, $second => $second]], mapping::membership());
+    }
+
+    /**
+     * The same unit twice is still one row.
+     */
+    public function test_placing_a_learner_in_the_same_unit_twice_is_one_row(): void {
+        global $DB;
+
+        $learner = $this->getDataGenerator()->create_user();
+        $node = mapping::save_node('Rotterdam', 'department');
+
+        mapping::place((int) $learner->id, $node);
+        mapping::place((int) $learner->id, $node);
+
+        $this->assertSame(1, $DB->count_records('local_reportlms_member', ['userid' => $learner->id]));
     }
 
     /**

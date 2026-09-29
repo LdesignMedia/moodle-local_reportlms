@@ -110,10 +110,13 @@ final class sources_test extends \advanced_testcase {
     }
 
     /**
-     * A group beats the course holding it, because it is the narrower thing to
-     * have pointed at.
+     * A group and the course holding it, chosen for two units, put the person
+     * in both.
+     *
+     * The narrower claim used to win and take the person out of the other unit,
+     * which then showed a course chosen and somebody on it missing.
      */
-    public function test_a_group_beats_the_course_that_holds_it(): void {
+    public function test_a_group_and_the_course_holding_it_both_draw(): void {
         $course = $this->getDataGenerator()->create_course();
         $learner = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($learner->id, $course->id);
@@ -127,13 +130,15 @@ final class sources_test extends \advanced_testcase {
         mapping::save_sources($wide, ['courses' => [$course->id]]);
         mapping::save_sources($narrow, ['groups' => [$group->id]]);
 
-        $this->assertSame($narrow, mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame($this->ids($wide, $narrow), mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame([(int) $learner->id], mapping::members_of($wide));
+        $this->assertSame([(int) $learner->id], mapping::members_of($narrow));
     }
 
     /**
-     * A course beats a whole category, for the same reason.
+     * A category and a course in it, for two units: both, for the same reason.
      */
-    public function test_a_course_beats_a_category(): void {
+    public function test_a_category_and_a_course_in_it_both_draw(): void {
         $category = $this->getDataGenerator()->create_category();
         $course = $this->getDataGenerator()->create_course(['category' => $category->id]);
         $learner = $this->getDataGenerator()->create_user();
@@ -145,21 +150,22 @@ final class sources_test extends \advanced_testcase {
         mapping::save_sources($wide, ['categories' => [$category->id]]);
         mapping::save_sources($narrow, ['courses' => [$course->id]]);
 
-        $this->assertSame($narrow, mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame($this->ids($wide, $narrow), mapping::resolved_membership()[(int) $learner->id]);
     }
 
     /**
-     * Two units drawing the same course is a contradiction, and the person
-     * lands nowhere until somebody resolves it.
+     * One course chosen for two units puts everybody on it in both.
      *
-     * Deliberately not "lowest id wins". That is stable and meaningless, it
-     * hides the contradiction behind a plausible answer, and the answer changes
-     * if a unit is deleted and recreated.
+     * The case this change exists for. It used to be called a contradiction and
+     * leave the person in neither unit, while the editor showed the course
+     * chosen in both.
      */
-    public function test_two_units_drawing_one_course_leaves_the_person_unplaced(): void {
+    public function test_two_units_drawing_one_course_both_hold_the_person(): void {
         $course = $this->getDataGenerator()->create_course();
         $learner = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($learner->id, $course->id);
+        $this->getDataGenerator()->enrol_user($other->id, $course->id);
 
         $sales = mapping::save_node('Sales', 'department');
         $support = mapping::save_node('Support', 'department');
@@ -167,44 +173,47 @@ final class sources_test extends \advanced_testcase {
         mapping::save_sources($sales, ['courses' => [$course->id]]);
         mapping::save_sources($support, ['courses' => [$course->id]]);
 
-        $this->assertArrayNotHasKey((int) $learner->id, mapping::resolved_membership());
-        $this->assertSame([(int) $learner->id], mapping::contested());
-        $this->assertSame('department:Unassigned', $this->node_of((int) $learner->id));
+        $both = [(int) $learner->id, (int) $other->id];
+        sort($both);
+
+        $this->assertSame($this->ids($sales, $support), mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame($both, $this->sorted(mapping::members_of($sales)));
+        $this->assertSame($both, $this->sorted(mapping::members_of($support)));
+        $this->assertSame([$sales => 2, $support => 2], $this->sorted_keys(mapping::member_counts()));
+        $this->assertSame(['department:Sales', 'department:Support'], $this->nodes_of((int) $learner->id));
+        $this->assertSame(0, mapping::unplaced_count() - $this->unplaced_without([$learner, $other]));
     }
 
     /**
-     * And naming them settles it, because that is somebody answering the
-     * question the sources disagreed about.
+     * Naming somebody into a third unit adds it, and leaves the units their
+     * sources put them in alone.
      */
-    public function test_naming_somebody_settles_a_contested_claim(): void {
+    public function test_naming_somebody_adds_a_unit(): void {
         $course = $this->getDataGenerator()->create_course();
         $learner = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($learner->id, $course->id);
 
         $sales = mapping::save_node('Sales', 'department');
         $support = mapping::save_node('Support', 'department');
+        $named = mapping::save_node('Named', 'department');
 
         mapping::save_sources($sales, ['courses' => [$course->id]]);
         mapping::save_sources($support, ['courses' => [$course->id]]);
-        mapping::place((int) $learner->id, $support);
+        mapping::place((int) $learner->id, $named);
         mapping::reset();
 
-        $this->assertSame($support, mapping::resolved_membership()[(int) $learner->id]);
-        $this->assertSame([], mapping::contested());
+        $this->assertSame($this->ids($sales, $support, $named), mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame([(int) $learner->id], mapping::named_members_of($named));
+        $this->assertSame([], mapping::named_members_of($sales));
     }
 
     /**
-     * A source beats what the migration left behind.
+     * A placement the migration left adds its unit to the ones a source draws.
      *
-     * The migration wrote one row per learner to reproduce a tree that had been
-     * worked out from profile fields, and stored it the only way there was at
-     * the time: as though somebody had typed every name. Left at that rank it
-     * outranked every source, so on a migrated site a course could draw nobody,
-     * because all 3,262 people were already spoken for.
+     * It is a name in that unit's Person box, and a name there that did nothing
+     * showed somebody in a unit's box and missing from its people list.
      */
-    public function test_a_source_beats_a_placement_the_migration_left(): void {
-        global $DB;
-
+    public function test_a_placement_the_migration_left_adds_its_unit(): void {
         $course = $this->getDataGenerator()->create_course();
         $learner = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($learner->id, $course->id);
@@ -212,90 +221,119 @@ final class sources_test extends \advanced_testcase {
         $old = mapping::save_node('Where they were', 'department');
         $new = mapping::save_node('Where the course says', 'department');
 
-        $DB->insert_record('local_reportlms_member', (object) [
-            'nodeid' => $old,
-            'userid' => $learner->id,
-            'source' => mapping::ADOPTED,
-            'timemodified' => time(),
-            'usermodified' => 0,
-        ]);
-
+        $this->adopt((int) $learner->id, $old);
         mapping::save_sources($new, ['courses' => [$course->id]]);
 
-        $this->assertSame($new, mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame($this->ids($old, $new), mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame([(int) $learner->id], mapping::members_of($old));
+        $this->assertSame([], mapping::named_members_of($old), 'Not a name anybody typed.');
     }
 
     /**
-     * With no source saying otherwise, the migration's placement stands. It is
-     * the whole organisation on a site that has not started using sources.
+     * With no source at all, the migration's placement is the whole answer. It
+     * is the whole organisation on a site that has not started using sources.
      */
     public function test_the_migration_stands_where_no_source_speaks(): void {
-        global $DB;
-
         $learner = $this->getDataGenerator()->create_user();
         $node = mapping::save_node('Where they were', 'department');
 
-        $DB->insert_record('local_reportlms_member', (object) [
-            'nodeid' => $node,
-            'userid' => $learner->id,
-            'source' => mapping::ADOPTED,
-            'timemodified' => time(),
-            'usermodified' => 0,
-        ]);
-
+        $this->adopt((int) $learner->id, $node);
         mapping::reset();
 
-        $this->assertSame($node, mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame([$node => $node], mapping::resolved_membership()[(int) $learner->id]);
         $this->assertSame([], mapping::named_members_of($node), 'Not a name anybody typed.');
     }
 
     /**
-     * Two sources shouting over each other leaves the migration's answer
-     * standing, because it is at least an answer.
+     * A typed name in the unit a source already draws them into is still one
+     * membership, not two.
      */
-    public function test_a_contested_learner_keeps_what_the_migration_said(): void {
-        global $DB;
-
+    public function test_a_named_person_on_a_unit_that_draws_them_is_in_it_once(): void {
         $course = $this->getDataGenerator()->create_course();
         $learner = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($learner->id, $course->id);
 
-        $was = mapping::save_node('Where they were', 'department');
-        $sales = mapping::save_node('Sales', 'department');
-        $support = mapping::save_node('Support', 'department');
+        $node = mapping::save_node('Drawn and named', 'department');
 
-        $DB->insert_record('local_reportlms_member', (object) [
-            'nodeid' => $was,
-            'userid' => $learner->id,
-            'source' => mapping::ADOPTED,
-            'timemodified' => time(),
-            'usermodified' => 0,
-        ]);
+        mapping::save_sources($node, ['courses' => [$course->id]]);
+        mapping::place((int) $learner->id, $node);
+        mapping::reset();
 
-        mapping::save_sources($sales, ['courses' => [$course->id]]);
-        mapping::save_sources($support, ['courses' => [$course->id]]);
-
-        $this->assertSame($was, mapping::resolved_membership()[(int) $learner->id]);
-        $this->assertSame([(int) $learner->id], mapping::contested(), 'Still worth saying out loud.');
+        $this->assertSame([$node => $node], mapping::resolved_membership()[(int) $learner->id]);
+        $this->assertSame([(int) $learner->id], mapping::members_of($node));
+        $this->assertSame(['department:Drawn and named'], $this->nodes_of((int) $learner->id));
     }
 
     /**
-     * A typed name beats any source, however narrow.
+     * Removing somebody from one unit leaves them in the others.
+     *
+     * Remove used to delete every row the person had anywhere, which was the
+     * same thing while a person could be in one unit only.
      */
-    public function test_a_named_person_beats_a_source(): void {
+    public function test_removing_somebody_from_one_unit_keeps_the_others(): void {
+        $learner = $this->getDataGenerator()->create_user();
+        $sales = mapping::save_node('Sales', 'department');
+        $support = mapping::save_node('Support', 'department');
+        $migrated = mapping::save_node('Migrated', 'department');
+
+        mapping::place((int) $learner->id, $sales);
+        mapping::place((int) $learner->id, $support);
+        $this->adopt((int) $learner->id, $migrated);
+
+        mapping::release((int) $learner->id, $sales);
+
+        $this->assertSame($this->ids($support, $migrated), mapping::resolved_membership()[(int) $learner->id]);
+
+        mapping::release((int) $learner->id, $migrated);
+
+        $this->assertSame([$support => $support], mapping::resolved_membership()[(int) $learner->id]);
+    }
+
+    /**
+     * Remove takes out the row, never what a source draws: that stays until the
+     * source changes, which is why the editor offers Remove only on rows.
+     */
+    public function test_removing_a_named_person_a_source_draws_leaves_them_drawn(): void {
         $course = $this->getDataGenerator()->create_course();
         $learner = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($learner->id, $course->id);
 
-        $drawn = mapping::save_node('Drawn', 'department');
-        $named = mapping::save_node('Named', 'department');
+        $node = mapping::save_node('Drawn and named', 'department');
+        mapping::save_sources($node, ['courses' => [$course->id]]);
+        mapping::place((int) $learner->id, $node);
 
-        mapping::save_sources($drawn, ['courses' => [$course->id]]);
-        mapping::place((int) $learner->id, $named);
+        mapping::release((int) $learner->id, $node);
+
+        $this->assertSame([(int) $learner->id], mapping::members_of($node));
+        $this->assertSame([], mapping::named_members_of($node));
+    }
+
+    /**
+     * A person in two departments of one sector is one person in that sector.
+     *
+     * The editor's roll-up summed the departments, which was only right while a
+     * person could be in one unit.
+     */
+    public function test_the_roll_up_counts_a_person_once(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $shared = $this->getDataGenerator()->create_user();
+        $only = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($shared->id, $course->id);
+
+        $sector = mapping::save_node('Operations', 'sector');
+        $north = mapping::save_node('North', 'department', $sector);
+        $south = mapping::save_node('South', 'department', $sector);
+
+        mapping::save_sources($north, ['courses' => [$course->id]]);
+        mapping::save_sources($south, ['courses' => [$course->id]]);
+        mapping::place((int) $only->id, $south);
         mapping::reset();
 
-        $this->assertSame($named, mapping::resolved_membership()[(int) $learner->id]);
-        $this->assertSame([(int) $learner->id], mapping::named_members_of($named));
+        $counts = mapping::rolled_up_counts();
+
+        $this->assertSame(1, $counts[$north]);
+        $this->assertSame(2, $counts[$south]);
+        $this->assertSame(2, $counts[$sector], 'Two people, not three.');
     }
 
     /**
@@ -496,6 +534,101 @@ final class sources_test extends \advanced_testcase {
         $this->assertSame(2, $counts[$node], 'One drawn by the course, one named.');
         $this->assertSame(count(mapping::members_of($node)), $counts[$node]);
         $this->assertArrayNotHasKey($empty, $counts, 'An empty unit is absent, and reads as zero.');
+    }
+
+    /**
+     * Node ids as the resolver keys them, in node id order.
+     *
+     * @param int ...$nodeids
+     *
+     * @return array<int, int>
+     */
+    private function ids(int ...$nodeids): array {
+        sort($nodeids);
+
+        return array_combine($nodeids, $nodeids);
+    }
+
+    /**
+     * A list of ints, sorted.
+     *
+     * @param array $ids User ids.
+     *
+     * @return array
+     */
+    private function sorted(array $ids): array {
+        sort($ids);
+
+        return $ids;
+    }
+
+    /**
+     * A map, sorted by key.
+     *
+     * @param array $map Node id to count.
+     *
+     * @return array
+     */
+    private function sorted_keys(array $map): array {
+        ksort($map);
+
+        return $map;
+    }
+
+    /**
+     * How many people are in no unit, leaving out these users.
+     *
+     * @param array $users User records.
+     *
+     * @return int
+     */
+    private function unplaced_without(array $users): int {
+        global $DB;
+
+        return $DB->count_records_select('user', 'deleted = 0 AND id > 2') - count($users);
+    }
+
+    /**
+     * Write a placement the way the migration did.
+     *
+     * @param int $userid
+     * @param int $nodeid
+     *
+     * @return void
+     */
+    private function adopt(int $userid, int $nodeid): void {
+        global $DB;
+
+        $DB->insert_record('local_reportlms_member', (object) [
+            'nodeid' => $nodeid,
+            'userid' => $userid,
+            'source' => mapping::ADOPTED,
+            'timemodified' => time(),
+            'usermodified' => 0,
+        ]);
+
+        mapping::reset();
+    }
+
+    /**
+     * Every node key the collector sends for this user, sorted.
+     *
+     * @param int $userid
+     *
+     * @return array<int, string>
+     */
+    private function nodes_of(int $userid): array {
+        mapping::reset();
+
+        $keys = [];
+
+        foreach (org::collect()->members as $member) {
+            if ((int) $member->userid === $userid) {
+                $keys[] = $member->nodekey;
+            }
+        }
+
+        return $keys;
     }
 
     /**

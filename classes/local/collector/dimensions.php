@@ -138,6 +138,11 @@ class dimensions {
         return $unmeasurable;
     }
 
+    /**
+     * The catalogue: every reportable course and its activities.
+     *
+     * @return \stdClass {courses, activities}
+     */
     public static function collect(): \stdClass {
         global $CFG, $DB;
 

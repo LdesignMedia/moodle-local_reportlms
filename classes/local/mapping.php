@@ -39,9 +39,10 @@ defined('MOODLE_INTERNAL') || die();
  *
  * Two rules hold the design together.
  *
- * **What somebody states here is the answer.** A row somebody
- * typed is a statement of fact about the organisation; a profile field is a
- * guess derived from an HR export. When they disagree, the person wins.
+ * **What somebody states here is the answer.** A unit holds everybody its
+ * sources include and everybody named into it, and a person is in every unit
+ * that says so. Nothing stated here is overruled by anything else stated here:
+ * a course chosen for two departments puts its people in both.
  *
  * **Being a manager is data, not a permission.** Naming somebody here gives
  * them the report for that unit without any role assignment, because a training
@@ -76,30 +77,26 @@ class mapping {
     /** @var array<int, \stdClass>|null Memoised per request. */
     protected static $nodes = null;
 
-    /** @var array<int, int>|null Learner id to node id, manual rows only. */
+    /** @var array<int, array<int, int>>|null Learner id to node ids, manual rows only. */
     protected static $members = null;
 
-    /** @var array<int, int>|null Learner id to node id, sources and manual rows together. */
+    /** @var array<int, array<int, int>>|null Learner id to node ids, sources and rows together. */
     protected static $resolved = null;
 
-    /** @var array<int, int>|null Learner id to node id, what the migration left. */
+    /** @var array<int, array<int, int>>|null Learner id to node ids, what the migration left. */
     protected static $adopted = null;
 
-    /** @var array<int, true>|null Learners two units claim equally hard. */
-    protected static $contested = null;
+    /** @var array<int, array<int, int>>|null Node id to learner ids, the resolved map turned round. */
+    protected static $byunit = null;
 
     /**
-     * Source kinds, narrowest first.
+     * The kinds of source a unit can draw people from.
      *
-     * This order decides who wins when two units claim one person, and it is a
-     * judgement about what people mean rather than a fact. A group is narrower
-     * than the course holding it, a course is narrower than the category
-     * holding it, and a cohort is a hand-kept list so it beats a whole
-     * category. Somebody drawn by Sales' group and Support's category belongs
-     * to Sales, which is what a person would say if asked.
-     *
-     * A name typed into the Person box beats all of them, and is not in this
-     * list because it is not a source: it is a row in the member table.
+     * No order and no winner. A unit holds everybody its sources include, so
+     * a course chosen for two departments puts its people in both. Picking one
+     * unit per person used to drop people silently: the narrower claim took
+     * them away from the other unit, and two equal claims left them in
+     * neither, while the editor showed the course chosen in both.
      *
      * @var string[]
      */
@@ -117,8 +114,8 @@ class mapping {
         self::$nodes = null;
         self::$members = null;
         self::$resolved = null;
-        self::$contested = null;
         self::$adopted = null;
+        self::$byunit = null;
     }
 
     /**
@@ -137,27 +134,45 @@ class mapping {
     }
 
     /**
-     * Which unit each learner was put in.
+     * Which units each learner was named into by hand.
      *
-     * @return array<int, int> Learner user id to node id.
+     * @return array<int, array<int, int>> Learner user id to node ids.
      */
     public static function membership(): array {
-        global $DB;
-
         if (self::$members === null) {
-            self::$members = $DB->get_records_menu(
-                'local_reportlms_member',
-                ['source' => self::MANUAL],
-                '',
-                'userid, nodeid'
-            );
+            self::$members = self::rows_by_user(self::MANUAL);
         }
 
         return self::$members;
     }
 
     /**
-     * Who is in which unit, sources resolved and manual rows on top.
+     * Member rows of one kind, as learner id to node ids.
+     *
+     * A recordset rather than get_records_menu(): a menu keeps one value per
+     * key, so a learner with rows in two units would come back in one of them.
+     *
+     * @param string $source {@see MANUAL} or {@see ADOPTED}.
+     *
+     * @return array<int, array<int, int>>
+     */
+    protected static function rows_by_user(string $source): array {
+        global $DB;
+
+        $found = [];
+        $rows = $DB->get_recordset('local_reportlms_member', ['source' => $source], 'userid, nodeid', 'id, userid, nodeid');
+
+        foreach ($rows as $row) {
+            $found[(int) $row->userid][(int) $row->nodeid] = (int) $row->nodeid;
+        }
+
+        $rows->close();
+
+        return $found;
+    }
+
+    /**
+     * Who is in which unit: everybody a source draws and everybody with a row.
      *
      * The whole site in one pass, because the editor asks it once per unit
      * while drawing a table and the collector asks it for every learner. Five
@@ -168,81 +183,44 @@ class mapping {
      * time, so somebody enrolled tomorrow is in the unit tomorrow without
      * anybody touching the editor.
      *
-     * @return array<int, int> Learner user id to node id.
+     * A learner is in every unit that claims them, and nothing outranks
+     * anything. A course chosen for two departments puts its people in both; a
+     * name typed into a unit adds that unit; a placement the migration left
+     * adds its unit too, because it is a name in that unit's Person box and a
+     * name there that did nothing would be a lie on the screen.
+     *
+     * @return array<int, array<int, int>> Learner user id to node ids, in node id order.
      */
     public static function resolved_membership(): array {
         if (self::$resolved !== null) {
             return self::$resolved;
         }
 
-        $claims = self::source_claims();
-        $contested = [];
+        $resolved = self::source_claims();
 
-        /*
-         * The migration's placements, underneath everything.
-         *
-         * Weakest, so a source somebody chose deliberately moves people the
-         * migration merely carried over. See {@see ADOPTED}.
-         */
-        $resolved = self::adopted_membership();
-
-        foreach ($claims as $userid => $byrank) {
-            ksort($byrank);
-            $best = reset($byrank);
-
-            /*
-             * Two units claiming one person at the same narrowness is a
-             * contradiction, not a puzzle: somebody said two incompatible
-             * things, and there is no honest way to pick.
-             *
-             * They land nowhere until it is resolved, and the editor counts
-             * them, because a person quietly assigned to whichever unit sorted
-             * first is how a department gains somebody else's people.
-             */
-            if (count($best) > 1) {
-                $contested[$userid] = true;
-
-                // Whatever the migration said stands, because it is at least an
-                // answer, and two sources shouting over each other is not.
-                continue;
+        foreach ([self::adopted_membership(), self::membership()] as $rows) {
+            foreach ($rows as $userid => $nodeids) {
+                foreach ($nodeids as $nodeid) {
+                    $resolved[(int) $userid][(int) $nodeid] = (int) $nodeid;
+                }
             }
-
-            $resolved[$userid] = (int) reset($best);
         }
 
-        // A name typed into the Person box is the last word, and it settles a
-        // contested learner too: it is somebody answering the question the
-        // sources disagreed about.
-        foreach (self::membership() as $userid => $nodeid) {
-            $resolved[(int) $userid] = (int) $nodeid;
-            unset($contested[(int) $userid]);
+        // A stable order, so the org state hash is the same on every run.
+        foreach ($resolved as &$nodeids) {
+            ksort($nodeids);
         }
+        unset($nodeids);
 
-        self::$contested = $contested;
+        ksort($resolved);
 
         return self::$resolved = $resolved;
     }
 
     /**
-     * Learners more than one unit claims, with nothing to separate the claims.
+     * Every claim a source makes, as user id => [node ids].
      *
-     * @return array<int, int> User ids.
-     */
-    public static function contested(): array {
-        if (self::$contested === null) {
-            self::resolved_membership();
-        }
-
-        return array_keys(self::$contested);
-    }
-
-    /**
-     * Every claim a source makes, as user id => rank => [node ids].
-     *
-     * Rank is the position in {@see SOURCE_KINDS}, so a lower number is a
-     * narrower claim and sorting picks the winner.
-     *
-     * @return array<int, array<int, array<int, int>>>
+     * @return array<int, array<int, int>>
      */
     protected static function source_claims(): array {
         global $DB;
@@ -259,15 +237,12 @@ class mapping {
             $bytype[$row->itemtype][] = $row;
         }
 
-        $ranks = array_flip(self::SOURCE_KINDS);
         $claims = [];
 
         foreach ($bytype as $itemtype => $typerows) {
-            $rank = $ranks[$itemtype] ?? count($ranks);
-
             foreach (self::people_for($itemtype, $typerows) as $userid => $nodeids) {
                 foreach ($nodeids as $nodeid) {
-                    $claims[$userid][$rank][$nodeid] = $nodeid;
+                    $claims[(int) $userid][(int) $nodeid] = (int) $nodeid;
                 }
             }
         }
@@ -387,20 +362,11 @@ class mapping {
     /**
      * The placements the migration wrote.
      *
-     * @return array<int, int> Learner user id to node id.
+     * @return array<int, array<int, int>> Learner user id to node ids.
      */
     public static function adopted_membership(): array {
-        global $DB;
-
         if (self::$adopted === null) {
-            // Cast, because get_records_menu hands back strings and this feeds
-            // the resolver directly, where every other value is an int.
-            self::$adopted = array_map('intval', $DB->get_records_menu(
-                'local_reportlms_member',
-                ['source' => self::ADOPTED],
-                '',
-                'userid, nodeid'
-            ));
+            self::$adopted = self::rows_by_user(self::ADOPTED);
         }
 
         return self::$adopted;
@@ -448,13 +414,62 @@ class mapping {
      * @return array<int, int> Node id to headcount. A unit with nobody is absent.
      */
     public static function member_counts(): array {
+        return array_map('count', self::by_unit());
+    }
+
+    /**
+     * How many distinct people each unit holds, its own and everything below.
+     *
+     * Not the sum of the children: a person in two departments of one sector
+     * is one person in that sector, which is how Report LMS counts it too.
+     *
+     * @return array<int, int> Node id to headcount. A unit with nobody is absent.
+     */
+    public static function rolled_up_counts(): array {
+        $nodes = self::nodes();
         $counts = [];
 
-        foreach (self::resolved_membership() as $nodeid) {
-            $counts[(int) $nodeid] = ($counts[(int) $nodeid] ?? 0) + 1;
+        foreach (self::resolved_membership() as $nodeids) {
+            $reached = [];
+
+            foreach ($nodeids as $nodeid) {
+                // Up the tree from each unit, once per unit reached, and never
+                // round a loop if a parent has been pointed at a descendant.
+                while ($nodeid !== null && isset($nodes[$nodeid]) && !isset($reached[$nodeid])) {
+                    $reached[$nodeid] = true;
+                    $parentid = $nodes[$nodeid]->parentid;
+                    $nodeid = $parentid === null ? null : (int) $parentid;
+                }
+            }
+
+            foreach (array_keys($reached) as $nodeid) {
+                $counts[$nodeid] = ($counts[$nodeid] ?? 0) + 1;
+            }
         }
 
         return $counts;
+    }
+
+    /**
+     * The resolved membership turned round: node id to the learners in it.
+     *
+     * Built once per request. members_of() used to walk the whole site's
+     * membership for every unit it was asked about.
+     *
+     * @return array<int, array<int, int>> Node id to user ids. A unit with nobody is absent.
+     */
+    protected static function by_unit(): array {
+        if (self::$byunit === null) {
+            self::$byunit = [];
+
+            foreach (self::resolved_membership() as $userid => $nodeids) {
+                foreach ($nodeids as $nodeid) {
+                    self::$byunit[(int) $nodeid][] = (int) $userid;
+                }
+            }
+        }
+
+        return self::$byunit;
     }
 
     /**
@@ -501,8 +516,8 @@ class mapping {
     public static function named_members_of(int $nodeid): array {
         $ids = [];
 
-        foreach (self::membership() as $userid => $node) {
-            if ((int) $node === $nodeid) {
+        foreach (self::membership() as $userid => $nodeids) {
+            if (isset($nodeids[$nodeid])) {
                 $ids[] = (int) $userid;
             }
         }
@@ -872,7 +887,7 @@ class mapping {
         $count = 0;
 
         foreach ($DB->get_fieldset_select('user', 'id', 'deleted = 0 AND id > 2') as $userid) {
-            if (!isset($placed[(int) $userid])) {
+            if (empty($placed[(int) $userid])) {
                 $count++;
             }
         }
@@ -944,15 +959,7 @@ class mapping {
      * @return array<int, int> User ids.
      */
     public static function members_of(int $nodeid): array {
-        $ids = [];
-
-        foreach (self::resolved_membership() as $userid => $node) {
-            if ((int) $node === $nodeid) {
-                $ids[] = (int) $userid;
-            }
-        }
-
-        return $ids;
+        return self::by_unit()[$nodeid] ?? [];
     }
 
     /**
@@ -1103,12 +1110,14 @@ class mapping {
     }
 
     /**
-     * Put a learner in a unit.
+     * Put a learner in a unit, on top of any unit they are already in.
      *
-     * One unit per learner: placing them somewhere new moves them rather than
-     * adding a second claim. Several departments per person is a v2 question
-     * and the tree cannot express it yet, so pretending otherwise here would
-     * store data nothing can read.
+     * A person can be in several units, so naming somebody here adds this one
+     * and leaves the others alone. It used to move them, which is how typing a
+     * name into one department took it out of another without anybody saying so.
+     *
+     * A person already holding a row in this unit keeps it as it is, typed or
+     * carried over by the migration: either way they are in it already.
      *
      * @param int $userid
      * @param int $nodeid
@@ -1118,7 +1127,9 @@ class mapping {
     public static function place(int $userid, int $nodeid): void {
         global $DB, $USER;
 
-        $DB->delete_records('local_reportlms_member', ['userid' => $userid, 'source' => self::MANUAL]);
+        if ($DB->record_exists('local_reportlms_member', ['userid' => $userid, 'nodeid' => $nodeid])) {
+            return;
+        }
 
         $DB->insert_record('local_reportlms_member', (object) [
             'nodeid' => $nodeid,
@@ -1133,23 +1144,26 @@ class mapping {
     }
 
     /**
-     * Take a learner out of the unit they were placed in.
+     * Take a learner out of one unit.
      *
-     * They land wherever their profile field and their manager put them, which
-     * may not be where they were before somebody moved them. That is correct
-     * and it will still surprise people, so the editor says where they are
-     * about to go.
+     * Only this unit. It used to delete the person's rows everywhere, which was
+     * the same thing while a person could be in one unit only, and is not now:
+     * removing somebody from Sales must not take them out of Support.
+     *
+     * Only rows go. Somebody a source of this unit draws is still in it, which
+     * is why the editor offers Remove on rows and never on drawn people.
      *
      * @param int $userid
+     * @param int $nodeid
      *
      * @return void
      */
-    public static function release(int $userid): void {
+    public static function release(int $userid, int $nodeid): void {
         global $DB;
 
         // Both kinds of stored row: a name somebody typed and a placement the
         // migration left behind are both things Remove is expected to remove.
-        $DB->delete_records('local_reportlms_member', ['userid' => $userid]);
+        $DB->delete_records('local_reportlms_member', ['userid' => $userid, 'nodeid' => $nodeid]);
 
         self::reset();
         userstate::mark_dirty($userid);

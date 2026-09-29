@@ -71,6 +71,61 @@ final class org_collector_test extends \advanced_testcase {
     }
 
     /**
+     * A learner in two units is sent once per unit, in a stable order, so the
+     * same organisation hashes the same on every run.
+     */
+    public function test_a_learner_in_two_units_is_sent_in_both(): void {
+        $learner = $this->getDataGenerator()->create_user();
+        $utrecht = mapping::save_node('Utrecht', 'department');
+        $rotterdam = mapping::save_node('Rotterdam', 'department');
+        mapping::place((int) $learner->id, $utrecht);
+        mapping::place((int) $learner->id, $rotterdam);
+        mapping::reset();
+
+        $first = org::collect();
+        $keys = [];
+
+        foreach ($first->members as $member) {
+            if ((int) $member->userid === (int) $learner->id) {
+                $keys[] = $member->nodekey;
+            }
+        }
+
+        $this->assertSame(['department:Rotterdam', 'department:Utrecht'], $keys);
+
+        mapping::reset();
+        $this->assertSame(org::state_hash($first), org::state_hash(org::collect()));
+    }
+
+    /**
+     * Two units that share a key are one unit on the wire, so a person in both
+     * is sent once. Sending the pair twice failed the whole org write.
+     */
+    public function test_two_units_with_one_key_send_the_learner_once(): void {
+        global $DB;
+
+        $learner = $this->getDataGenerator()->create_user();
+        $first = mapping::save_node('Rotterdam', 'department');
+
+        // From before names were checked: the editor refuses this today.
+        $second = $DB->insert_record('local_reportlms_node', (object) [
+            'name' => 'Rotterdam',
+            'parentid' => null,
+            'kind' => 'department',
+            'timemodified' => time(),
+            'usermodified' => 0,
+        ]);
+
+        mapping::place((int) $learner->id, $first);
+        mapping::place((int) $learner->id, (int) $second);
+        mapping::reset();
+
+        $rows = array_filter(org::collect()->members, fn($m) => (int) $m->userid === (int) $learner->id);
+
+        $this->assertSame(['department:Rotterdam'], array_values(array_column($rows, 'nodekey')));
+    }
+
+    /**
      * The regression this change exists to prevent coming back.
      *
      * A profile field holding a department name places nobody. It can still be

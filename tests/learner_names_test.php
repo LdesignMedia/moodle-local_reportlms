@@ -85,6 +85,33 @@ final class learner_names_test extends \advanced_testcase {
     }
 
     /**
+     * A person in two units is named for the manager of either.
+     *
+     * Being in a second unit must not hide them from the manager of the first,
+     * which is what a one-unit lookup would do.
+     */
+    public function test_a_person_in_two_units_is_named_for_either_manager(): void {
+        [$manager, $mine] = $this->manager_with_a_participant('Anna', 'Jansen');
+
+        $other = mapping::save_node('Utrecht', 'department');
+        mapping::place((int) $mine->id, $other);
+
+        $othermanager = $this->getDataGenerator()->create_user();
+        mapping::add_manager($other, (int) $othermanager->id, null);
+
+        capability_holders::reset();
+        mapping::reset();
+
+        $code = pseudonym::learner((int) $mine->id);
+
+        $this->setUser($manager);
+        $this->assertSame(['Anna Jansen'], array_values(learner_names::resolve([$code])));
+
+        $this->setUser($othermanager);
+        $this->assertSame(['Anna Jansen'], array_values(learner_names::resolve([$code])));
+    }
+
+    /**
      * An administrator names anybody, which is what the unscoped view means.
      */
     public function test_an_administrator_names_anybody(): void {

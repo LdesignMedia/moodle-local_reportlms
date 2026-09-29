@@ -175,8 +175,9 @@ if ($action !== '' && confirm_sesskey()) {
              */
             $single = optional_param('release', 0, PARAM_INT);
 
-            if ($single > 0) {
-                mapping::release($single);
+            // Out of this unit only: a person can be in others as well.
+            if ($single > 0 && $nodeid > 0) {
+                mapping::release($single, $nodeid);
                 redirect($returnurl);
             }
 
@@ -224,7 +225,7 @@ if ($action !== '' && confirm_sesskey()) {
             }
 
             foreach (array_keys($removed) as $id) {
-                mapping::release((int) $id);
+                mapping::release((int) $id, $nodeid);
             }
 
             mapping::reset();
@@ -436,6 +437,7 @@ if ($openunit && isset($nodes[$openunit])) {
             $release = new moodle_url($pageurl, [
                 'action' => 'place',
                 'release' => $userid,
+                'nodeid' => $openunit,
                 'people' => $openunit,
                 'sesskey' => sesskey(),
             ]);
@@ -460,7 +462,7 @@ if ($openunit && isset($nodes[$openunit])) {
              * they came from and point at the source that would change it.
              */
             $isnamed = isset($named[$userid]);
-            $isadopted = !$isnamed && (int) ($adopted[$userid] ?? 0) === $openunit;
+            $isadopted = !$isnamed && isset($adopted[$userid][$openunit]);
             $bysource = !$isnamed && !$isadopted;
 
             if ($isnamed) {
@@ -905,25 +907,10 @@ if (!$nodes) {
      * The count was direct members only, so Operations read 0 on this page
      * while its report read 22 — the people are in the departments underneath
      * it. Two screens, one tree, two answers, and no way to tell which was
-     * lying. Summing rather than counting distinct is safe because a person
-     * belongs to exactly one unit: resolved_membership() is a userid => nodeid
-     * map, so there is nobody to count twice.
+     * lying. Counted distinct, as the report counts it: somebody in two
+     * departments of one sector is one person in that sector.
      */
-    $rolledup = [];
-
-    $rollup = function (int $nodeid) use (&$rollup, &$rolledup, $childrenof, $membercounts): int {
-        $total = $membercounts[$nodeid] ?? 0;
-
-        foreach ($childrenof[$nodeid] ?? [] as $child) {
-            $total += $rollup((int) $child->id);
-        }
-
-        return $rolledup[$nodeid] = $total;
-    };
-
-    foreach ($childrenof[0] ?? [] as $root) {
-        $rollup((int) $root->id);
-    }
+    $rolledup = mapping::rolled_up_counts();
 
     // Depth per unit, for the indent. Walked from the roots so a unit whose
     // parent has been filtered away still gets a number rather than a warning.

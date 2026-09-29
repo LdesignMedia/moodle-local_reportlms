@@ -110,6 +110,26 @@ final class writeback_test extends \advanced_testcase {
     }
 
     /**
+     * Somebody in two units has both named, in a stable order, and the sector
+     * once when both departments sit in it.
+     */
+    public function test_a_person_in_two_units_has_both_written(): void {
+        $learner = $this->getDataGenerator()->create_user();
+
+        $sector = mapping::save_node('Operations', 'sector');
+        $south = mapping::save_node('South', 'department', $sector);
+        $north = mapping::save_node('North', 'department', $sector);
+        mapping::place((int) $learner->id, $south);
+        mapping::place((int) $learner->id, $north);
+        mapping::reset();
+
+        writeback::apply();
+
+        $this->assertSame('North, South', $this->value_of($learner, 'rlms_department'));
+        $this->assertSame('Operations', $this->value_of($learner, 'rlms_sector'));
+    }
+
+    /**
      * Leaving a unit blanks the field rather than leaving it naming the place
      * they left, which is the whole reason the field is worth maintaining.
      */
@@ -123,7 +143,7 @@ final class writeback_test extends \advanced_testcase {
         writeback::apply();
         $this->assertSame('Rotterdam', $this->value_of($learner, 'rlms_department'));
 
-        mapping::release((int) $learner->id);
+        mapping::release((int) $learner->id, $department);
         mapping::reset();
 
         writeback::apply();

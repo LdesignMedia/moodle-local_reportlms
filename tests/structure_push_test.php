@@ -238,5 +238,9 @@ final class structure_push_test extends \advanced_testcase {
         if ($dims !== null) {
             set_config('lastdimhash', $dims['hash'], 'local_reportlms');
         }
+
+        // The settings travel with the structure since the deadline rule moved
+        // into them, and the push task records their hash the same way.
+        set_config('lastsettingshash', sha1(json_encode(batch_builder::settings_section())), 'local_reportlms');
     }
 }

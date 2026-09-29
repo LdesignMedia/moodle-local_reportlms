@@ -383,6 +383,16 @@ class batch_builder {
         return ['deadline_source' => 'period', 'deadline_days' => $days];
     }
 
+    /**
+     * A batch carrying only what changed in the structure, for a push with no dirty learner.
+     *
+     * The org tree, the catalogue and the settings, each only when changed since
+     * the last accepted push, and no facts.
+     *
+     * @param int $snapshotat
+     *
+     * @return \stdClass|null Null when nothing changed.
+     */
     public static function structure_only(int $snapshotat): ?\stdClass {
         $orgsection = self::org_section_if_changed();
         $dimensions = self::dimensions_section_if_changed();

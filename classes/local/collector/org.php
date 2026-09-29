@@ -164,16 +164,37 @@ class org {
         foreach ($recordset as $row) {
             $uid = (int) $row->id;
 
-            $nodekey = self::UNASSIGNED;
+            /*
+             * One row per unit the person is in.
+             *
+             * Keyed by node key, because two units can share one: the key is
+             * built from names, and a site can hold the same name twice under
+             * the same parent from before names were checked. The same pair
+             * twice would be one fact sent twice. Sorted, so the same
+             * organisation always hashes the same.
+             */
+            $nodekeys = [];
 
-            if (isset($placed[$uid])) {
+            foreach ($placed[$uid] ?? [] as $nodeid) {
                 // A placement pointing at a unit that has since been deleted
-                // leaves somebody nowhere, which is Unassigned rather than an
-                // error: the report must still count them.
-                $nodekey = mapping::nodekey((int) $placed[$uid]) ?? self::UNASSIGNED;
+                // places nobody; it is skipped rather than an error.
+                $nodekey = mapping::nodekey((int) $nodeid);
+
+                if ($nodekey !== null) {
+                    $nodekeys[$nodekey] = $nodekey;
+                }
             }
 
-            $members[] = (object) ['userid' => $uid, 'nodekey' => $nodekey];
+            // Nowhere is Unassigned, so the report still counts them.
+            if (!$nodekeys) {
+                $nodekeys[self::UNASSIGNED] = self::UNASSIGNED;
+            }
+
+            ksort($nodekeys);
+
+            foreach ($nodekeys as $nodekey) {
+                $members[] = (object) ['userid' => $uid, 'nodekey' => $nodekey];
+            }
 
             $functionvalue = trim((string) $row->functionvalue);
 
