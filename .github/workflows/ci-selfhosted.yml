@@ -144,6 +144,13 @@ jobs:
           repository: catalyst/catalyst-moodle-workflows
           ref: ${{ inputs.internal_workflow_branch }}
           token: ${{ github.token }}
+      - name: Fetch latest Moodle updates cache
+        run: |
+          # Same step as upstream: parse-version reads this file instead of
+          # calling download.moodle.org, which blocks automated requests.
+          curl -sSf \
+            "https://raw.githubusercontent.com/catalyst/catalyst-moodle-workflows/caches/moodle-updates-cache.json" \
+            -o "${GITHUB_WORKSPACE}/ci/.github/actions/parse-version/moodle-updates-cache.json"
       - name: Check out plugin code
         uses: actions/checkout@v3
         with:

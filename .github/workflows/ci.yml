@@ -24,11 +24,12 @@ jobs:
       # install it, and 4.5 is what every connected environment actually runs.
       min_php: 8.1
       moodle_branches: MOODLE_405_STABLE
-      # Pin upstream catalyst-moodle-workflows to the last commit before their
-      # 2026-07-06 "Moved cache into its own branch" refactor, whose empty
-      # updates-cache branch breaks parse-version for all consumers
-      # ("Moodle updates cache file not found"). Drop this pin once upstream's
-      # refresh-moodle-updates-cache workflow has run successfully.
-      internal_workflow_branch: bb878c5f96553dc1d6afebfb50b210e6c91e5b3f
+      # Pin upstream catalyst-moodle-workflows to a known commit. The earlier
+      # pin predated their move to a cached Moodle updates file and fetched
+      # download.moodle.org directly, which now answers 403 (Cloudflare
+      # challenge), so "prepare test matrix" failed before any test ran.
+      # This commit reads the cache that ci-selfhosted.yml downloads from their
+      # caches branch.
+      internal_workflow_branch: 48c522dc02dbf280d91cd920a4d6d613051008c7
       # amd/build is generated, and docs holds working notes rather than code.
       ignore_paths: amd/build,vendor,node_modules,docs
