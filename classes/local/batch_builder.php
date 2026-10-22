@@ -183,6 +183,10 @@ class batch_builder {
                 'kind' => $row->kind,
                 'summative' => $row->summative,
                 'attempts' => $row->attempts,
+                // When the latest of those attempts was finished. Null when it
+                // is not known, which the report shows as a dash rather than
+                // as a date.
+                'last_attempt_at' => $row->lastattemptat !== null ? self::iso($row->lastattemptat) : null,
             ];
         }
         foreach (grades::collect($userids) as $row) {
@@ -466,6 +470,11 @@ class batch_builder {
                 // dimension push, never once at discovery: a course gains and
                 // loses criteria over its life and the report has to follow.
                 'measurable' => $course->measurable,
+                // Moodle's own created date, or null where it holds none.
+                // Sent with every course for the same reason as measurable:
+                // the catalogue is full state, and a field that rode along
+                // only sometimes would be read as having been taken away.
+                'created_at' => $course->timecreated !== null ? self::iso($course->timecreated) : null,
             ];
         }
         foreach ($dims->activities as $activity) {

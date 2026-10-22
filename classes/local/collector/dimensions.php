@@ -57,7 +57,7 @@ class dimensions {
      * tracking, plus the main (completion-gating) activity, which is also
      * the one flagged summative, mirroring the attempts collector's rule.
      *
-     * @return \stdClass {courses: [{courseid, title, active, measurable}],
+     * @return \stdClass {courses: [{courseid, title, active, measurable, timecreated}],
      *                    activities: [{cmid, courseid, title, kind, summative}]}
      */
     /**
@@ -84,13 +84,13 @@ class dimensions {
      * administrator which courses are missing a rule cannot come to a
      * different answer than the collector that hid them.
      *
-     * @return array<int, \stdClass> id, fullname, visible, enablecompletion.
+     * @return array<int, \stdClass> id, fullname, visible, enablecompletion, timecreated.
      */
     private static function reportable_courses(): array {
         global $DB;
 
         return $DB->get_records_sql(
-            "SELECT c.id, c.fullname, c.visible, c.enablecompletion
+            "SELECT c.id, c.fullname, c.visible, c.enablecompletion, c.timecreated
                FROM {course} c
               WHERE c.id > 1
                 AND (
@@ -186,6 +186,20 @@ class dimensions {
                  */
                 'measurable' => (bool) $course->enablecompletion
                     && isset($withcriteria[(int) $course->id]),
+                /*
+                 * When the course was made, so the training's timeline can
+                 * start where the training did rather than at whoever happened
+                 * to be enrolled first.
+                 *
+                 * Null rather than 0 when Moodle holds none: a course restored
+                 * or created by a script can carry 0, and 0 sent as a date is
+                 * 1 January 1970, which every reader would take literally.
+                 *
+                 * Part of the hashed catalogue on purpose. The first push after
+                 * an upgrade therefore re-sends every course once, which is
+                 * how the date reaches courses that have not changed since.
+                 */
+                'timecreated' => (int) $course->timecreated > 0 ? (int) $course->timecreated : null,
             ];
 
             // The completion-gating activities, summative by the same rule

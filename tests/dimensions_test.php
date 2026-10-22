@@ -25,13 +25,16 @@
 
 namespace local_reportlms;
 
+use local_reportlms\local\batch_builder;
 use local_reportlms\local\collector\completion;
 use local_reportlms\local\collector\dimensions;
+use local_reportlms\local\pseudonym;
 
 /**
  * The catalogue has to name every course a fact can point at.
  *
  * @covers \local_reportlms\local\collector\dimensions
+ * @covers \local_reportlms\local\batch_builder::dimensions_section_if_changed
  */
 final class dimensions_test extends \advanced_testcase {
     protected function setUp(): void {
@@ -182,6 +185,118 @@ final class dimensions_test extends \advanced_testcase {
         );
 
         $this->assertNotContains((int) $course->id, $reported);
+    }
+
+    /**
+     * The course's own created date travels, in the contract's date form.
+     *
+     * The training modal starts its timeline here. Without it the report falls
+     * back to the first enrolment, which on an old course imported in one go
+     * is the import, not the training.
+     */
+    public function test_a_course_carries_its_created_date(): void {
+        global $DB;
+
+        $course = $this->catalogued_course();
+        $created = 1735732800; // 1 January 2025, 12:00 UTC.
+        $DB->set_field('course', 'timecreated', $created, ['id' => $course->id]);
+
+        $this->assertSame($created, $this->collected($course)->timecreated);
+        $this->assertSame('2025-01-01T12:00:00Z', $this->sent($course)['created_at']);
+    }
+
+    /**
+     * A course Moodle holds no created date for says so, rather than 1970.
+     *
+     * A restore or a creation script can leave 0 behind. Sent as a date, that
+     * is 1 January 1970, and a timeline drawn from it is fifty years of empty
+     * bars.
+     */
+    public function test_a_course_without_a_created_date_sends_null(): void {
+        global $DB;
+
+        $course = $this->catalogued_course();
+        $DB->set_field('course', 'timecreated', 0, ['id' => $course->id]);
+
+        $this->assertNull($this->collected($course)->timecreated);
+
+        $sent = $this->sent($course);
+        $this->assertArrayHasKey('created_at', $sent, 'Null is sent, not left out.');
+        $this->assertNull($sent['created_at']);
+    }
+
+    /**
+     * Upgrading moves the catalogue hash, which is what re-sends every course.
+     *
+     * The date is new on courses nothing else has changed about, so without
+     * the hash moving they would never carry it.
+     */
+    public function test_the_created_date_is_part_of_the_catalogue_hash(): void {
+        global $DB;
+
+        $course = $this->catalogued_course();
+        $before = dimensions::state_hash(dimensions::collect());
+
+        $DB->set_field('course', 'timecreated', 1735732800, ['id' => $course->id]);
+
+        $this->assertNotSame($before, dimensions::state_hash(dimensions::collect()));
+    }
+
+    /**
+     * A course with somebody enrolled, so the catalogue names it.
+     *
+     * @return \stdClass
+     */
+    private function catalogued_course(): \stdClass {
+        set_config('salt', 'salt-for-unit-tests', 'local_reportlms');
+
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($user->id, $course->id);
+
+        return $course;
+    }
+
+    /**
+     * The collector's row for one course.
+     *
+     * @param \stdClass $course
+     *
+     * @return \stdClass
+     */
+    private function collected(\stdClass $course): \stdClass {
+        foreach (dimensions::collect()->courses as $row) {
+            if ($row->courseid === (int) $course->id) {
+                return $row;
+            }
+        }
+
+        $this->fail('The course is not in the catalogue.');
+    }
+
+    /**
+     * The row for one course as it goes on the wire.
+     *
+     * @param \stdClass $course
+     *
+     * @return array<string, mixed>
+     */
+    private function sent(\stdClass $course): array {
+        // Never delivered, so the section is always built.
+        unset_config('lastdimhash', 'local_reportlms');
+
+        $section = batch_builder::dimensions_section_if_changed();
+        $this->assertNotNull($section);
+
+        $ref = pseudonym::course((int) $course->id);
+
+        foreach ($section['section']['courses'] as $row) {
+            if ($row['course_ref'] === $ref) {
+                return $row;
+            }
+        }
+
+        $this->fail('The course is not in the dimensions section.');
     }
 
     public function test_the_catalogue_hash_moves_when_a_course_joins_it(): void {

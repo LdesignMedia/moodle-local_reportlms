@@ -49,7 +49,7 @@ class attempts {
      *
      * @return array<int, \stdClass> Rows: userid, cmid (course module id, the
      *         activity_ref source), kind ('quiz'), summative (true),
-     *         attempts (int).
+     *         attempts (int), lastattemptat (int unix time, or null).
      */
     public static function collect(array $userids): array {
         global $CFG, $DB;
@@ -63,9 +63,20 @@ class attempts {
         [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
         $params['criteriatype'] = COMPLETION_CRITERIA_TYPE_ACTIVITY;
 
-        // The criteria join is what selects the main activity: only attempts
-        // on a quiz that gates its course's completion are counted.
-        $sql = "SELECT qa.userid, cm.id AS cmid, cm.course AS courseid, COUNT(qa.id) AS attempts
+        /*
+         * The criteria join is what selects the main activity: only attempts
+         * on a quiz that gates its course's completion are counted.
+         *
+         * The last finished attempt rides with the count, over the same rows,
+         * so the date can never belong to an attempt the count left out. The
+         * state filter below already excludes an attempt still in progress,
+         * whose timefinish is 0; a finished one with 0 stored anyway (an
+         * import, a repair script) would still make MAX() answer 0, so that
+         * is turned into "unknown" when the row is built rather than sent as
+         * 1 January 1970.
+         */
+        $sql = "SELECT qa.userid, cm.id AS cmid, cm.course AS courseid, COUNT(qa.id) AS attempts,
+                       MAX(qa.timefinish) AS lastattemptat
                   FROM {quiz_attempts} qa
                   JOIN {course_modules} cm ON cm.instance = qa.quiz
                   JOIN {modules} m ON m.id = cm.module AND m.name = 'quiz'
@@ -97,6 +108,7 @@ class attempts {
                 'kind' => 'quiz',
                 'summative' => true,
                 'attempts' => (int) $record->attempts,
+                'lastattemptat' => (int) $record->lastattemptat > 0 ? (int) $record->lastattemptat : null,
             ];
         }
         $recordset->close();
