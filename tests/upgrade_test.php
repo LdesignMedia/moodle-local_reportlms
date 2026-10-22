@@ -38,7 +38,11 @@ use local_reportlms\local\userstate;
  * @covers ::xmldb_local_reportlms_upgrade
  */
 final class upgrade_test extends \advanced_testcase {
-    /** @var int The version just before the step, so only that step runs. */
+    /**
+     * @var int The version just before the step. Later steps run too; 2026102300
+     *          marks only learners with an unfinished completion record, and no
+     *          fixture here has one.
+     */
     private const BEFORE = 2026102100;
 
     /** @var int Next value for quiz_attempts.uniqueid, which has to be unique. */
@@ -125,7 +129,7 @@ final class upgrade_test extends \advanced_testcase {
         $this->upgrade();
 
         $this->assertFalse($this->is_dirty($user));
-        $this->assertSame(2026102200, (int) get_config('local_reportlms', 'version'), 'The savepoint is still reached.');
+        $this->assertSame(2026102300, (int) get_config('local_reportlms', 'version'), 'The savepoint is still reached.');
     }
 
     /**

@@ -377,5 +377,68 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026102200, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026102300) {
+        /*
+         * Re-send the learners the completion collector now leaves out.
+         *
+         * Moodle's daily completion task gives every enrolled student a
+         * completion record whether or not they ever sign in, and the collector
+         * sent each unfinished one as in progress. It now leaves one out unless
+         * there is a sign of a start (collector\completion::started()), and
+         * Report LMS drops an in-progress row that a named learner's batch no
+         * longer mentions. But facts only travel for dirty learners, so without
+         * this step a learner who never signs in, which is the whole case,
+         * would read in progress for ever.
+         *
+         * Marked: an unfinished record and no visit to that course. That holds
+         * everybody whose status changes; a few of them have a completed
+         * activity or a grade and so stay in progress, which costs one re-sent
+         * slice. Anybody who opened the course keeps their status, so they are
+         * left alone. timestarted plays no part, as in the collector: Moodle
+         * sets it for criteria its own tasks mark with nobody present. Same two
+         * set-based statements as 2026102200.
+         *
+         * The sweep's new courseaccess source starts here and now, on every
+         * site, connected or not. From zero, its first run would mark everybody
+         * who ever opened a course.
+         */
+        set_config('watermark_courseaccess', time(), 'local_reportlms');
+
+        if (\local_reportlms\local\connect_manager::is_connected()) {
+            $table = '{' . \local_reportlms\local\userstate::TABLE . '}';
+            $firstuserid = \local_reportlms\local\userstate::FIRST_REPORTABLE_USERID;
+            $now = time();
+
+            $unstarted = "SELECT cc.userid
+                            FROM {course_completions} cc
+                            JOIN {user} au ON au.id = cc.userid
+                           WHERE au.deleted = 0
+                             AND au.id >= {$firstuserid}
+                             AND cc.timecompleted IS NULL
+                             AND NOT EXISTS (
+                                     SELECT 1
+                                       FROM {user_lastaccess} ula
+                                      WHERE ula.userid = cc.userid
+                                        AND ula.courseid = cc.course
+                                 )";
+
+            $DB->execute(
+                "UPDATE {$table} SET dirty = 1, timechanged = ? WHERE userid IN ({$unstarted})",
+                [$now]
+            );
+
+            $DB->execute(
+                "INSERT INTO {$table} (userid, dirty, timechanged, timepushed)
+                 SELECT u.id, 1, ?, 0
+                   FROM {user} u
+                  WHERE u.id IN ({$unstarted})
+                    AND NOT EXISTS (SELECT 1 FROM {$table} s WHERE s.userid = u.id)",
+                [$now]
+            );
+        }
+
+        upgrade_plugin_savepoint(true, 2026102300, 'local', 'reportlms');
+    }
+
     return true;
 }

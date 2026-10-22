@@ -48,7 +48,12 @@ class reconcile_userstate extends \core\task\scheduled_task {
      * an in-progress change cannot be swept. Those rely on the event, which is
      * why the pair matters rather than either alone.
      *
-     * @return array<string, array{table: string, column: string, userfield: string}>
+     * A source may add a join and a further condition, both written against
+     * the source table as "s", when only some of its rows can change a
+     * learner's slice, and a longer overlap than the default minute.
+     *
+     * @return array<string, array{table: string, column: string, userfield: string, overlap?: int, join?: string,
+     *     where?: string}>
      */
     protected function sources(): array {
         global $DB;
@@ -66,6 +71,46 @@ class reconcile_userstate extends \core\task\scheduled_task {
             // leave no row to sweep; the role_unassigned observer carries
             // those, which is why the pair matters here too.
             'roles' => ['table' => 'role_assignments', 'column' => 'timemodified', 'userfield' => 'userid'],
+            /*
+             * Opening a course is what turns not started into in progress (see
+             * collector\completion::started()), and it raises no event this
+             * plugin observes. Swept, a first visit lands within a night.
+             *
+             * Narrowed to the visits that can change anything: an unfinished
+             * record, with no activity done in the course yet. Somebody who has
+             * done one is in progress already, so their browsing would only
+             * re-send the same slice night after night.
+             *
+             * A day of overlap rather than a minute. The record is made by
+             * Moodle's daily completion task, at its own hour, and that raises
+             * no event either. Somebody enrolled today who opens the course
+             * before tonight's sweep has no record yet, so the sweep skips them;
+             * with a minute's overlap their visit would be behind the watermark
+             * by the next night, and they would read not started until they did
+             * something else. The cost is that a visit is looked at twice.
+             *
+             * The watermark starts at the upgrade that added this source rather
+             * than at zero, or the first sweep would mark everybody who ever
+             * opened anything.
+             */
+            'courseaccess' => [
+                'table' => 'user_lastaccess',
+                'column' => 'timeaccess',
+                'userfield' => 'userid',
+                'overlap' => DAYSECS,
+                'join' => 'JOIN {course_completions} cc
+                                ON cc.userid = s.userid
+                               AND cc.course = s.courseid
+                               AND cc.timecompleted IS NULL',
+                'where' => 'AND NOT EXISTS (
+                                SELECT 1
+                                  FROM {course_modules_completion} cmc
+                                  JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
+                                 WHERE cmc.userid = s.userid
+                                   AND cm.course = s.courseid
+                                   AND cmc.completionstate > 0
+                            )',
+            ],
         ];
 
         /*
@@ -132,20 +177,25 @@ class reconcile_userstate extends \core\task\scheduled_task {
         foreach ($this->sources() as $key => $source) {
             $watermark = (int) get_config('local_reportlms', 'watermark_' . $key);
             // A little overlap on purpose: rows written in the same second as
-            // the last run would otherwise fall between two sweeps.
-            $from = max(0, $watermark - 60);
+            // the last run would otherwise fall between two sweeps. A source
+            // can ask for more; see courseaccess.
+            $from = max(0, $watermark - ($source['overlap'] ?? 60));
             $highest = $watermark;
 
             // Joined to user rather than read straight from the source table:
             // grade and enrolment rows outlive the account, so a plain sweep
             // marks deleted learners dirty and the next push carries people
             // who must not be reported on at all.
+            $join = $source['join'] ?? '';
+            $where = $source['where'] ?? '';
             $sql = "SELECT s.{$source['userfield']} AS userid, MAX(s.{$source['column']}) AS changed
                       FROM {{$source['table']}} s
                       JOIN {user} u ON u.id = s.{$source['userfield']}
+                           {$join}
                      WHERE s.{$source['column']} > :from
                        AND u.deleted = 0
                        AND u.id >= " . userstate::FIRST_REPORTABLE_USERID . "
+                           {$where}
                   GROUP BY s.{$source['userfield']}";
 
             $recordset = $DB->get_recordset_sql($sql, ['from' => $from]);
