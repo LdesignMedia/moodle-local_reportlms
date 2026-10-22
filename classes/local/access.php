@@ -237,6 +237,48 @@ class access {
     }
 
     /**
+     * Whether this viewer may be handed the e-mail addresses of the people on screen.
+     *
+     * Moodle's own rule, asked exactly as Moodle asks it, rather than one of
+     * ours. "Show user identity" with e-mail in it, plus
+     * moodle/site:viewuseridentity, is what puts an address in the participants
+     * list and the user selectors, so a viewer this answers yes for can already
+     * read every address on the site in Moodle itself. That is what makes a
+     * copy button a convenience instead of a new way in. Hidden user fields are
+     * honoured too, because get_identity_fields() drops e-mail when it is hidden
+     * and the viewer lacks moodle/user:viewhiddendetails. A person's own "show
+     * my e-mail address" choice is not consulted, and on purpose: Moodle does
+     * not consult it for identity fields either, so honouring it here would be
+     * stricter than the site the addresses already come from.
+     *
+     * System context only, never "anywhere", for the reason :viewall is. A
+     * teacher may see identity fields inside their own course, and that is a
+     * statement about the people in that course. The report spans the whole
+     * organisation, so a grant held in one course would hand over the
+     * addresses of people who never enrolled in it. On Moodle's default roles
+     * that leaves site administrators and managers.
+     *
+     * Only the second door. Whether the viewer may open the report at all is
+     * still {@see require_view()}, asked by each caller first, and which
+     * people's addresses come back is still the candidate set in
+     * {@see learner_names}.
+     *
+     * One rule for both places that need it: the launch claim that decides
+     * whether the dashboard shows the button, and the service that answers
+     * the button. Two copies would eventually show a button that fails, or
+     * hide one that would have worked.
+     *
+     * @return bool
+     */
+    public static function can_copy_emails(): bool {
+        return in_array(
+            'email',
+            \core_user\fields::get_identity_fields(\context_system::instance(), false),
+            true
+        );
+    }
+
+    /**
      * Whether this viewer sees the whole organisation rather than a subtree.
      *
      * Site administrators do too, without holding anything: Moodle grants them

@@ -109,6 +109,19 @@ class launch {
             // false for older plugins, and an explicit false keeps that default
             // from doing the deciding.
             'configure' => access::can_configure(),
+            /*
+             * Whether the dashboard may offer to copy e-mail addresses.
+             *
+             * The same rule the lookup service applies, from the same method,
+             * so the button is only shown to somebody whose click the service
+             * will answer. Always present, like configure: an older plugin
+             * sends nothing, the SaaS reads that as false, and so the button
+             * cannot appear on a site that has no service to call.
+             *
+             * A yes or no about the viewer, not an address. Nothing about the
+             * people in the report travels on the token.
+             */
+            'copy_emails' => access::can_copy_emails(),
             'iat' => $now,
             'exp' => $now + self::TTL,
             // One-time id. A launch URL ends up in browser history, in referrer

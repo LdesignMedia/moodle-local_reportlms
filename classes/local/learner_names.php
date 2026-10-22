@@ -64,6 +64,72 @@ class learner_names {
      *         viewer's reach are absent rather than refused.
      */
     public static function resolve(array $codes): array {
+        $names = [];
+
+        foreach (self::matching($codes, \core_user\fields::get_name_fields()) as $code => $user) {
+            $names[$code] = fullname($user);
+        }
+
+        return $names;
+    }
+
+    /**
+     * E-mail addresses for the codes this viewer is entitled to resolve.
+     *
+     * The same people {@see resolve()} would name, and not one more: an address
+     * travels the path a name does, through the same candidate set, so the two
+     * cannot come to different answers about who a viewer may see. What differs
+     * is the second door, Moodle's own rule on who may see addresses at all,
+     * which a viewer can pass for names and fail for addresses.
+     *
+     * That door is asked again here rather than trusted to the caller. The
+     * service asks it first so it can say "not allowed" instead of "nobody has
+     * one", but a list of addresses leaving this method is the thing being
+     * guarded, so it is guarded where it leaves.
+     *
+     * Somebody without an address is absent, as is somebody whose stored
+     * address is not one Moodle would accept as an address. The second is rare
+     * (an import or an authentication plugin writing what it was given) and is
+     * treated as none: copied into a mail client it would only break the
+     * recipient line, and the service declares what it returns as an e-mail
+     * address, so one malformed value would fail the whole batch.
+     *
+     * @param array<int, string> $codes Coded learner ids.
+     *
+     * @return array<string, string> Code to e-mail address. Codes outside the
+     *         viewer's reach, or for somebody with no usable address, are absent.
+     */
+    public static function emails(array $codes): array {
+        if (!access::can_copy_emails()) {
+            return [];
+        }
+
+        $emails = [];
+
+        foreach (self::matching($codes, ['email']) as $code => $user) {
+            $email = trim((string) $user->email);
+
+            if ($email !== '' && clean_param($email, PARAM_EMAIL) === $email) {
+                $emails[$code] = $email;
+            }
+        }
+
+        return $emails;
+    }
+
+    /**
+     * The user records behind the codes this viewer is entitled to resolve.
+     *
+     * The one place the candidate set meets the codes, shared by names and
+     * addresses so there is only ever one answer to "who may this viewer see".
+     *
+     * @param array<int, string> $codes Coded learner ids. Only the first
+     *        MAX_CODES distinct ones are looked at.
+     * @param array<int, string> $fields User table fields to load besides id.
+     *
+     * @return array<string, \stdClass> Code to user record.
+     */
+    protected static function matching(array $codes, array $fields): array {
         $codes = array_slice(array_values(array_unique($codes)), 0, self::MAX_CODES);
 
         if (!$codes) {
@@ -77,17 +143,17 @@ class learner_names {
         }
 
         $wanted = array_flip($codes);
-        $names = [];
+        $matched = [];
 
-        foreach (self::users($candidates) as $user) {
+        foreach (self::users($candidates, $fields) as $user) {
             $code = pseudonym::learner((int) $user->id);
 
             if (isset($wanted[$code])) {
-                $names[$code] = fullname($user);
+                $matched[$code] = $user;
             }
         }
 
-        return $names;
+        return $matched;
     }
 
     /**
@@ -126,16 +192,17 @@ class learner_names {
     }
 
     /**
-     * The name fields for a set of users, in chunks the database will take.
+     * The asked-for fields for a set of users, in chunks the database will take.
      *
      * @param array<int, int> $userids
+     * @param array<int, string> $fields User table fields to load besides id.
      *
      * @return \Generator<\stdClass>
      */
-    protected static function users(array $userids): \Generator {
+    protected static function users(array $userids, array $fields): \Generator {
         global $DB;
 
-        $fields = 'id, ' . implode(', ', \core_user\fields::get_name_fields());
+        $fields = 'id, ' . implode(', ', $fields);
 
         foreach (array_chunk($userids, 5000) as $chunk) {
             [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);

@@ -92,6 +92,46 @@ final class launch_test extends \advanced_testcase {
         $this->assertTrue($this->claims()['configure']);
     }
 
+    public function test_an_administrator_may_copy_emails(): void {
+        set_config('showuseridentity', 'email');
+        $this->setAdminUser();
+
+        $this->assertTrue($this->claims()['copy_emails']);
+    }
+
+    public function test_a_plain_viewer_may_not_copy_emails_and_the_claim_still_travels(): void {
+        // Present-and-false for the same reason as configure: an absent claim
+        // is how the SaaS recognises an older plugin.
+        $generator = $this->getDataGenerator();
+        $user = $generator->create_user();
+        $course = $generator->create_course();
+        $roleid = create_role('Reporting manager', 'reportingmanager', '');
+        assign_capability(access::VIEW, CAP_ALLOW, $roleid, \context_system::instance()->id);
+        role_assign($roleid, $user->id, \context_course::instance($course->id)->id);
+        $this->setUser($user);
+
+        $claims = $this->claims();
+
+        $this->assertArrayHasKey('copy_emails', $claims);
+        $this->assertFalse($claims['copy_emails']);
+    }
+
+    public function test_copy_emails_follows_show_user_identity(): void {
+        // Same viewer, same capabilities: only the site's identity setting
+        // moves, and the claim moves with it.
+        $user = $this->getDataGenerator()->create_user();
+        $roleid = create_role('Address reader', 'addressreader', '');
+        assign_capability('moodle/site:viewuseridentity', CAP_ALLOW, $roleid, \context_system::instance()->id);
+        role_assign($roleid, $user->id, \context_system::instance()->id);
+        $this->setUser($user);
+
+        set_config('showuseridentity', 'email');
+        $this->assertTrue($this->claims()['copy_emails']);
+
+        set_config('showuseridentity', 'idnumber');
+        $this->assertFalse($this->claims()['copy_emails']);
+    }
+
     public function test_the_claim_set_the_saas_relies_on_is_intact(): void {
         $this->setAdminUser();
 
@@ -99,7 +139,7 @@ final class launch_test extends \advanced_testcase {
 
         foreach (
             ['iss', 'env', 'sub', 'role', 'scope', 'cron_last_run_at',
-            'push_task_last_run_at', 'configure', 'iat', 'exp', 'jti'] as $key
+            'push_task_last_run_at', 'configure', 'copy_emails', 'iat', 'exp', 'jti'] as $key
         ) {
             $this->assertArrayHasKey($key, $claims, "Claim {$key} went missing.");
         }

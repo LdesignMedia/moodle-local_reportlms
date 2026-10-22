@@ -26,7 +26,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_reportlms';
-$plugin->version = 2026092900;
+$plugin->version = 2026102200;
 $plugin->requires = 2020061500; // Moodle 3.9.
 $plugin->maturity = MATURITY_BETA;
-$plugin->release = '0.7.0';
+$plugin->release = '0.8.0';

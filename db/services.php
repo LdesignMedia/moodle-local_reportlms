@@ -57,6 +57,24 @@ $functions = [
     ],
 
     /*
+     * E-mail addresses for the same people, for the dashboard's copy button.
+     *
+     * Same candidate set as the names above, plus Moodle's own rule on who may
+     * see addresses, asked in the system context inside the function. Not
+     * listed as a capability here because it is not one: it is "Show user
+     * identity" containing e-mail together with moodle/site:viewuseridentity.
+     * See access::can_copy_emails().
+     */
+    'local_reportlms_resolve_learner_emails' => [
+        'classname' => 'local_reportlms\external\resolve_learner_emails',
+        'methodname' => 'execute',
+        'description' => 'Resolve coded learner ids to the e-mail addresses this site holds for them.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'local/reportlms:view',
+    ],
+
+    /*
      * There is no separate service for recording the data statement.
      *
      * There was, and it could not work in the order the setup steps ask for:
