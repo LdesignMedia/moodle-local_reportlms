@@ -84,13 +84,13 @@ class dimensions {
      * administrator which courses are missing a rule cannot come to a
      * different answer than the collector that hid them.
      *
-     * @return array<int, \stdClass> id, fullname, visible, enablecompletion, timecreated.
+     * @return array<int, \stdClass> id, fullname, visible, enablecompletion, timecreated, category.
      */
     private static function reportable_courses(): array {
         global $DB;
 
         return $DB->get_records_sql(
-            "SELECT c.id, c.fullname, c.visible, c.enablecompletion, c.timecreated
+            "SELECT c.id, c.fullname, c.visible, c.enablecompletion, c.timecreated, c.category
                FROM {course} c
               WHERE c.id > 1
                 AND (
@@ -205,6 +205,15 @@ class dimensions {
                  * them dirty, because facts only travel for dirty learners.
                  */
                 'timecreated' => (int) $course->timecreated > 0 ? (int) $course->timecreated : null,
+                /*
+                 * The category the course sits in, which is what tells apart
+                 * trainings that share a title. A site that runs one copy of
+                 * "HACCP Basic" per team or location gives each copy the same
+                 * name and its own category, so the picker otherwise lists the
+                 * same words thirty times. Sent as a code, never a name: see
+                 * pseudonym::category().
+                 */
+                'categoryid' => (int) $course->category > 0 ? (int) $course->category : null,
             ];
 
             // The completion-gating activities, summative by the same rule

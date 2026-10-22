@@ -323,6 +323,9 @@ class access {
      *   parent is a picker nobody can use
      * - functions, which are job titles rather than org units, are offered as
      *   a filter to every viewer, and describe nobody in particular
+     * - course categories, which tell apart trainings that share a title and
+     *   label the catalogue rather than a unit; a hidden one only for a viewer
+     *   Moodle lets see hidden categories there
      *
      * @param array<int, string> $codes
      *
@@ -343,7 +346,25 @@ class access {
         $map = label_map::all();
 
         return array_values(array_filter($codes, static function (string $code) use ($allowed, $map): bool {
-            return isset($allowed[$code]) || (($map[$code]['kind'] ?? null) === 'function');
+            // Functions and course categories are named for anybody who may
+            // open the report: they label the catalogue and the people in it,
+            // not units the viewer may be kept out of, and a manager is shown
+            // the trainings the category tells apart either way.
+            if (isset($allowed[$code]) || ($map[$code]['kind'] ?? null) === 'function') {
+                return true;
+            }
+
+            if (($map[$code]['kind'] ?? null) !== 'category') {
+                return false;
+            }
+
+            if ($map[$code]['visible']) {
+                return true;
+            }
+
+            $context = \context_coursecat::instance($map[$code]['categoryid'], IGNORE_MISSING);
+
+            return $context && has_capability('moodle/category:viewhiddencategories', $context);
         }));
     }
 }

@@ -63,7 +63,7 @@ class label_map {
             return $map;
         }
 
-        $map = array_merge(self::nodes(), self::functions());
+        $map = array_merge(self::nodes(), self::functions(), self::categories());
         $cache->set(self::CACHE_KEY, $map);
 
         return $map;
@@ -204,6 +204,43 @@ class label_map {
                 'label' => $value,
                 'kind' => 'function',
                 'parent' => null,
+            ];
+        }
+
+        return $map;
+    }
+
+    /**
+     * The course category labels.
+     *
+     * A category tells apart trainings that share a title, and its name can be
+     * a person's ("TM - Jane Doe"), so it travels as a code and is named
+     * here, like a department. The parent rides along so a caller can build
+     * the path when the name alone repeats ("Transport" under two years).
+     *
+     * Every category rather than only those holding a reported course: a site
+     * has tens of them, not thousands, and filtering would mean the collector's
+     * course query a second time.
+     *
+     * @return array<string, array{label: string, kind: string, parent: string|null}>
+     */
+    protected static function categories(): array {
+        global $DB;
+
+        $map = [];
+
+        foreach ($DB->get_records('course_categories', null, '', 'id, name, parent, visible') as $category) {
+            $map[pseudonym::category((int) $category->id)] = [
+                // Raw, as stored. The map is cached for every viewer, so the
+                // multi-language filter runs when a viewer is answered, in
+                // their language; see resolve_labels.
+                'label' => trim((string) $category->name),
+                'kind' => 'category',
+                'parent' => (int) $category->parent > 0 ? pseudonym::category((int) $category->parent) : null,
+                // For the access check: a hidden category is named only to
+                // somebody Moodle would show it to.
+                'categoryid' => (int) $category->id,
+                'visible' => (bool) $category->visible,
             ];
         }
 

@@ -97,13 +97,31 @@ class resolve_labels extends external_api {
         foreach (label_map::resolve($wanted) as $code => $entry) {
             $labels[] = [
                 'code' => $code,
-                'label' => $entry['label'],
+                'label' => $entry['kind'] === 'category' ? self::category_name($entry) : $entry['label'],
                 'kind' => $entry['kind'],
                 'parent' => $entry['parent'],
             ];
         }
 
         return ['labels' => $labels];
+    }
+
+    /**
+     * A category's name as this viewer reads it.
+     *
+     * Run through the text filters here rather than when the map is built: the
+     * map is cached for every viewer, and a multi-language name has to come out
+     * in the language of the one being answered. Not escaped, because the
+     * dashboard renders it as text.
+     *
+     * @param array $entry A category entry from the label map.
+     *
+     * @return string
+     */
+    protected static function category_name(array $entry): string {
+        $context = \context_coursecat::instance($entry['categoryid'], IGNORE_MISSING) ?: context_system::instance();
+
+        return trim(format_string($entry['label'], true, ['context' => $context, 'escape' => false]));
     }
 
     /**
@@ -120,7 +138,7 @@ class resolve_labels extends external_api {
                 new external_single_structure([
                     'code' => new external_value(PARAM_ALPHANUMEXT, 'The code that was asked about'),
                     'label' => new external_value(PARAM_TEXT, 'The name this site holds for it'),
-                    'kind' => new external_value(PARAM_ALPHA, 'sector, department or function'),
+                    'kind' => new external_value(PARAM_ALPHA, 'sector, department, function or category'),
                     'parent' => new external_value(PARAM_ALPHANUMEXT, 'Parent node code, null at the top level', VALUE_OPTIONAL, null, NULL_ALLOWED),
                 ])
             ),

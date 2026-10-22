@@ -88,6 +88,43 @@ final class resolve_labels_test extends \advanced_testcase {
     }
 
     /**
+     * A manager is told a course category's name, whichever unit they run.
+     *
+     * The category tells apart trainings the manager is shown anyway, so it
+     * is named like a function rather than scoped like a department.
+     */
+    public function test_a_manager_is_told_a_categorys_name(): void {
+        $category = $this->getDataGenerator()->create_category(['name' => 'TM - Jane Doe']);
+        $manager = $this->make_manager_of('Rotterdam');
+        label_map::purge();
+
+        $this->setUser($manager);
+
+        $code = pseudonym::category((int) $category->id);
+        $labels = resolve_labels::execute([$code])['labels'];
+
+        $this->assertSame([$code], array_column($labels, 'code'));
+        $this->assertSame('TM - Jane Doe', $labels[0]['label']);
+        $this->assertSame('category', $labels[0]['kind']);
+    }
+
+    /**
+     * A hidden category is named only to somebody Moodle would show it to.
+     */
+    public function test_a_hidden_category_is_not_named_to_a_manager(): void {
+        $category = $this->getDataGenerator()->create_category(['name' => 'TM - Former team', 'visible' => 0]);
+        $manager = $this->make_manager_of('Rotterdam');
+        label_map::purge();
+        $code = pseudonym::category((int) $category->id);
+
+        $this->setUser($manager);
+        $this->assertSame([], resolve_labels::execute([$code])['labels']);
+
+        $this->setAdminUser();
+        $this->assertSame([$code], $this->codes_returned([$code]));
+    }
+
+    /**
      * An administrator still names everything, which is what the org-wide
      * viewer is for.
      */

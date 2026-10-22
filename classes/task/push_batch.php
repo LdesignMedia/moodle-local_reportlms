@@ -243,9 +243,12 @@ class push_batch extends \core\task\scheduled_task {
                 // would put an old department name on new numbers.
                 label_map::purge();
             }
-            // Same for the dimensions catalogue.
+            // Same for the dimensions catalogue. A course moved into a new or
+            // renamed category changes it, and the category's name is resolved
+            // from the label map, so that map goes stale here too.
             if (!empty($chunk->dimhash)) {
                 set_config('lastdimhash', $chunk->dimhash, 'local_reportlms');
+                label_map::purge();
             }
             /*
              * And for the deadline rule, remembered only after the SaaS has

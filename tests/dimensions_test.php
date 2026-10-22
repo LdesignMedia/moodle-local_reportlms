@@ -243,6 +243,37 @@ final class dimensions_test extends \advanced_testcase {
     }
 
     /**
+     * The course's category travels as a code, never by name.
+     *
+     * It is what tells apart trainings that share a title, and a category can
+     * be named after a person, so the dashboard asks this site for the name.
+     */
+    public function test_a_course_carries_its_category_as_a_code(): void {
+        global $DB;
+
+        $category = $this->getDataGenerator()->create_category(['name' => 'TM - Jane Doe']);
+        $course = $this->catalogued_course();
+        $DB->set_field('course', 'category', $category->id, ['id' => $course->id]);
+
+        $row = $this->sent($course);
+
+        $this->assertSame(pseudonym::category((int) $category->id), $row['category_ref']);
+        $this->assertStringNotContainsString('Jane', json_encode($row));
+    }
+
+    public function test_the_catalogue_hash_moves_when_a_course_changes_category(): void {
+        global $DB;
+
+        $course = $this->catalogued_course();
+        $before = dimensions::state_hash(dimensions::collect());
+
+        $category = $this->getDataGenerator()->create_category();
+        $DB->set_field('course', 'category', $category->id, ['id' => $course->id]);
+
+        $this->assertNotSame($before, dimensions::state_hash(dimensions::collect()));
+    }
+
+    /**
      * A course with somebody enrolled, so the catalogue names it.
      *
      * @return \stdClass

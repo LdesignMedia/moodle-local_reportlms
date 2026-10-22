@@ -156,6 +156,25 @@ final class label_map_test extends \advanced_testcase {
     }
 
     /**
+     * A category resolves to its own name, with its parent's code.
+     *
+     * Trainings that share a title are told apart by their category, and a
+     * category's name can be a person's, so it is named here and never sent.
+     */
+    public function test_a_category_resolves_to_its_name_and_its_parent(): void {
+        $year = $this->getDataGenerator()->create_category(['name' => '2025 / 2026']);
+        $team = $this->getDataGenerator()->create_category(['name' => 'TM - Jane Doe', 'parent' => $year->id]);
+
+        $code = pseudonym::category((int) $team->id);
+        $labels = label_map::resolve([$code, pseudonym::category((int) $year->id)]);
+
+        $this->assertSame('TM - Jane Doe', $labels[$code]['label']);
+        $this->assertSame('category', $labels[$code]['kind']);
+        $this->assertSame(pseudonym::category((int) $year->id), $labels[$code]['parent']);
+        $this->assertNull($labels[pseudonym::category((int) $year->id)]['parent']);
+    }
+
+    /**
      * A renamed department must not keep its old label for the cache window.
      */
     public function test_purging_forgets_both_maps(): void {

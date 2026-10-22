@@ -475,6 +475,8 @@ class batch_builder {
                 // the catalogue is full state, and a field that rode along
                 // only sometimes would be read as having been taken away.
                 'created_at' => $course->timecreated !== null ? self::iso($course->timecreated) : null,
+                // Coded; the dashboard asks this site for the name.
+                'category_ref' => $course->categoryid !== null ? pseudonym::category($course->categoryid) : null,
             ];
         }
         foreach ($dims->activities as $activity) {

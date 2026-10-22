@@ -57,6 +57,22 @@ class pseudonym {
     }
 
     /**
+     * A course category, from course_categories.id.
+     *
+     * Coded like a department, not sent by name: a site can name its
+     * categories after team managers ("TM - Jane Doe"), which makes the
+     * name a person's, so the dashboard asks this site for it through the
+     * bridge exactly as it does for a department. 'c' is the course's letter,
+     * so a category wears 'k'.
+     *
+     * @param int $categoryid
+     * @return string
+     */
+    public static function category(int $categoryid): string {
+        return self::code('k', 'category', $categoryid);
+    }
+
+    /**
      * An activity, from course_modules.id.
      *
      * The course module id, not the module instance id: quiz id 5 and course
