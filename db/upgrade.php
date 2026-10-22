@@ -32,7 +32,7 @@ defined('MOODLE_INTERNAL') || die();
  * @return bool
  */
 function xmldb_local_reportlms_upgrade(int $oldversion): bool {
-    global $DB;
+    global $CFG, $DB;
 
     $dbman = $DB->get_manager();
 
@@ -309,6 +309,72 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         }
 
         upgrade_plugin_savepoint(true, 2026081700, 'local', 'reportlms');
+    }
+
+    if ($oldversion < 2026102200) {
+        /*
+         * Re-send the learners whose attempt rows just gained last_attempt_at.
+         *
+         * Facts only travel for learners marked dirty, and an upgrade marks
+         * nobody. Without this step the date would reach Report LMS only for
+         * somebody who happens to change after the upgrade, and every attempt
+         * row it already holds would say "unknown" until then, which on a quiet
+         * course is forever.
+         *
+         * Only the learners it can change: those with a finished, non-preview
+         * attempt on a quiz that gates its course's completion, by the same
+         * joins the attempts collector counts with. Anybody else's slice is
+         * byte for byte what was sent before, and re-sending every learner on
+         * the site (userstate::mark_all_dirty()) would turn one upgrade into a
+         * full backfill for the sake of a column most of them do not have.
+         *
+         * Two statements, both set-based, mirroring mark_all_dirty(): flag the
+         * rows that exist, then add a dirty row for anybody not tracked yet.
+         * The second is rare (the nightly sweep adds rows too) but a learner
+         * with attempts and no row would otherwise be the one person this step
+         * misses.
+         *
+         * Only on a connected site. An unconnected one has nothing to re-send
+         * to, and connecting marks everybody anyway, because the first push
+         * after connect is a full backfill.
+         */
+        if (\local_reportlms\local\connect_manager::is_connected()) {
+            require_once($CFG->dirroot . '/completion/criteria/completion_criteria.php');
+
+            $table = '{' . \local_reportlms\local\userstate::TABLE . '}';
+            $firstuserid = \local_reportlms\local\userstate::FIRST_REPORTABLE_USERID;
+            $now = time();
+
+            $takers = "SELECT qa.userid
+                         FROM {quiz_attempts} qa
+                         JOIN {course_modules} cm ON cm.instance = qa.quiz
+                         JOIN {modules} m ON m.id = cm.module AND m.name = 'quiz'
+                         JOIN {course_completion_criteria} ccc
+                              ON ccc.moduleinstance = cm.id
+                             AND ccc.course = cm.course
+                             AND ccc.criteriatype = ?
+                         JOIN {user} au ON au.id = qa.userid
+                        WHERE au.deleted = 0
+                          AND au.id >= {$firstuserid}
+                          AND qa.state = 'finished'
+                          AND qa.preview = 0";
+
+            $DB->execute(
+                "UPDATE {$table} SET dirty = 1, timechanged = ? WHERE userid IN ({$takers})",
+                [$now, COMPLETION_CRITERIA_TYPE_ACTIVITY]
+            );
+
+            $DB->execute(
+                "INSERT INTO {$table} (userid, dirty, timechanged, timepushed)
+                 SELECT u.id, 1, ?, 0
+                   FROM {user} u
+                  WHERE u.id IN ({$takers})
+                    AND NOT EXISTS (SELECT 1 FROM {$table} s WHERE s.userid = u.id)",
+                [$now, COMPLETION_CRITERIA_TYPE_ACTIVITY]
+            );
+        }
+
+        upgrade_plugin_savepoint(true, 2026102200, 'local', 'reportlms');
     }
 
     return true;

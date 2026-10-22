@@ -198,6 +198,11 @@ class dimensions {
                  * Part of the hashed catalogue on purpose. The first push after
                  * an upgrade therefore re-sends every course once, which is
                  * how the date reaches courses that have not changed since.
+                 *
+                 * The same push also re-sends every learner with a counted
+                 * attempt on a main quiz, for the attempts block's
+                 * last_attempt_at: the 2026102200 step in db/upgrade.php marks
+                 * them dirty, because facts only travel for dirty learners.
                  */
                 'timecreated' => (int) $course->timecreated > 0 ? (int) $course->timecreated : null,
             ];

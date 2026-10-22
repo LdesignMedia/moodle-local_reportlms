@@ -37,12 +37,13 @@ $string['privacy:metadata:member:source'] = 'Whether this person was named here 
 $string['privacy:metadata:manager'] = 'Who was named as the manager of a part of the organisation.';
 $string['privacy:metadata:manager:userid'] = 'The person named.';
 $string['privacy:metadata:manager:nodeid'] = 'The unit they manage.';
-$string['privacy:metadata:reportlms'] = 'Training results are sent to Report LMS. No name, e-mail address or free text is ever sent: people, courses, activities and organisation units are replaced with coded identifiers before they leave this site, using a key that stays here. Names, and e-mail addresses for viewers this site lets see them, reach the dashboard by this site answering the browser directly, never by Report LMS holding them.';
+$string['privacy:metadata:reportlms'] = 'Training results are sent to Report LMS. No name or e-mail address is ever sent. People and organisation units are replaced with coded identifiers before they leave this site, using a key that stays here. Course and activity titles are sent as they are, so the report is readable. Names, and e-mail addresses for viewers this site lets see them, reach the dashboard only by this site answering the viewer\'s browser directly. Report LMS never holds them.';
 $string['privacy:metadata:reportlms:learner_pid'] = 'A coded identifier standing for one learner.';
 $string['privacy:metadata:reportlms:course_ref'] = 'A coded identifier standing for one course.';
 $string['privacy:metadata:reportlms:status'] = 'Whether a course was completed, is in progress, or has not been started.';
 $string['privacy:metadata:reportlms:grade'] = 'The grade on the main test of the course, as a percentage.';
-$string['privacy:metadata:reportlms:attempts'] = 'How many attempts were taken at that test.';
+$string['privacy:metadata:reportlms:attempts'] = 'How many attempts were taken at that test, and when the last one was finished.';
+$string['privacy:metadata:reportlms:last_attempt_at'] = 'When the last of those attempts was finished.';
 $string['privacy:metadata:reportlms:node_id'] = 'A coded identifier standing for a sector or department.';
 
 // Connect flow.
@@ -238,6 +239,9 @@ $string['block:addbutton'] = 'Add a block to the front page';
 $string['block:removebutton'] = 'Remove the front page block';
 $string['block:added'] = 'A Report LMS block has been added to the site front page.';
 $string['block:removed'] = 'The Report LMS block has been removed from the site front page.';
+
+// Events.
+$string['event:learneremailsresolved'] = 'Learner e-mail addresses given to the Report LMS dashboard';
 
 // Scheduled tasks.
 $string['task:push'] = 'Report LMS: push changed learners to the SaaS';

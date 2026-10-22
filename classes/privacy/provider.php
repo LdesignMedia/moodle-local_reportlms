@@ -42,8 +42,10 @@ use core_privacy\local\request\writer;
  * declaration was a compliance product telling its customers something untrue
  * about itself.
  *
- * Nothing here holds a name, an address or free text. The tables carry user ids
- * and the wire carries HMAC-coded identifiers, which is the whole design. That
+ * Nothing here holds a name or an address. The tables carry user ids and the
+ * wire carries HMAC-coded identifiers for people and organisation units, which
+ * is the whole design; the only text it carries is course and activity titles,
+ * which describe the training rather than anybody taking it. That
  * is still personal data: an id identifies a person to the site holding it, and
  * a coded id is pseudonymised rather than anonymous, because this site keeps the
  * key that reverses it.
@@ -100,6 +102,7 @@ class provider implements
                 'status' => 'privacy:metadata:reportlms:status',
                 'grade' => 'privacy:metadata:reportlms:grade',
                 'attempts' => 'privacy:metadata:reportlms:attempts',
+                'last_attempt_at' => 'privacy:metadata:reportlms:last_attempt_at',
                 'node_id' => 'privacy:metadata:reportlms:node_id',
             ],
             'privacy:metadata:reportlms'

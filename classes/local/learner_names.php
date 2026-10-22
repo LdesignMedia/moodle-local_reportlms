@@ -87,17 +87,26 @@ class learner_names {
      * one", but a list of addresses leaving this method is the thing being
      * guarded, so it is guarded where it leaves.
      *
-     * Somebody without an address is absent, as is somebody whose stored
-     * address is not one Moodle would accept as an address. The second is rare
-     * (an import or an authentication plugin writing what it was given) and is
-     * treated as none: copied into a mail client it would only break the
-     * recipient line, and the service declares what it returns as an e-mail
-     * address, so one malformed value would fail the whole batch.
+     * Two kinds of "no address", kept apart because the dashboard reports them
+     * differently. Somebody outside the viewer's reach is absent: this method
+     * says nothing about them, not even that they exist. Somebody inside it
+     * with no usable address is present with null. The dashboard counts the
+     * first as "not copied" and the second as "has none", and it can only do
+     * that if the answer tells them apart; folded together, a lookup that
+     * missed people would read as people who have no address.
+     *
+     * Not usable means empty, or stored but not one Moodle would accept as an
+     * address. The second is rare (an import or an authentication plugin
+     * writing what it was given) and is treated as none: copied into a mail
+     * client it would only break the recipient line, and the service declares
+     * what it returns as an e-mail address, so one malformed value would fail
+     * the whole batch.
      *
      * @param array<int, string> $codes Coded learner ids.
      *
-     * @return array<string, string> Code to e-mail address. Codes outside the
-     *         viewer's reach, or for somebody with no usable address, are absent.
+     * @return array<string, string|null> Code to e-mail address, or to null for
+     *         somebody in reach with no usable address. Codes outside the
+     *         viewer's reach are absent.
      */
     public static function emails(array $codes): array {
         if (!access::can_copy_emails()) {
@@ -109,9 +118,7 @@ class learner_names {
         foreach (self::matching($codes, ['email']) as $code => $user) {
             $email = trim((string) $user->email);
 
-            if ($email !== '' && clean_param($email, PARAM_EMAIL) === $email) {
-                $emails[$code] = $email;
-            }
+            $emails[$code] = ($email !== '' && clean_param($email, PARAM_EMAIL) === $email) ? $email : null;
         }
 
         return $emails;

@@ -26,6 +26,7 @@
 namespace local_reportlms;
 
 use core_external\external_api;
+use local_reportlms\event\learner_emails_resolved;
 use local_reportlms\external\resolve_learner_emails;
 use local_reportlms\local\access;
 use local_reportlms\local\capability_holders;
@@ -44,6 +45,7 @@ use local_reportlms\local\pseudonym;
  * @covers \local_reportlms\external\resolve_learner_emails
  * @covers \local_reportlms\local\learner_names::emails
  * @covers \local_reportlms\local\access::can_copy_emails
+ * @covers \local_reportlms\event\learner_emails_resolved
  */
 final class resolve_learner_emails_test extends \advanced_testcase {
     protected function setUp(): void {
@@ -125,6 +127,28 @@ final class resolve_learner_emails_test extends \advanced_testcase {
     }
 
     /**
+     * The same hidden field, with moodle/user:viewhiddendetails held across the site.
+     *
+     * The positive control for the case above: same viewer, same setting, one
+     * capability more. Without it the refusal above could be coming from
+     * anywhere.
+     */
+    public function test_a_hidden_email_field_is_allowed_with_viewhiddendetails(): void {
+        [$manager, $mine] = $this->manager_with_a_participant('anna@example.com');
+        $this->grant_at_system($manager, ['moodle/site:viewuseridentity', 'moodle/user:viewhiddendetails']);
+
+        set_config('hiddenuserfields', 'email');
+        $this->setUser($manager);
+
+        $code = pseudonym::learner((int) $mine->id);
+
+        $this->assertSame(
+            ['allowed' => true, 'learners' => [['code' => $code, 'email' => 'anna@example.com']]],
+            $this->call([$code])
+        );
+    }
+
+    /**
      * Seeing identity fields inside one course is not seeing them across the site.
      *
      * The case the system-context rule exists for. A teacher sees addresses on
@@ -171,12 +195,14 @@ final class resolve_learner_emails_test extends \advanced_testcase {
     }
 
     /**
-     * Somebody with no address, or one Moodle would not accept, is left out.
+     * Somebody with no address, or one Moodle would not accept, comes back as null.
      *
-     * Left out rather than sent empty: the caller counts the absent as "has
-     * none", and an empty string would also fail the declared return type.
+     * Present rather than left out: the dashboard reports an absent code as
+     * "not copied" and a null one as "has none", and these people are the
+     * second. Null rather than an empty string, which would fail the declared
+     * return type.
      */
-    public function test_people_without_a_usable_address_are_skipped(): void {
+    public function test_people_without_a_usable_address_are_answered_with_null(): void {
         global $DB;
 
         $with = $this->getDataGenerator()->create_user(['email' => 'anna@example.com']);
@@ -193,8 +219,65 @@ final class resolve_learner_emails_test extends \advanced_testcase {
             pseudonym::learner((int) $broken->id),
         ]);
 
+        $expected = [
+            pseudonym::learner((int) $with->id) => 'anna@example.com',
+            pseudonym::learner((int) $without->id) => null,
+            pseudonym::learner((int) $broken->id) => null,
+        ];
+        ksort($expected);
+
         $this->assertTrue($result['allowed']);
-        $this->assertSame(['anna@example.com'], array_column($result['learners'], 'email'));
+        $this->assertSame($expected, $this->by_code($result['learners']));
+    }
+
+    /**
+     * "Has none" and "not yours to see" never look alike.
+     *
+     * The manager's own person has no address and comes back with null. The
+     * other person has an address and a valid code, but is outside the
+     * manager's units, so their code does not come back at all: not with
+     * null, which would tell the dashboard they have no address.
+     */
+    public function test_in_reach_without_an_address_is_null_and_out_of_reach_is_absent(): void {
+        global $DB;
+
+        [$manager, $mine] = $this->manager_with_a_participant('anna@example.com');
+        $DB->set_field('user', 'email', '', ['id' => $mine->id]);
+        $this->grant_at_system($manager, ['moodle/site:viewuseridentity']);
+
+        $elsewhere = $this->getDataGenerator()->create_user(['email' => 'bob@example.com']);
+        mapping::place((int) $elsewhere->id, mapping::save_node('Utrecht', 'department'));
+
+        capability_holders::reset();
+        mapping::reset();
+        $this->setUser($manager);
+
+        $mycode = pseudonym::learner((int) $mine->id);
+        $result = $this->call([$mycode, pseudonym::learner((int) $elsewhere->id)]);
+
+        $this->assertTrue($result['allowed']);
+        $this->assertSame([['code' => $mycode, 'email' => null]], $result['learners']);
+    }
+
+    /**
+     * A deleted account gives no address, even though Moodle left one stored.
+     *
+     * Set directly rather than through delete_user(), which rewrites the
+     * address: this is the row an old deletion, or one by another route,
+     * leaves behind with the address still in it.
+     */
+    public function test_a_deleted_user_gives_no_address(): void {
+        global $DB;
+
+        $gone = $this->getDataGenerator()->create_user(['email' => 'gone@example.com']);
+        $DB->set_field('user', 'deleted', 1, ['id' => $gone->id]);
+
+        $this->setAdminUser();
+
+        $result = $this->call([pseudonym::learner((int) $gone->id)]);
+
+        $this->assertTrue($result['allowed']);
+        $this->assertSame([], $result['learners']);
     }
 
     /**
@@ -220,6 +303,102 @@ final class resolve_learner_emails_test extends \advanced_testcase {
     }
 
     /**
+     * A viewer who may not copy hears "not allowed" whatever the size of the ask.
+     *
+     * The permission is asked before the ceiling, so a batch that is too big
+     * from somebody who may not have addresses at all is answered with the
+     * reason that matters to them, not with an error about the batch.
+     */
+    public function test_a_viewer_who_may_not_copy_is_not_allowed_past_the_ceiling(): void {
+        [$manager] = $this->manager_with_a_participant('anna@example.com');
+        $this->setUser($manager);
+
+        $codes = [];
+
+        for ($i = 0; $i <= learner_names::MAX_CODES; $i++) {
+            $codes[] = 'p_' . str_pad((string) $i, 32, '0', STR_PAD_LEFT);
+        }
+
+        $this->assertCount(learner_names::MAX_CODES + 1, array_unique($codes));
+        $this->assertSame(['allowed' => false, 'learners' => []], $this->call($codes));
+    }
+
+    /**
+     * The address lookup checks the permission itself, not only the service.
+     *
+     * Called directly, past the service's own check, as a manager who may see
+     * their people's names: the names still come back and the addresses do
+     * not. This is the second check inside emails(), pinned.
+     */
+    public function test_emails_refuses_a_viewer_without_identity_rights_on_its_own(): void {
+        [$manager, $mine] = $this->manager_with_a_participant('anna@example.com');
+        $this->setUser($manager);
+
+        $code = pseudonym::learner((int) $mine->id);
+
+        $this->assertSame([$code => fullname($mine)], learner_names::resolve([$code]));
+        $this->assertSame([], learner_names::emails([$code]));
+    }
+
+    /**
+     * Handing addresses over is logged, as a count, and never with the addresses.
+     */
+    public function test_an_allowed_answer_is_logged_as_a_count_only(): void {
+        global $DB;
+
+        $with = $this->getDataGenerator()->create_user(['email' => 'anna@example.com']);
+        $other = $this->getDataGenerator()->create_user(['email' => 'bob@example.com']);
+        $without = $this->getDataGenerator()->create_user();
+        $DB->set_field('user', 'email', '', ['id' => $without->id]);
+
+        $codes = [
+            pseudonym::learner((int) $with->id),
+            pseudonym::learner((int) $other->id),
+            pseudonym::learner((int) $without->id),
+        ];
+
+        $this->setAdminUser();
+
+        $sink = $this->redirectEvents();
+        $this->call($codes);
+        $events = array_values(array_filter(
+            $sink->get_events(),
+            static fn($event): bool => $event instanceof learner_emails_resolved
+        ));
+        $sink->close();
+
+        $this->assertCount(1, $events);
+        $this->assertSame(['count' => 2], $events[0]->other);
+        $this->assertSame((int) get_admin()->id, (int) $events[0]->userid);
+        $this->assertSame(\context_system::instance()->id, (int) $events[0]->contextid);
+
+        // Nothing that names anybody, anywhere in what the log would keep.
+        $logged = json_encode($events[0]->get_data()) . $events[0]->get_description();
+
+        foreach (array_merge(['anna@example.com', 'bob@example.com'], $codes) as $secret) {
+            $this->assertStringNotContainsString($secret, $logged);
+        }
+    }
+
+    /**
+     * A refusal hands nothing over, so it logs nothing.
+     */
+    public function test_a_refused_answer_is_not_logged(): void {
+        [$manager, $mine] = $this->manager_with_a_participant('anna@example.com');
+        $this->setUser($manager);
+
+        $sink = $this->redirectEvents();
+        $this->call([pseudonym::learner((int) $mine->id)]);
+        $events = array_filter(
+            $sink->get_events(),
+            static fn($event): bool => $event instanceof learner_emails_resolved
+        );
+        $sink->close();
+
+        $this->assertSame([], $events);
+    }
+
+    /**
      * Somebody who may not open the report is stopped at the first door.
      */
     public function test_a_viewer_without_view_is_refused(): void {
@@ -242,6 +421,28 @@ final class resolve_learner_emails_test extends \advanced_testcase {
             resolve_learner_emails::execute_returns(),
             resolve_learner_emails::execute($codes)
         );
+    }
+
+    /**
+     * The service's learners as code => address, whatever order they came in.
+     *
+     * Built by hand rather than with array_column(), so a null address stays a
+     * null entry instead of depending on how that helper treats one.
+     *
+     * @param array $learners The service's learners, each a code and an address or null.
+     *
+     * @return array<string, string|null>
+     */
+    private function by_code(array $learners): array {
+        $map = [];
+
+        foreach ($learners as $entry) {
+            $map[$entry['code']] = $entry['email'];
+        }
+
+        ksort($map);
+
+        return $map;
     }
 
     /**

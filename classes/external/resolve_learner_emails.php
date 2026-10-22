@@ -31,6 +31,7 @@ use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
+use local_reportlms\event\learner_emails_resolved;
 use local_reportlms\local\access;
 use local_reportlms\local\learner_names;
 
@@ -71,13 +72,22 @@ class resolve_learner_emails extends external_api {
     /**
      * Turn coded learner identifiers into e-mail addresses, for those in scope.
      *
+     * Every code inside the viewer's reach comes back, with the address or
+     * with null when that person has none Moodle would accept. A code outside
+     * it does not come back at all. The dashboard reports the first as "has
+     * none" and the second as "not copied", so the two must never look alike.
+     *
      * More than learner_names::MAX_CODES distinct codes in one call is refused
      * outright rather than cut short, which is where this parts company with
      * the name service. A missing name leaves a placeholder on screen and costs
-     * nothing. A missing address is counted as "has none", so an answer quietly
-     * shortened at the ceiling would tell the viewer that hundreds of people
-     * have no address when nobody asked about them. The caller asks in batches,
-     * and a batch that is too big should fail where it can be seen.
+     * nothing. A missing code here is reported to the viewer as somebody whose
+     * address was not copied, so an answer quietly shortened at the ceiling
+     * would report hundreds of people that way for no reason anybody could see.
+     * The caller asks in batches, and a batch that is too big should fail where
+     * it can be seen.
+     *
+     * Each allowed answer is logged, as the number of addresses it handed over
+     * and nothing more. See {@see \local_reportlms\event\learner_emails_resolved}.
      *
      * @param array $codes
      *
@@ -108,10 +118,20 @@ class resolve_learner_emails extends external_api {
         }
 
         $learners = [];
+        $addresses = 0;
 
         foreach (learner_names::emails($wanted) as $code => $email) {
             $learners[] = ['code' => $code, 'email' => $email];
+
+            if ($email !== null) {
+                $addresses++;
+            }
         }
+
+        learner_emails_resolved::create([
+            'context' => $context,
+            'other' => ['count' => $addresses],
+        ])->trigger();
 
         return ['allowed' => true, 'learners' => $learners];
     }
@@ -128,13 +148,20 @@ class resolve_learner_emails extends external_api {
                 'Whether this viewer may be given e-mail addresses at all. False means the list is empty because of that.'
             ),
             // A list rather than a keyed object, like the name service. A code
-            // that is out of the viewer's reach and a code for somebody with no
-            // usable address are both simply absent; the caller counts them as
+            // out of the viewer's reach is absent, and the caller reports it as
+            // not copied. A code for somebody in reach with no usable address
+            // is present with a null address, and the caller reports it as
             // having none.
             'learners' => new external_multiple_structure(
                 new external_single_structure([
                     'code' => new external_value(PARAM_ALPHANUMEXT, 'The coded learner id'),
-                    'email' => new external_value(PARAM_EMAIL, 'The e-mail address this site holds'),
+                    'email' => new external_value(
+                        PARAM_EMAIL,
+                        'The e-mail address this site holds, or null when this person has none Moodle would accept',
+                        VALUE_REQUIRED,
+                        null,
+                        NULL_ALLOWED
+                    ),
                 ])
             ),
         ]);

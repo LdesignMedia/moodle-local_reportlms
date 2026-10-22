@@ -28,9 +28,16 @@
  * for days, through two plugin upgrades, because a caching rule on its own web
  * server pinned the file for a year. Nothing we shipped could reach it.
  *
- * **Moodle stays the transport.** The served script is handed a `call` function
- * and never builds a request itself, so the sesskey that guards every change
- * stays inside code the customer installed. It cannot be read out of here.
+ * **Moodle stays the transport, and only for this plugin's services.** The
+ * served script runs in this Moodle page, as whoever is viewing it, with their
+ * session and everything else a script on this page can reach. That is the
+ * trade of serving it rather than shipping it, and it is not something this
+ * file can narrow. What this file does decide is the function it hands over:
+ * `call` forwards to Moodle's own AJAX endpoint, and only for the services
+ * this plugin declares in db/services.php. Anything else is refused before a
+ * request is made. A fault in the bridge therefore cannot wander into one of
+ * Moodle's own services through the door it was given, which is defence in
+ * depth, not a boundary against a script that set out to build its own.
  *
  * **There is no local copy of the bridge, deliberately.** One shipped with the
  * first version of this and it was reasoning that did not survive being
@@ -71,6 +78,39 @@ import Ajax from 'core/ajax';
  * @returns {string}
  */
 const bridgePath = (platform) => '/bridge/' + platform + '/v1.js';
+
+/**
+ * The web services the served bridge may call through this page.
+ *
+ * This plugin's own, exactly as db/services.php declares them, and nothing
+ * else. Every one of them does its own capability check as the logged-in
+ * viewer; the list only stops the bridge reaching anything that is not ours.
+ * A service added there that the bridge needs has to be added here too, and
+ * one the bridge does not need should stay off it.
+ *
+ * @type {string[]}
+ */
+const BRIDGE_SERVICES = [
+    'local_reportlms_connect',
+    'local_reportlms_resolve_labels',
+    'local_reportlms_resolve_learners',
+    'local_reportlms_resolve_learner_emails',
+];
+
+/**
+ * Call one of this plugin's web services for the bridge, and refuse any other.
+ *
+ * @param {string} methodname
+ * @param {Object} args
+ * @returns {Promise} Moodle's answer, or a rejection naming the refused service.
+ */
+const callForBridge = (methodname, args) => {
+    if (!BRIDGE_SERVICES.includes(methodname)) {
+        return Promise.reject(new Error('local_reportlms: the bridge may not call ' + methodname));
+    }
+
+    return Ajax.call([{methodname: methodname, args: args}])[0];
+};
 
 /**
  * Fetch and run the bridge Report LMS serves.
@@ -126,10 +166,12 @@ export const init = (origin, frameselector, pluginversion, platform) => {
                 origin: origin,
                 frame: document.querySelector(frameselector),
                 pluginVersion: pluginversion,
-                // The whole of this page's authority, handed over as one narrow
-                // function. It can only reach the services db/services.php
-                // declares ajax, and only as whoever is logged in.
-                call: (methodname, args) => Ajax.call([{methodname: methodname, args: args}])[0],
+                // One narrow function: it forwards this plugin's own services,
+                // as whoever is logged in, and refuses every other. The script
+                // itself still runs in this page with the viewer's session, so
+                // this narrows what the bridge is given, not what a script on
+                // this page could do.
+                call: callForBridge,
             });
 
             return true;
