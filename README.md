@@ -55,7 +55,9 @@ signing secret and the salt are written by the connect flow and are never render
 be hand-edited into a broken state.
 
 The Report LMS URL and push path live behind advanced mode, reached from the Advanced settings
-button (shown to holders of `local/reportlms:manage`) or directly:
+button on the settings page (shown to holders of `local/reportlms:manage`), from the one at the
+top of the report page (shown to holders of `moodle/site:config`, who are the people Moodle lets
+open it), or directly:
 
 ```
 /admin/settings.php?section=local_reportlms&mode=advanced

@@ -223,6 +223,24 @@ class access {
     }
 
     /**
+     * The advanced settings page, for whoever Moodle will let open it.
+     *
+     * The plugin's settings page is an ordinary admin settings page, which
+     * Moodle opens to moodle/site:config in the system context and to nobody
+     * else, so that is the question asked here. A link handed to anybody
+     * else would end on "access denied".
+     *
+     * @return \moodle_url|null
+     */
+    public static function advanced_settings_url(): ?\moodle_url {
+        if (!has_capability('moodle/site:config', \context_system::instance())) {
+            return null;
+        }
+
+        return new \moodle_url('/admin/settings.php', ['section' => 'local_reportlms', 'mode' => 'advanced']);
+    }
+
+    /**
      * Whether this viewer may configure the site-wide dashboard deck.
      *
      * Site administrators may, without holding anything: Moodle grants them

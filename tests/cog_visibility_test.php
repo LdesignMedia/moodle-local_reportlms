@@ -36,6 +36,7 @@ use local_reportlms\local\mapping;
  *
  * @covers \local_reportlms\local\block_visibility
  * @covers \local_reportlms\local\access::admin_destination
+ * @covers \local_reportlms\local\access::advanced_settings_url
  */
 final class cog_visibility_test extends \advanced_testcase {
     protected function setUp(): void {
@@ -124,6 +125,46 @@ All three keys, because is_connected() checks all three. */
         $this->setUser($this->viewer());
 
         $this->assertNull(access::admin_destination());
+    }
+
+    // ---- advanced_settings_url() ---------------------------------------
+
+    public function test_an_administrator_gets_the_advanced_settings(): void {
+        $this->setAdminUser();
+
+        $expected = new \moodle_url('/admin/settings.php', ['section' => 'local_reportlms', 'mode' => 'advanced']);
+
+        $this->assertSame($expected->out(false), access::advanced_settings_url()->out(false));
+    }
+
+    public function test_a_siteconfig_holder_gets_the_advanced_settings(): void {
+        $user = $this->getDataGenerator()->create_user();
+        $roleid = create_role('Config holder', 'configholder', '');
+        assign_capability('moodle/site:config', CAP_ALLOW, $roleid, \context_system::instance()->id);
+        role_assign($roleid, $user->id, \context_system::instance()->id);
+        $this->setUser($user);
+
+        $this->assertNotNull(access::advanced_settings_url());
+    }
+
+    /**
+     * The organisation editor is theirs, the settings page is not: Moodle
+     * would turn them away from it.
+     */
+    public function test_a_manage_holder_does_not_get_the_advanced_settings(): void {
+        $user = $this->getDataGenerator()->create_user();
+        $roleid = create_role('Org editor', 'orgeditor', '');
+        assign_capability(access::MANAGE, CAP_ALLOW, $roleid, \context_system::instance()->id);
+        role_assign($roleid, $user->id, \context_system::instance()->id);
+        $this->setUser($user);
+
+        $this->assertNull(access::advanced_settings_url());
+    }
+
+    public function test_a_viewer_does_not_get_the_advanced_settings(): void {
+        $this->setUser($this->viewer());
+
+        $this->assertNull(access::advanced_settings_url());
     }
 
     // ---- block_visibility::css() ---------------------------------------

@@ -128,6 +128,19 @@ if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
 
 $actions = '';
 
+// The connection internals, one click from the report rather than a trip
+// through Site administration. Only on the dashboard: the setup steps above
+// have no settings link on purpose.
+$advanced = access::advanced_settings_url();
+
+if ($advanced !== null) {
+    $actions .= html_writer::link(
+        $advanced,
+        get_string('settings:advancedbutton', 'local_reportlms'),
+        ['class' => 'btn local-reportlms-btn']
+    );
+}
+
 /*
  * The cog goes where the block's cog goes: the mapping editor.
  *
