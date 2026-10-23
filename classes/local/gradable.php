@@ -41,6 +41,20 @@ namespace local_reportlms\local;
  * check is deliberately done in PHP: the SQL version compares context paths
  * column-to-column, which no index can serve, while the two queries below are
  * both straight indexed lookups and the intersection is a set test per row.
+ *
+ * Site administrators never count, whatever role they hold. They get enrolled
+ * to look at a course, to test it or to fix it, often as a student because
+ * that is the view they need to check, and a trial run of the final quiz is not
+ * a result. Left out here rather than when choosing whom to send, so their
+ * enrolments still go, flagged as not counted. That flag is what tells Report
+ * LMS to stop counting somebody it counted yesterday; a person simply left out
+ * of the push would keep the rows it already holds, counted. User id 2 never
+ * gets this far: {@see userstate::FIRST_REPORTABLE_USERID}.
+ *
+ * What this cannot reach is an enrolment that ended before the person became
+ * an administrator. Moodle has nothing left of it to send, so Report LMS keeps
+ * the flag it had, and the Unenrolled filter can still show that old result.
+ * Closing that needs a flag on the person rather than on the enrolment.
  */
 class gradable {
     /**
@@ -85,6 +99,11 @@ class gradable {
      */
     public static function pairs(array $userids): array {
         global $DB;
+
+        // Before the null-path guard below, on purpose: for an administrator
+        // the answer is no whatever the context tree says, so a tree mid-rebuild
+        // is no reason to hold their push back.
+        $userids = array_values(array_diff($userids, site_admins::ids()));
 
         if (!$userids) {
             return [];

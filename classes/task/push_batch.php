@@ -137,6 +137,14 @@ class push_batch extends \core\task\scheduled_task {
             mtrace('Report LMS: published the organisation into ' . $published . ' profile value(s).');
         }
 
+        // Before the batch is picked, so somebody who has just become an
+        // administrator is taken out of the figures by this run, not the next.
+        $admins = \local_reportlms\local\site_admins::sync();
+
+        if ($admins) {
+            mtrace('Report LMS: ' . $admins . ' person(s) to send again, for joining or leaving the site administrators.');
+        }
+
         $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN);
 
         if ($userids) {

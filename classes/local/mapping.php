@@ -884,10 +884,14 @@ class mapping {
          */
         $placed = self::resolved_membership();
 
+        // Not administrators: they are in no figure, so they cannot be missing
+        // from one, and the editor refuses to place them anyway.
+        $admins = array_flip(site_admins::ids());
+
         $count = 0;
 
         foreach ($DB->get_fieldset_select('user', 'id', 'deleted = 0 AND id > 2') as $userid) {
-            if (empty($placed[(int) $userid])) {
+            if (empty($placed[(int) $userid]) && !isset($admins[(int) $userid])) {
                 $count++;
             }
         }
