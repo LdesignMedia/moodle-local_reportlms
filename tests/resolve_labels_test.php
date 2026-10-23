@@ -109,6 +109,53 @@ final class resolve_labels_test extends \advanced_testcase {
     }
 
     /**
+     * A nested category carries its top category, so last year's copy of a
+     * training differs from this year's when both sit in a "Transport".
+     */
+    public function test_a_nested_category_is_named_with_its_top_category(): void {
+        $year = $this->getDataGenerator()->create_category(['name' => '2025 / 2026']);
+        $region = $this->getDataGenerator()->create_category(['name' => 'Transport Noord', 'parent' => $year->id]);
+        $old = $this->getDataGenerator()->create_category(['name' => 'Transport', 'parent' => $region->id]);
+        $current = $this->getDataGenerator()->create_category(['name' => 'Transport']);
+        label_map::purge();
+        $this->setAdminUser();
+
+        $labels = array_column(
+            resolve_labels::execute([pseudonym::category((int) $old->id), pseudonym::category((int) $current->id)])['labels'],
+            'label',
+            'code'
+        );
+
+        $this->assertSame('2025 / 2026 › Transport', $labels[pseudonym::category((int) $old->id)]);
+        $this->assertSame('Transport', $labels[pseudonym::category((int) $current->id)]);
+    }
+
+    /**
+     * A hidden top category is not named to somebody who may not see it: the
+     * visible category under it is still named, on its own.
+     */
+    public function test_a_hidden_top_category_is_left_out_for_a_manager(): void {
+        global $DB;
+
+        $year = $this->getDataGenerator()->create_category(['name' => 'Archive 2025']);
+        $team = $this->getDataGenerator()->create_category(['name' => 'TM - Jane Doe', 'parent' => $year->id]);
+        $DB->set_field('course_categories', 'visible', 0, ['id' => $year->id]);
+        $manager = $this->make_manager_of('Rotterdam');
+        label_map::purge();
+
+        $this->setUser($manager);
+
+        $labels = resolve_labels::execute([pseudonym::category((int) $team->id)])['labels'];
+
+        $this->assertSame('TM - Jane Doe', $labels[0]['label']);
+
+        // Somebody Moodle shows hidden categories to is told the top as well.
+        $this->setAdminUser();
+        $labels = resolve_labels::execute([pseudonym::category((int) $team->id)])['labels'];
+        $this->assertSame('Archive 2025 › TM - Jane Doe', $labels[0]['label']);
+    }
+
+    /**
      * A hidden category is named only to somebody Moodle would show it to.
      */
     public function test_a_hidden_category_is_not_named_to_a_manager(): void {

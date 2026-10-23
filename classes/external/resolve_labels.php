@@ -94,10 +94,16 @@ class resolve_labels extends external_api {
 
         $labels = [];
 
+        $map = null;
+
         foreach (label_map::resolve($wanted) as $code => $entry) {
+            if ($entry['kind'] === 'category') {
+                $map = $map ?? label_map::all();
+            }
+
             $labels[] = [
                 'code' => $code,
-                'label' => $entry['kind'] === 'category' ? self::category_name($entry) : $entry['label'],
+                'label' => $entry['kind'] === 'category' ? self::category_name($entry, $map) : $entry['label'],
                 'kind' => $entry['kind'],
                 'parent' => $entry['parent'],
             ];
@@ -107,7 +113,17 @@ class resolve_labels extends external_api {
     }
 
     /**
-     * A category's name as this viewer reads it.
+     * A category's name as this viewer reads it, with its top category in front.
+     *
+     * The top is what tells an old copy of a training from this year's: a site
+     * that files last year's copies under "2025 / 2026" can give them the same
+     * category names as the current ones ("Transport" and "Transport"), and
+     * "2025 / 2026 › Transport" says which is which. A top-level category is
+     * its own name alone. The levels between are left out to keep it short:
+     * the top and the category itself are the two that differ.
+     *
+     * The top is named only when the viewer could be told it on its own: a
+     * hidden one only with moodle/category:viewhiddencategories there.
      *
      * Run through the text filters here rather than when the map is built: the
      * map is cached for every viewer, and a multi-language name has to come out
@@ -115,10 +131,44 @@ class resolve_labels extends external_api {
      * dashboard renders it as text.
      *
      * @param array $entry A category entry from the label map.
+     * @param array $map The whole label map, for the parents.
      *
      * @return string
      */
-    protected static function category_name(array $entry): string {
+    protected static function category_name(array $entry, array $map): string {
+        $own = self::formatted($entry);
+
+        $top = null;
+        $code = $entry['parent'];
+        // Bounded, in case a damaged tree points in a circle.
+        for ($depth = 0; $code !== null && isset($map[$code]) && $depth < 20; $depth++) {
+            $top = $map[$code];
+            $code = $top['parent'];
+        }
+
+        if ($top === null || ($top['kind'] ?? null) !== 'category') {
+            return $own;
+        }
+
+        if (!$top['visible']) {
+            $context = \context_coursecat::instance($top['categoryid'], IGNORE_MISSING);
+
+            if (!$context || !has_capability('moodle/category:viewhiddencategories', $context)) {
+                return $own;
+            }
+        }
+
+        return self::formatted($top) . ' › ' . $own;
+    }
+
+    /**
+     * One category entry's name, filtered for this viewer.
+     *
+     * @param array $entry
+     *
+     * @return string
+     */
+    protected static function formatted(array $entry): string {
         $context = \context_coursecat::instance($entry['categoryid'], IGNORE_MISSING) ?: context_system::instance();
 
         return trim(format_string($entry['label'], true, ['context' => $context, 'escape' => false]));

@@ -215,8 +215,9 @@ class label_map {
      *
      * A category tells apart trainings that share a title, and its name can be
      * a person's ("TM - Jane Doe"), so it travels as a code and is named
-     * here, like a department. The parent rides along so a caller can build
-     * the path when the name alone repeats ("Transport" under two years).
+     * here, like a department. The parent rides along for resolve_labels,
+     * which puts the top category in front of a nested one's name, so callers
+     * get "2025 / 2026 › Transport" whole and need not build it.
      *
      * Every category rather than only those holding a reported course: a site
      * has tens of them, not thousands, and filtering would mean the collector's
