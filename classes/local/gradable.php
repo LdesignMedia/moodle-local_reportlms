@@ -52,9 +52,9 @@ namespace local_reportlms\local;
  * gets this far: {@see userstate::FIRST_REPORTABLE_USERID}.
  *
  * What this cannot reach is an enrolment that ended before the person became
- * an administrator. Moodle has nothing left of it to send, so Report LMS keeps
- * the flag it had, and the Unenrolled filter can still show that old result.
- * Closing that needs a flag on the person rather than on the enrolment.
+ * an administrator: Moodle has nothing left of it to send. The push names them
+ * in `uncounted` as well, and Report LMS flags the person, which reaches every
+ * row it holds for them, ended ones included.
  */
 class gradable {
     /**

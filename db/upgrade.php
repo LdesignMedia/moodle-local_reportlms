@@ -440,5 +440,17 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026102300, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026102303) {
+        // Forget the administrators list the push last saw, so the next push
+        // treats every administrator as new and sends them again. That run is
+        // the first to carry `uncounted`, which is what takes the enrolments
+        // that ended before they became one out of the figures. A site on the
+        // previous build had already remembered the list and would never have
+        // sent them again on its own.
+        unset_config(\local_reportlms\local\site_admins::SEEN, 'local_reportlms');
+
+        upgrade_plugin_savepoint(true, 2026102303, 'local', 'reportlms');
+    }
+
     return true;
 }

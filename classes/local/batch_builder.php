@@ -268,6 +268,11 @@ class batch_builder {
         $orgsection = self::org_section_if_changed();
         $dimensions = self::dimensions_section_if_changed();
 
+        // Read the same way gradable::pairs() read it above. A change between
+        // the two reads is caught by the next run: site_admins::sync() marks
+        // whoever it concerns.
+        $admins = array_flip(site_admins::ids());
+
         $result = [];
         foreach ($chunks as $i => $chunk) {
             $payload = self::envelope($snapshotat);
@@ -297,6 +302,20 @@ class batch_builder {
             $payload['learners'] = array_values(array_map(
                 static fn(int $userid): string => pseudonym::learner($userid),
                 $chunk['userids']
+            ));
+            /*
+             * Which of them count in no figure: the site administrators.
+             *
+             * Their enrolments already go flagged, but only the ones Moodle
+             * still has. One that ended before they became an administrator is
+             * gone from here and still counted there, so the person is named
+             * and Report LMS flags every row it holds for them. Sent every
+             * time, empty or not: everybody named and not in it counts, which
+             * is what puts somebody back once they are off the list.
+             */
+            $payload['uncounted'] = array_values(array_map(
+                static fn(int $userid): string => pseudonym::learner($userid),
+                array_filter($chunk['userids'], static fn(int $userid): bool => isset($admins[$userid]))
             ));
             /*
              * Departures ride in the first chunk, like the org tree: they are a

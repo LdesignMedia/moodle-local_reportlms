@@ -152,6 +152,72 @@ final class site_admins_test extends \advanced_testcase {
     }
 
     /**
+     * The person is named too, so Report LMS also stops counting the
+     * enrolments that ended before they became an administrator, which
+     * Moodle has nothing left of to flag.
+     */
+    public function test_the_push_names_an_administrator_as_uncounted(): void {
+        [$admin, $course] = $this->student();
+        [$student] = $this->student($course);
+        $this->make_admins($admin);
+
+        $chunks = batch_builder::build([(int) $admin->id, (int) $student->id], time());
+
+        $this->assertSame([pseudonym::learner((int) $admin->id)], $chunks[0]->payload['uncounted']);
+    }
+
+    /**
+     * The case `uncounted` exists for: an administrator whose only enrolment
+     * ended. Moodle has nothing of it to flag, so naming them is all there is.
+     */
+    public function test_an_administrator_with_no_enrolment_left_is_still_named(): void {
+        $admin = $this->getDataGenerator()->create_user();
+        $this->make_admins($admin);
+
+        $chunks = batch_builder::build([(int) $admin->id], time());
+        $pid = pseudonym::learner((int) $admin->id);
+
+        $this->assertSame([$pid], $chunks[0]->payload['learners']);
+        $this->assertSame([$pid], $chunks[0]->payload['uncounted']);
+    }
+
+    /**
+     * A site that ran the build before `uncounted` remembered the list
+     * already, and would never send its administrators again on its own.
+     *
+     * @covers ::xmldb_local_reportlms_upgrade
+     */
+    public function test_the_upgrade_has_every_administrator_sent_again(): void {
+        global $CFG;
+
+        require_once($CFG->libdir . '/upgradelib.php');
+        require_once($CFG->dirroot . '/local/reportlms/db/upgrade.php');
+
+        $admin = $this->getDataGenerator()->create_user();
+        $this->make_admins($admin);
+        site_admins::sync();
+        $this->clean($admin);
+
+        set_config('version', 2026102302, 'local_reportlms');
+        $this->assertTrue(xmldb_local_reportlms_upgrade(2026102302));
+        site_admins::sync();
+
+        $this->assertTrue($this->dirty($admin));
+    }
+
+    /**
+     * Sent empty rather than left out: an empty list is what tells Report LMS
+     * that somebody off the list counts again.
+     */
+    public function test_the_list_goes_empty_when_nobody_is_an_administrator(): void {
+        [$student] = $this->student();
+
+        $chunks = batch_builder::build([(int) $student->id], time());
+
+        $this->assertSame([], $chunks[0]->payload['uncounted']);
+    }
+
+    /**
      * The push notices the change itself, and in the same run.
      *
      * Somebody made an administrator a moment ago, on a site where nobody

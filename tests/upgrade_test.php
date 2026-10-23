@@ -129,7 +129,7 @@ final class upgrade_test extends \advanced_testcase {
         $this->upgrade();
 
         $this->assertFalse($this->is_dirty($user));
-        $this->assertSame(2026102300, (int) get_config('local_reportlms', 'version'), 'The savepoint is still reached.');
+        $this->assertSame(2026102303, (int) get_config('local_reportlms', 'version'), 'The last savepoint is still reached.');
     }
 
     /**

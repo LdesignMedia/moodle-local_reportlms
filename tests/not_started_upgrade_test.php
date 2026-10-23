@@ -104,7 +104,7 @@ final class not_started_upgrade_test extends \advanced_testcase {
 
         $this->assertFalse($this->is_dirty($absentee));
         $this->assertGreaterThanOrEqual($before, (int) get_config('local_reportlms', 'watermark_courseaccess'));
-        $this->assertSame(2026102300, (int) get_config('local_reportlms', 'version'));
+        $this->assertSame(2026102303, (int) get_config('local_reportlms', 'version'), 'The last savepoint is still reached.');
     }
 
     /**
