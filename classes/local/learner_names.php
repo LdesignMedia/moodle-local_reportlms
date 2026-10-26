@@ -116,19 +116,108 @@ class learner_names {
         $emails = [];
 
         foreach (self::matching($codes, ['email']) as $code => $user) {
-            $email = trim((string) $user->email);
-
-            $emails[$code] = ($email !== '' && clean_param($email, PARAM_EMAIL) === $email) ? $email : null;
+            $emails[$code] = self::usable_email((string) $user->email);
         }
 
         return $emails;
     }
 
     /**
+     * E-mail addresses and phone numbers for the codes this viewer is entitled to resolve.
+     *
+     * {@see emails()} with a phone number beside each address, for the
+     * dashboard's export. Everything said there holds here: the same candidate
+     * set, so not one more person than a name would be given for; the same
+     * second door, asked again where the contact details leave; the same two
+     * kinds of "nothing", absent for somebody outside the viewer's reach and
+     * present with nulls for somebody inside it who has none.
+     *
+     * The address is the one {@see emails()} would give, rule for rule.
+     *
+     * The phone number is Moodle's own rule, field by field. Only a field in
+     * {@see access::visible_phone_fields()} is handed out, and a field that is
+     * not visible to this viewer is not even read from the database. Of the
+     * visible ones the first a person has filled in is used, "Phone" before
+     * "Mobile phone", and a field that is empty, or holds something that is not
+     * plain text, counts as not filled in. The service declares what it returns
+     * as plain text, so one malformed value would otherwise fail the whole
+     * batch, as a malformed address would.
+     *
+     * Address and phone number are independent. Somebody can have either, both
+     * or neither, and a viewer who may copy addresses may still be shown no
+     * phone numbers at all.
+     *
+     * @param array<int, string> $codes Coded learner ids.
+     *
+     * @return array<string, array{email: string|null, phone: string|null}> Code
+     *         to the person's address and phone number, each null when this
+     *         person has none usable. Codes outside the viewer's reach are
+     *         absent.
+     */
+    public static function contacts(array $codes): array {
+        if (!access::can_copy_emails()) {
+            return [];
+        }
+
+        $phonefields = access::visible_phone_fields();
+        $contacts = [];
+
+        foreach (self::matching($codes, array_merge(['email'], $phonefields)) as $code => $user) {
+            $contacts[$code] = [
+                'email' => self::usable_email((string) $user->email),
+                'phone' => self::usable_phone($user, $phonefields),
+            ];
+        }
+
+        return $contacts;
+    }
+
+    /**
+     * An address as stored, or null when it is not one Moodle would accept.
+     *
+     * The one statement of "usable" for addresses, so the two lookups cannot
+     * come to different answers about the same person.
+     *
+     * @param string $stored
+     *
+     * @return string|null
+     */
+    protected static function usable_email(string $stored): ?string {
+        $email = trim($stored);
+
+        return ($email !== '' && clean_param($email, PARAM_EMAIL) === $email) ? $email : null;
+    }
+
+    /**
+     * The first phone number this person has filled in, among the fields this viewer may see.
+     *
+     * Trimmed. A field whose value Moodle would not accept as plain text is
+     * skipped like an empty one rather than returned, so the next field gets
+     * its turn and the service's declared type is never broken by one row.
+     *
+     * @param \stdClass $user A user record holding every field in $visible.
+     * @param array<int, string> $visible Phone fields this viewer may see, most preferred first.
+     *
+     * @return string|null
+     */
+    protected static function usable_phone(\stdClass $user, array $visible): ?string {
+        foreach ($visible as $field) {
+            $phone = trim((string) $user->{$field});
+
+            if ($phone !== '' && clean_param($phone, PARAM_TEXT) === $phone) {
+                return $phone;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The user records behind the codes this viewer is entitled to resolve.
      *
-     * The one place the candidate set meets the codes, shared by names and
-     * addresses so there is only ever one answer to "who may this viewer see".
+     * The one place the candidate set meets the codes, shared by names,
+     * addresses and phone numbers so there is only ever one answer to "who may
+     * this viewer see".
      *
      * @param array<int, string> $codes Coded learner ids. Only the first
      *        MAX_CODES distinct ones are looked at.

@@ -95,6 +95,7 @@ const BRIDGE_SERVICES = [
     'local_reportlms_resolve_labels',
     'local_reportlms_resolve_learners',
     'local_reportlms_resolve_learner_emails',
+    'local_reportlms_resolve_learner_contacts',
 ];
 
 /**

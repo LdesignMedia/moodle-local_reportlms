@@ -110,7 +110,9 @@ class launch {
             // from doing the deciding.
             'configure' => access::can_configure(),
             /*
-             * Whether the dashboard may offer to copy e-mail addresses.
+             * Whether the dashboard may offer "Export people (Excel)": names,
+             * e-mail addresses and phone numbers. The name is older than the
+             * export; it was given for the copy button the export replaced.
              *
              * The same rule the lookup service applies, from the same method,
              * so the button is only shown to somebody whose click the service

@@ -75,6 +75,26 @@ $functions = [
     ],
 
     /*
+     * E-mail addresses and phone numbers for the same people, for the
+     * dashboard's people export.
+     *
+     * The e-mail service above with a phone number beside each address, which
+     * is why that one stays: a Report LMS older than this plugin still calls
+     * it. Same candidate set, same rule on who may see addresses, and a phone
+     * number only from a field Moodle shows this viewer, asked in the system
+     * context inside the function. Not listed as a capability here for the same
+     * reason. See access::can_copy_emails() and access::visible_phone_fields().
+     */
+    'local_reportlms_resolve_learner_contacts' => [
+        'classname' => 'local_reportlms\external\resolve_learner_contacts',
+        'methodname' => 'execute',
+        'description' => 'Resolve coded learner ids to the e-mail addresses and phone numbers this site holds for them.',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'local/reportlms:view',
+    ],
+
+    /*
      * There is no separate service for recording the data statement.
      *
      * There was, and it could not work in the order the setup steps ask for:

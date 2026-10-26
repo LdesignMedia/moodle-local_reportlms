@@ -261,8 +261,8 @@ class access {
      * ours. "Show user identity" with e-mail in it, plus
      * moodle/site:viewuseridentity, is what puts an address in the participants
      * list and the user selectors, so a viewer this answers yes for can already
-     * read every address on the site in Moodle itself. That is what makes a
-     * copy button a convenience instead of a new way in. Hidden user fields are
+     * read every address on the site in Moodle itself. That is what makes the
+     * dashboard's people export a convenience instead of a new way in. Hidden user fields are
      * honoured too, because get_identity_fields() drops e-mail when it is hidden
      * and the viewer lacks moodle/user:viewhiddendetails. A person's own "show
      * my e-mail address" choice is not consulted, and on purpose: Moodle does
@@ -294,6 +294,38 @@ class access {
             \core_user\fields::get_identity_fields(\context_system::instance(), false),
             true
         );
+    }
+
+    /**
+     * Which phone fields this viewer may be handed, most preferred first.
+     *
+     * The same rule as {@see can_copy_emails()}, asked of the same list: the
+     * viewer's identity fields in the system context, with hidden user fields
+     * and the system-only reading explained there. A phone number is not given
+     * out on a looser footing than an address. Moodle shows "Phone" and "Mobile
+     * phone" in the participants list only when the site chose to put them in
+     * "Show user identity", so a viewer who gets one of them from this method
+     * can already read it for everybody in Moodle itself.
+     *
+     * Each field is decided on its own. A site may show the mobile phone and
+     * not the phone, or the other way round, and one being allowed says nothing
+     * about the other.
+     *
+     * The order is the order they are preferred in: phone1 ("Phone") before
+     * phone2 ("Mobile phone"). Whoever hands out a number takes the first of
+     * these a person has filled in.
+     *
+     * Empty means no phone number may be given out, whatever people have stored.
+     * It does not mean the viewer may not copy addresses: that is
+     * {@see can_copy_emails()}, and the two are asked separately.
+     *
+     * @return array<int, string> Some of 'phone1' and 'phone2', in that order.
+     */
+    public static function visible_phone_fields(): array {
+        return array_values(array_intersect(
+            ['phone1', 'phone2'],
+            \core_user\fields::get_identity_fields(\context_system::instance(), false)
+        ));
     }
 
     /**

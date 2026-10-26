@@ -209,10 +209,12 @@ echo html_writer::tag('iframe', '', [
     // tightening this would leave the dashboard showing hashes.
     'sandbox' => 'allow-scripts allow-same-origin allow-popups allow-downloads',
     /*
-     * The copy-addresses button writes to the clipboard from inside the frame,
-     * and a browser refuses that to a cross-origin frame unless the page
-     * embedding it says so. Only this frame: the setup steps above have
-     * nothing to copy, so they are not given the permission.
+     * The copy-addresses button of a Report LMS from before the people export
+     * writes to the clipboard from inside the frame, and a browser refuses that
+     * to a cross-origin frame unless the page embedding it says so. The export
+     * that replaced it only downloads a file, so this can go once no Report LMS
+     * that copies is left. Only this frame: the setup steps above have nothing
+     * to copy, so they are not given the permission.
      */
     'allow' => 'clipboard-write',
     'referrerpolicy' => 'no-referrer',
