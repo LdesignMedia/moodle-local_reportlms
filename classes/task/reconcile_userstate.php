@@ -25,6 +25,7 @@
 
 namespace local_reportlms\task;
 
+use local_reportlms\local\source_sweep;
 use local_reportlms\local\userstate;
 
 /**
@@ -52,12 +53,10 @@ class reconcile_userstate extends \core\task\scheduled_task {
      * the source table as "s", when only some of its rows can change a
      * learner's slice, and a longer overlap than the default minute.
      *
-     * @return array<string, array{table: string, column: string, userfield: string, overlap?: int, join?: string,
-     *     where?: string}>
+     * @return array<string, array{table: string, column: string, userfield: string, lag?: int, overlap?: int,
+     *     join?: string, where?: string}>
      */
     protected function sources(): array {
-        global $DB;
-
         $sources = [
             'user' => ['table' => 'user', 'column' => 'timemodified', 'userfield' => 'id'],
             'enrolments' => ['table' => 'user_enrolments', 'column' => 'timemodified', 'userfield' => 'userid'],
@@ -116,39 +115,20 @@ class reconcile_userstate extends \core\task\scheduled_task {
         /*
          * Certificates, which nothing else reliably notices.
          *
-         * mod_customcert raises no event when it issues one — its events cover
-         * templates, pages and elements, which are authoring actions rather
-         * than a learner receiving anything. db/events.php said the reconcile
-         * sweep was the fallback for that, and docs/known-issues.md said the
-         * fallback worked; neither was true, because no certificate table was
-         * ever listed here. A customcert issue reached Report LMS only when the
-         * learner happened to be marked dirty for some unrelated reason, so on
-         * a site that issues certificates and little else the tile could stay
-         * wrong indefinitely.
+         * Every push sweeps these too, the same way and against the same
+         * watermarks (see source_sweep), which is what gets a certificate to
+         * the report within one push rather than one night. So on a site whose
+         * push runs, the night finds nothing here that a push has not already
+         * marked. Listed all the same: one query a night is cheap, and the
+         * nightly task is where every source is swept.
          *
-         * Both tables are optional, and appended rather than woven in: the
-         * sweep loop has no error handling, so an unguarded read of a table
-         * that is not installed would throw and abandon every source after it.
-         * Guarded and last, the worst case is that these two are missing.
-         *
-         * tool_certificate does raise events and is observed, so sweeping it is
-         * belt and braces. It costs one query per sweep and closes the same gap
-         * if an event is ever missed.
+         * Until 2026-08-19 no certificate table was listed here at all, so a
+         * customcert issue reached Report LMS only when its learner happened to
+         * be marked dirty for some unrelated reason. Appended rather than woven
+         * in, and only the tables that exist: an unguarded read of one that is
+         * not installed would throw and abandon every source after it.
          */
-        $manager = $DB->get_manager();
-
-        $certificates = [
-            'customcertissues' => ['table' => 'customcert_issues', 'column' => 'timecreated', 'userfield' => 'userid'],
-            'toolcertissues' => ['table' => 'tool_certificate_issues', 'column' => 'timecreated', 'userfield' => 'userid'],
-        ];
-
-        foreach ($certificates as $key => $source) {
-            if ($manager->table_exists($source['table'])) {
-                $sources[$key] = $source;
-            }
-        }
-
-        return $sources;
+        return array_merge($sources, source_sweep::certificate_sources());
     }
 
     /**
@@ -164,8 +144,6 @@ class reconcile_userstate extends \core\task\scheduled_task {
      * Sweep every source and mark whoever changed.
      */
     public function execute(): void {
-        global $DB;
-
         if (!\local_reportlms\local\connect_manager::is_connected()) {
             mtrace('Report LMS is not connected, skipping the reconcile sweep.');
 
@@ -175,42 +153,7 @@ class reconcile_userstate extends \core\task\scheduled_task {
         $marked = 0;
 
         foreach ($this->sources() as $key => $source) {
-            $watermark = (int) get_config('local_reportlms', 'watermark_' . $key);
-            // A little overlap on purpose: rows written in the same second as
-            // the last run would otherwise fall between two sweeps. A source
-            // can ask for more; see courseaccess.
-            $from = max(0, $watermark - ($source['overlap'] ?? 60));
-            $highest = $watermark;
-
-            // Joined to user rather than read straight from the source table:
-            // grade and enrolment rows outlive the account, so a plain sweep
-            // marks deleted learners dirty and the next push carries people
-            // who must not be reported on at all.
-            $join = $source['join'] ?? '';
-            $where = $source['where'] ?? '';
-            $sql = "SELECT s.{$source['userfield']} AS userid, MAX(s.{$source['column']}) AS changed
-                      FROM {{$source['table']}} s
-                      JOIN {user} u ON u.id = s.{$source['userfield']}
-                           {$join}
-                     WHERE s.{$source['column']} > :from
-                       AND u.deleted = 0
-                       AND u.id >= " . userstate::FIRST_REPORTABLE_USERID . "
-                           {$where}
-                  GROUP BY s.{$source['userfield']}";
-
-            $recordset = $DB->get_recordset_sql($sql, ['from' => $from]);
-
-            foreach ($recordset as $row) {
-                userstate::mark_dirty((int) $row->userid);
-                $marked++;
-                $highest = max($highest, (int) $row->changed);
-            }
-
-            $recordset->close();
-
-            // Only advance once the sweep finished. A crash mid-source repeats
-            // it next time, which is wasteful but never loses a change.
-            set_config('watermark_' . $key, $highest, 'local_reportlms');
+            $marked += source_sweep::sweep($key, $source);
         }
 
         mtrace("Report LMS reconcile marked {$marked} learner rows, "

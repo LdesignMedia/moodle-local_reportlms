@@ -67,22 +67,24 @@ $observers = [
     /*
      * Certificates, Moodle Workplace side.
      *
-     * tool_certificate is the only certificate plugin either stack ships that
-     * raises an event when a learner is issued one, so these are the only ones
-     * there are to observe. Regeneration counts: it moves the expiry date, and
-     * an expiry date is half of what the dashboard reports.
+     * tool_certificate raises an event when a learner is issued, revoked or
+     * regenerated a certificate, and all three are observed. Regeneration
+     * counts: it moves the expiry date, and an expiry date is half of what the
+     * dashboard reports.
      *
-     * mod_customcert, the Moodle LMS side, raises nothing at all on issue. Its
-     * events cover templates and elements, which are authoring actions, not a
-     * learner receiving anything. So a customcert issue is picked up by the
-     * reconcile task rather than the moment it happens, and that is a property
-     * of the plugin rather than something this observer list can fix.
+     * mod_customcert, the Moodle LMS side, is not observed. From 4.4.6 and
+     * 5.0.0 (June 2025) it raises \mod_customcert\event\issue_created; older
+     * releases raise nothing when they issue a certificate, only events for
+     * templates and elements, which are authoring actions. Instead every push
+     * checks both issue tables for new rows before it sends
+     * (local\source_sweep), which covers every release of both plugins. On
+     * the releases that raise it, an observer would get a certificate out up
+     * to one push sooner; it is left out so that a certificate has one way
+     * into the report rather than two that could disagree.
      *
-     * That was written before the sweep could do it. reconcile_userstate had no
-     * certificate table until 2026-08-19, so this note described a fallback
-     * that did not exist and a customcert issue reached Report LMS only if the
-     * learner was marked dirty for some unrelated reason. The sweep reads both
-     * issue tables now, so the sentence above is true as well as intended.
+     * This note used to say customcert raises nothing at all on issue, and
+     * that its certificates waited for the nightly sweep. The first stopped
+     * being true in 2025 and the second on 2026-10-27.
      */
     ['eventname' => '\tool_certificate\event\certificate_issued', 'callback' => $callback],
     ['eventname' => '\tool_certificate\event\certificate_revoked', 'callback' => $callback],

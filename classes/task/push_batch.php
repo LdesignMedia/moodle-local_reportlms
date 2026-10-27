@@ -31,6 +31,7 @@ use local_reportlms\local\batch_builder;
 use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
 use local_reportlms\local\label_map;
+use local_reportlms\local\source_sweep;
 use local_reportlms\local\userstate;
 
 /**
@@ -143,6 +144,41 @@ class push_batch extends \core\task\scheduled_task {
 
         if ($admins) {
             mtrace('Report LMS: ' . $admins . ' person(s) to send again, for joining or leaving the site administrators.');
+        }
+
+        /*
+         * New certificates, every run rather than every night.
+         *
+         * A certificate is often issued a few seconds after the completion it
+         * rewards, when the learner opens it. The push that sends the
+         * completion can go out in between, and nothing marks the learner
+         * again: this plugin observes no customcert event, and the nightly
+         * sweep was the only thing that looked. So the report showed
+         * "Completed" with no certificate for up to a day, or for weeks on a
+         * site where the nightly task was switched off.
+         *
+         * Before the batch is picked, so whatever the check finds goes out
+         * with this run. A certificate is only looked for once it is two
+         * minutes old (source_sweep::CERTIFICATE_LAG), so it reaches the report
+         * within one push interval plus that.
+         *
+         * A failed read here is logged and skipped rather than failing the
+         * push: the learners already waiting still go out, and the watermark
+         * did not move, so the next run reads from the same place again. It is
+         * logged on every run it happens.
+         */
+        $certificates = 0;
+
+        foreach (source_sweep::certificate_sources() as $key => $source) {
+            try {
+                $certificates += source_sweep::sweep($key, $source);
+            } catch (\dml_exception $e) {
+                mtrace('Report LMS: could not check ' . $source['table'] . ' for new certificates: ' . $e->getMessage());
+            }
+        }
+
+        if ($certificates) {
+            mtrace('Report LMS: ' . $certificates . ' person(s) with a new certificate to send.');
         }
 
         $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN);
