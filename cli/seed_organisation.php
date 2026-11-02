@@ -54,11 +54,7 @@ require_once($CFG->libdir . '/grade/constants.php');
  * against hesitation; a list protects against the wrong terminal.
  */
 /** @var array The only sites this may run against. It invents data, so it asks first. */
-const ALLOWED_HOSTS = [
-    'moodle.test.example.com',
-    'workplace.test.example.com',
-    'localhost',
-];
+const ALLOWED_HOSTS = ['localhost'];
 
 /** @var string Everything this creates is prefixed, so it can be told apart and removed. */
 const TAG = 'rlmsseed';
@@ -133,8 +129,10 @@ EOT);
 
 $host = parse_url($CFG->wwwroot, PHP_URL_HOST);
 
-if (!in_array($host, ALLOWED_HOSTS, true)) {
-    cli_error("Refusing to run against {$host}. Add it to ALLOWED_HOSTS in this file if that is really what you want.");
+// A test site opts in from config.php: $CFG->local_reportlms_seed_hosts = ['test.example.com'];
+$allowedhosts = array_merge(ALLOWED_HOSTS, (array) ($CFG->local_reportlms_seed_hosts ?? []));
+if (!in_array($host, $allowedhosts, true)) {
+    cli_error("Refusing to run against {$host}. Add it to \$CFG->local_reportlms_seed_hosts in config.php if that is really what you want.");
 }
 
 $dryrun = (bool) $options['dry-run'];

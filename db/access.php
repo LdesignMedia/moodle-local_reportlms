@@ -52,7 +52,7 @@ defined('MOODLE_INTERNAL') || die();
  * Nothing is created to replace it either. There are two ways in: an
  * administrator grants :view to a role of their own making, or somebody is
  * named as a manager in the editor, which grants the same sight without any
- * role assignment at all. See docs/plan-access-and-mapping.md.
+ * role assignment at all.
  */
 $capabilities = [
 

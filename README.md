@@ -1,77 +1,65 @@
-# Report LMS (local_reportlms)
+<p align="center">
+  <a href="https://reportlms.com">
+    <img src=".github/assets/dashboard.png" alt="Report LMS: training dashboards for your Moodle site" width="772">
+  </a>
+</p>
 
-Moodle plugin that connects a site to the Report LMS reporting service and pushes pseudonymised
-learning data to it.
+# Report LMS for Moodle
 
-The receiving service is the `reportlms` Laravel application. The wire format both ends build
-against is `reportlms/docs/push-contract-v1.md`.
+[![CI](https://github.com/LdesignMedia/moodle-local_reportlms/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/LdesignMedia/moodle-local_reportlms/actions/workflows/ci.yml)
 
-## Status
+Connect your Moodle site to [Report LMS](https://reportlms.com) for clear training
+dashboards: completion, overdue training, attempts, time spent and certificates,
+per department.
 
-Connect flow, pseudonymiser, collectors, scheduled push and reconcile tasks, org mapping, launch
-tokens and the embedded dashboard are all built. See ClickUp 86cay1v14, 86cay1v1d and 86cay1v20.
+Learner data leaves your site as codes and numbers only. Names never do: the
+dashboard adds them in the manager's browser, straight from your own Moodle.
+
+## Features
+
+- Dashboard inside Moodle with completion, overdue, attempts and certificate figures.
+- Progress per training, attempts to pass, time spent and overdue per department.
+- Filters on training, department, profile fields and status.
+- PDF export for audits and management reports.
+- Organisation structure with departments, units and a manager per unit.
+- Managers only see the people in their own part of the organisation.
+- Certificate expiry tracking for Moodle Workplace and `mod_customcert`.
+- One-click connection with clear status, reconnect and disconnect controls.
+- Optional front page block that links to the dashboard.
 
 ## Requirements
 
-- Moodle 3.9 or later
-- PHP 8.0 or later
+- Moodle **3.9+** and PHP **8.0+**, using a PHP version supported by your Moodle release.
+- A Report LMS subscription, outbound HTTPS access and working Moodle cron.
 
-## Installation
+## Install and connect
 
-Copy into `local/reportlms` and run the Moodle upgrade.
+1. Install through **Site administration → Plugins → Install plugins**.
+2. Visit **Site administration** to complete the installation or upgrade.
+3. Open **Plugins → Local plugins → Report LMS**.
+4. Click **Connect to Report LMS**. The site is verified automatically, there are
+   no keys to copy.
+5. Set up your organisation: add departments and place people in them.
+6. Give managers access by naming them as manager of a unit, or grant
+   `local/reportlms:view` to a role.
 
-## Connecting a site
+For manual installation, place the plugin in `local/reportlms` on Moodle 3.9–5.0,
+or `public/local/reportlms` on Moodle 5.1 and later.
 
-The site must already be registered in the Report LMS licence system.
-
-*Site administration > Plugins > Local plugins > Report LMS*, then press **Connect to Report LMS**.
-
-What happens:
-
-1. The plugin generates a random verification token and publishes it on `/local/reportlms/verify.php`.
-2. It calls `POST /api/v1/connect` on the Report LMS host with the site URL and that token.
-3. Report LMS checks the licence for this site, then fetches the token back off the site to confirm
-   the caller really operates it.
-4. Report LMS returns an API key and a signing secret, which the plugin stores. The key expires with
-   the licence.
-
-`verify.php` is deliberately public and uses `NO_MOODLE_COOKIES`. A site with `forcelogin` enabled
-serves no public HTML at all, so a verification meta tag on the front page would be invisible to
-Report LMS and the check would fail for exactly the sites this plugin targets. The endpoint answers
-only while a connect attempt is open, and the token is single use.
-
-**Reconnect** re-runs the same verification. It does not need the existing key, so a site whose key
-expired or was lost can still reconnect.
-
-**Disconnect** clears the keys and the site stops sending data. The pseudonymisation salt is
-deliberately kept: regenerating it would change every coded id, so a later reconnect would look like
-a completely new population and orphan every fact already stored.
-
-## Settings
-
-The settings page shows the connection status, the Disconnect button and the front page block
-button; connecting happens from the report page, where the setup sequence lives. The API key, the
-signing secret and the salt are written by the connect flow and are never rendered, so they cannot
-be hand-edited into a broken state.
-
-The Report LMS URL and push path live behind advanced mode, reached from the Advanced settings
-button on the settings page (shown to holders of `local/reportlms:manage`), from the one at the
-top of the report page (shown to holders of `moodle/site:config`, who are the people Moodle lets
-open it), or directly:
-
-```
-/admin/settings.php?section=local_reportlms&mode=advanced
-```
-
-The base URL can be pinned in `config.php`:
-
-```php
-$CFG->forced_plugin_settings['local_reportlms']['baseurl'] = 'https://reportlms.example.com';
-```
+Data is sent by cron. **Disconnect** stops all sending. **Reconnect** verifies the
+site again, also when the previous key expired or was lost.
 
 ## Privacy
 
-The plugin currently stores no personal data and sends none, so it declares a null privacy provider.
-That has to change when the push lands: from then on it transmits coded learner identifiers and
-numeric results to an external service, which must be declared as an external location even though
-it carries no names or addresses.
+Report LMS never receives names, email addresses or other free text. Learner ids
+are coded with a key that stays on your Moodle site, so only your site can link a
+code back to a person. Results are sent as numbers and dates.
+
+Everything the plugin stores and sends is declared through the Moodle Privacy API.
+
+## Support and license
+
+Report problems through [GitHub issues](https://github.com/LdesignMedia/moodle-local_reportlms/issues).
+Learn more at [reportlms.com](https://reportlms.com).
+
+Licensed under [GNU GPL v3 or later](LICENSE).

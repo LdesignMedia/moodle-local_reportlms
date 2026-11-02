@@ -154,7 +154,7 @@ class launch {
      *
      * TODO: derive the role and scope from the org tree, so a manager's token
      * carries only the nodes they manage and the SaaS scopes every query to
-     * that subtree. Depends on the manager definition in 86cay1v20.
+     * that subtree. Depends on the manager definition.
      *
      * @return array{sub: string, role: string, scope: array}
      */

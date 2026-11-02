@@ -1,13 +1,10 @@
-# Local CI entrypoint - delegates to the vendored ci-selfhosted workflow so we
-# can pin the runner labels (ldesign self-hosted) instead of GitHub-hosted.
 name: ci
 
 on: [push, pull_request]
 
 jobs:
   ci:
-    uses: ./.github/workflows/ci-selfhosted.yml
-    secrets: inherit
+    uses: catalyst/catalyst-moodle-workflows/.github/workflows/ci.yml@main
     with:
       # No tests/behat directory. The surfaces worth driving through a browser
       # are the dashboard block and the embedded report, and both need a
@@ -24,12 +21,5 @@ jobs:
       # install it, and 4.5 is what every connected environment actually runs.
       min_php: 8.1
       moodle_branches: MOODLE_405_STABLE
-      # Pin upstream catalyst-moodle-workflows to a known commit. The earlier
-      # pin predated their move to a cached Moodle updates file and fetched
-      # download.moodle.org directly, which now answers 403 (Cloudflare
-      # challenge), so "prepare test matrix" failed before any test ran.
-      # This commit reads the cache that ci-selfhosted.yml downloads from their
-      # caches branch.
-      internal_workflow_branch: 48c522dc02dbf280d91cd920a4d6d613051008c7
-      # amd/build is generated, and docs holds working notes rather than code.
-      ignore_paths: amd/build,vendor,node_modules,docs
+      # amd/build is generated.
+      ignore_paths: amd/build,vendor,node_modules
