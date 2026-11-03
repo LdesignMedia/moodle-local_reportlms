@@ -36,12 +36,19 @@ dashboard adds them in the manager's browser, straight from your own Moodle.
 
 1. Install through **Site administration → Plugins → Install plugins**.
 2. Visit **Site administration** to complete the installation or upgrade.
-3. Open **Plugins → Local plugins → Report LMS**.
-4. Click **Connect to Report LMS**. The site is verified automatically, there are
-   no keys to copy.
-5. Set up your organisation: add departments and place people in them.
-6. Give managers access by naming them as manager of a unit, or grant
+3. Open **Plugins → Local plugins → Report LMS** and follow the three setup steps:
+   - **Request a licence** for your site address.
+   - **Read what leaves your site**: the statement shows exactly which data is sent
+     and which never is.
+   - **Press connect**. The plugin proves the site is yours and receives its keys,
+     there is nothing to copy or paste.
+4. Set up your organisation: add departments and place people in them.
+5. Give managers access by naming them as manager of a unit, or grant
    `local/reportlms:view` to a role.
+
+<p align="center">
+  <img src=".github/assets/setup.png" alt="Report LMS setup: request a licence, read the statement, connect" width="600">
+</p>
 
 For manual installation, place the plugin in `local/reportlms` on Moodle 3.9–5.0,
 or `public/local/reportlms` on Moodle 5.1 and later.
