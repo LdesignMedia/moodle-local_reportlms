@@ -18,8 +18,9 @@ jobs:
       # fails with "Unable to find local grunt".
       disable_grunt: true
       # The plugin declares Moodle 3.9 so a customer on an older site can still
-      # install it, and 4.5 is what every connected environment actually runs.
+      # install it. 4.5 is what every connected environment runs today; 5.0 and
+      # 5.1 are tested too, because "3.9 or later" is what the site says.
       min_php: 8.1
-      moodle_branches: MOODLE_405_STABLE
+      moodle_branches: MOODLE_405_STABLE MOODLE_500_STABLE MOODLE_501_STABLE
       # amd/build is generated.
       ignore_paths: amd/build,vendor,node_modules
