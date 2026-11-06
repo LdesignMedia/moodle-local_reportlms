@@ -174,7 +174,7 @@ class dimensions {
         foreach ($courserecords as $course) {
             $courses[] = (object) [
                 'courseid' => (int) $course->id,
-                'title' => trim($course->fullname),
+                'title' => self::plain_title((string) $course->fullname),
                 'active' => (bool) $course->visible,
                 /*
                  * Both halves are required and they fail the same way.
@@ -240,7 +240,7 @@ class dimensions {
                 $activities[] = (object) [
                     'cmid' => (int) $cm->id,
                     'courseid' => (int) $course->id,
-                    'title' => trim((string) $cm->name),
+                    'title' => self::plain_title((string) $cm->name),
                     'kind' => $cm->modname,
                     'summative' => $ismain,
                 ];
@@ -259,5 +259,20 @@ class dimensions {
      */
     public static function state_hash(\stdClass $dimensions): string {
         return sha1(json_encode($dimensions));
+    }
+
+    /**
+     * A title as people read it.
+     *
+     * Moodle keeps some names with their HTML entities (a course called
+     * "Health &amp; Safety" after an import or an old form), and the
+     * dashboard showed those entities as text. Decoded here once, so the
+     * picker and every list show the name the LMS shows.
+     *
+     * @param string $title The stored name.
+     * @return string
+     */
+    public static function plain_title(string $title): string {
+        return trim(html_entity_decode($title, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
     }
 }

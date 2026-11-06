@@ -341,4 +341,20 @@ final class dimensions_test extends \advanced_testcase {
 
         $this->assertNotSame($before, dimensions::state_hash(dimensions::collect()));
     }
+
+    public function test_a_title_kept_with_html_entities_is_sent_as_people_read_it(): void {
+        global $DB;
+        $course = $this->getDataGenerator()->create_course();
+        $DB->set_field('course', 'fullname', ' Health &amp; Safety &quot;basics&quot; ', ['id' => $course->id]);
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($user->id, $course->id);
+
+        $titles = [];
+        foreach (dimensions::collect()->courses as $row) {
+            $titles[$row->courseid] = $row->title;
+        }
+
+        $this->assertSame('Health & Safety "basics"', $titles[(int) $course->id]);
+        $this->assertSame('Plain', dimensions::plain_title('  Plain '));
+    }
 }
