@@ -209,8 +209,8 @@ final class completion_collector_test extends \advanced_testcase {
             'timeaccess' => time(),
         ]);
 
-        $this->assertSame('in_progress', $this->status($user, $opened));
-        $this->assertNull($this->status($user, $untouched));
+        $this->assertSame('in_progress', $this->status_of($user, $opened));
+        $this->assertNull($this->status_of($user, $untouched));
     }
 
     /**
