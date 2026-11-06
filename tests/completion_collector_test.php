@@ -51,7 +51,7 @@ final class completion_collector_test extends \advanced_testcase {
     public function test_somebody_who_never_opened_the_course_is_left_out(): void {
         [$user, $course] = $this->enrolled_with_a_record();
 
-        $this->assertNull($this->status($user, $course));
+        $this->assertNull($this->status_of($user, $course));
     }
 
     public function test_opening_the_course_is_a_start(): void {
@@ -64,7 +64,7 @@ final class completion_collector_test extends \advanced_testcase {
             'timeaccess' => time(),
         ]);
 
-        $this->assertSame('in_progress', $this->status($user, $course));
+        $this->assertSame('in_progress', $this->status_of($user, $course));
     }
 
     /**
@@ -77,7 +77,7 @@ final class completion_collector_test extends \advanced_testcase {
         [$user, $course] = $this->enrolled_with_a_record();
         $DB->set_field('course_completions', 'timestarted', time(), ['userid' => $user->id, 'course' => $course->id]);
 
-        $this->assertNull($this->status($user, $course));
+        $this->assertNull($this->status_of($user, $course));
     }
 
     /**
@@ -95,7 +95,7 @@ final class completion_collector_test extends \advanced_testcase {
             'timemodified' => time(),
         ]);
 
-        $this->assertSame('in_progress', $this->status($user, $course));
+        $this->assertSame('in_progress', $this->status_of($user, $course));
     }
 
     public function test_an_activity_that_is_not_complete_is_no_start(): void {
@@ -110,7 +110,7 @@ final class completion_collector_test extends \advanced_testcase {
             'timemodified' => time(),
         ]);
 
-        $this->assertNull($this->status($user, $course));
+        $this->assertNull($this->status_of($user, $course));
     }
 
     /**
@@ -121,7 +121,7 @@ final class completion_collector_test extends \advanced_testcase {
         [$user, $course] = $this->enrolled_with_a_record();
         $this->attempt($user, $course, false);
 
-        $this->assertSame('in_progress', $this->status($user, $course));
+        $this->assertSame('in_progress', $this->status_of($user, $course));
     }
 
     /**
@@ -131,7 +131,7 @@ final class completion_collector_test extends \advanced_testcase {
         [$user, $course] = $this->enrolled_with_a_record();
         $this->attempt($user, $course, true);
 
-        $this->assertNull($this->status($user, $course));
+        $this->assertNull($this->status_of($user, $course));
     }
 
     /**
@@ -141,7 +141,7 @@ final class completion_collector_test extends \advanced_testcase {
         [$user, $course] = $this->enrolled_with_a_record();
         $this->grade($user, $course, 7.5);
 
-        $this->assertSame('in_progress', $this->status($user, $course));
+        $this->assertSame('in_progress', $this->status_of($user, $course));
     }
 
     /**
@@ -151,7 +151,7 @@ final class completion_collector_test extends \advanced_testcase {
         [$user, $course] = $this->enrolled_with_a_record();
         $this->grade($user, $course, null);
 
-        $this->assertNull($this->status($user, $course));
+        $this->assertNull($this->status_of($user, $course));
     }
 
     /**
@@ -161,7 +161,7 @@ final class completion_collector_test extends \advanced_testcase {
         [$user, $course] = $this->enrolled_with_a_record();
         $this->grade($user, $course, 0.0);
 
-        $this->assertNull($this->status($user, $course));
+        $this->assertNull($this->status_of($user, $course));
     }
 
     /**
@@ -180,7 +180,7 @@ final class completion_collector_test extends \advanced_testcase {
             'timemodified' => time(),
         ]);
 
-        $this->assertSame('in_progress', $this->status($user, $course));
+        $this->assertSame('in_progress', $this->status_of($user, $course));
     }
 
     public function test_a_finished_record_stays_completed(): void {
@@ -356,7 +356,7 @@ final class completion_collector_test extends \advanced_testcase {
      * @param \stdClass $course
      * @return string|null Null when the record is left out, as not started.
      */
-    private function status(\stdClass $user, \stdClass $course): ?string {
+    private function status_of(\stdClass $user, \stdClass $course): ?string {
         $row = $this->row($user, $course);
 
         return $row ? $row->status : null;
