@@ -65,6 +65,22 @@ class grades {
         $params['criteriatype'] = COMPLETION_CRITERIA_TYPE_ACTIVITY;
         $params['gradetype'] = GRADE_TYPE_VALUE;
 
+        // Which course module a grade item belongs to: its module type and
+        // instance. The type is matched against each module's name as a bound
+        // value, never as modules.name = grade_items.itemmodule: a site whose
+        // tables carry different collations (a restored or migrated database,
+        // utf8mb4_unicode_ci next to utf8mb4_general_ci) refuses a comparison
+        // between two columns, and the whole push failed on it.
+        $modulematch = [];
+        foreach ($DB->get_records_menu('modules', null, 'id', 'id, name') as $moduleid => $modulename) {
+            $modulematch[] = "(cm.module = :modid{$moduleid} AND gi.itemmodule = :modname{$moduleid})";
+            $params["modid{$moduleid}"] = $moduleid;
+            $params["modname{$moduleid}"] = $modulename;
+        }
+        if ($modulematch === []) {
+            return [];
+        }
+
         // The criteria join selects the main activity, the same rule the
         // attempts collector uses. gradetype filters out scale and text items.
         $sql = "SELECT gg.id, gg.userid, cm.id AS cmid, cm.course AS courseid,
@@ -74,7 +90,7 @@ class grades {
                        AND gi.itemtype = 'mod'
                        AND gi.gradetype = :gradetype
                   JOIN {course_modules} cm ON cm.instance = gi.iteminstance
-                  JOIN {modules} m ON m.id = cm.module AND m.name = gi.itemmodule
+                       AND (" . implode(' OR ', $modulematch) . ")
                   JOIN {course_completion_criteria} ccc
                        ON ccc.moduleinstance = cm.id
                       AND ccc.course = cm.course
