@@ -143,8 +143,11 @@ const loadRemote = (src) => {
  * @param {string} frameselector
  * @param {number} pluginversion This plugin's version, so the frame can say which one is running.
  * @param {string} platform Which bridge to ask for, as config::PLATFORM names it.
+ * @param {string} adminemail The viewer's e-mail address when they may connect the site, so the setup steps can
+ *                            prefill the contact field. Empty otherwise. It goes to the bridge, which answers the
+ *                            frame at the one origin above and never at '*'.
  */
-export const init = (origin, frameselector, pluginversion, platform) => {
+export const init = (origin, frameselector, pluginversion, platform, adminemail = '') => {
     if (origin === '') {
         // No configured Report LMS, so there is nothing to fetch and nothing to
         // talk to.
@@ -167,6 +170,7 @@ export const init = (origin, frameselector, pluginversion, platform) => {
                 origin: origin,
                 frame: document.querySelector(frameselector),
                 pluginVersion: pluginversion,
+                adminEmail: adminemail,
                 // One narrow function: it forwards this plugin's own services,
                 // as whoever is logged in, and refuses every other. The script
                 // itself still runs in this page with the viewer's session, so

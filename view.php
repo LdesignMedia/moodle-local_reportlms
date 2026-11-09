@@ -29,6 +29,7 @@ use local_reportlms\local\access;
 use local_reportlms\local\branding;
 use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
+use local_reportlms\local\contact_email;
 use local_reportlms\local\launch;
 
 require_login();
@@ -79,6 +80,31 @@ $backbutton = html_writer::link(
     ['class' => 'btn local-reportlms-btn']
 );
 
+/*
+ * The contact question, for a site administrator on a connected site that
+ * Report LMS holds no contact for. Answered here, before any output, so a good
+ * answer can redirect to the report.
+ */
+$contactinvalid = false;
+$contactemail = '';
+
+if (
+    connect_manager::is_connected()
+    && config::privacy_acknowledged()
+    && optional_param('savecontact', 0, PARAM_BOOL)
+) {
+    require_sesskey();
+    require_capability('moodle/site:config', $context);
+
+    $contactemail = optional_param('contactemail', '', PARAM_EMAIL);
+
+    if (contact_email::save($contactemail)) {
+        redirect($PAGE->url);
+    }
+
+    $contactinvalid = true;
+}
+
 echo $OUTPUT->header();
 
 // The steps stay up until this site is both connected and has confirmed
@@ -120,7 +146,22 @@ if (!connect_manager::is_connected() || !config::privacy_acknowledged()) {
         '.local-reportlms-frame',
         (int) get_config('local_reportlms', 'version'),
         config::PLATFORM,
+        // Prefills the contact field of the setup steps, and only for somebody
+        // who may connect the site: nobody else is shown that step.
+        has_capability('moodle/site:config', $context) ? (string) $USER->email : '',
     ]);
+
+    echo $OUTPUT->footer();
+    exit;
+}
+
+if (contact_email::must_ask()) {
+    // No role="main": the embedded layout's own wrapper is the main landmark.
+    echo $OUTPUT->render_from_template('local_reportlms/contact_card', (new \local_reportlms\output\contact_card(
+        $contactemail !== '' ? $contactemail : $USER->email,
+        $contactinvalid,
+        $backurl
+    ))->export_for_template($OUTPUT));
 
     echo $OUTPUT->footer();
     exit;

@@ -37,13 +37,14 @@ $string['privacy:metadata:member:source'] = 'Whether this person was named here 
 $string['privacy:metadata:manager'] = 'Who was named as the manager of a part of the organisation.';
 $string['privacy:metadata:manager:userid'] = 'The person named.';
 $string['privacy:metadata:manager:nodeid'] = 'The unit they manage.';
-$string['privacy:metadata:reportlms'] = 'Training results are sent to Report LMS. No name, e-mail address or phone number is ever sent. People, organisation units and course categories are replaced with coded identifiers before they leave this site, using a key that stays here. Course and activity titles are sent as they are, so the report is readable. Names, and e-mail addresses and phone numbers for viewers this site lets see them, reach the dashboard only by this site answering the viewer\'s browser directly. Report LMS never holds them.';
+$string['privacy:metadata:reportlms'] = 'Training results are sent to Report LMS. No name, e-mail address or phone number is ever sent. People, organisation units and course categories are replaced with coded identifiers before they leave this site, using a key that stays here. Course and activity titles are sent as they are, so the report is readable. Names, and e-mail addresses and phone numbers for viewers this site lets see them, reach the dashboard only by this site answering the viewer\'s browser directly. Report LMS never holds them. The contact e-mail address you give is sent to Report LMS and used only for licence and service messages. It is never linked to the figures.';
 $string['privacy:metadata:reportlms:learner_pid'] = 'A coded identifier standing for one learner.';
 $string['privacy:metadata:reportlms:course_ref'] = 'A coded identifier standing for one course.';
 $string['privacy:metadata:reportlms:status'] = 'Whether a course was completed, is in progress, or has not been started.';
 $string['privacy:metadata:reportlms:grade'] = 'The grade on the main test of the course, as a percentage.';
 $string['privacy:metadata:reportlms:attempts'] = 'How many attempts were taken at that test, and when the last one was finished.';
 $string['privacy:metadata:reportlms:last_attempt_at'] = 'When the last of those attempts was finished.';
+$string['privacy:metadata:reportlms:contact_email'] = 'The contact e-mail address given for this site, used only for licence and service messages and never linked to the figures.';
 $string['privacy:metadata:reportlms:node_id'] = 'A coded identifier standing for a sector or department.';
 
 // Connect flow.
@@ -203,6 +204,8 @@ $string['settings:orgfield_missing'] = '{$a} (missing on this site)';
 $string['settings:orgfieldmissingwarning'] = 'The mapped function field does not exist on this site: {$a}. Nobody will have a function in the report, so fix the mapping under Advanced settings.';
 $string['settings:advancedheading'] = 'Advanced connection settings';
 $string['settings:advancedwarning'] = 'These settings are managed by the connect process. Change them only if Report LMS support asks you to.';
+$string['settings:contactemail'] = 'Contact email';
+$string['settings:contactemail_desc'] = 'Report LMS writes to this address about the licence and service. Sent with the next update of the figures. An address set by Report LMS staff is kept.';
 $string['settings:baseurl'] = 'Report LMS URL';
 $string['settings:baseurl_desc'] = 'The Report LMS instance this site connects to.';
 $string['settings:pushpath'] = 'Push path';
@@ -228,6 +231,14 @@ $string['label:unassigned'] = 'Unassigned';
 $string['cachedef_labels'] = 'Coded identifier to label map for the embedded dashboard';
 
 // The people behind a figure, and the export of them.
+
+// Contact address, asked for after an upgrade when Report LMS has none.
+$string['contact:field'] = 'Contact email';
+$string['contact:help'] = 'Used only for licence and service messages. Only site administrators see this question.';
+$string['contact:intro'] = 'Report LMS has no contact for this site yet. Add one address and your report opens right after.';
+$string['contact:invalid'] = 'That does not look like an e-mail address. Check it and try again.';
+$string['contact:save'] = 'Save and open the report';
+$string['contact:title'] = 'Who should we write to about your licence?';
 
 // Dashboard block.
 $string['block:title'] = 'Report LMS';

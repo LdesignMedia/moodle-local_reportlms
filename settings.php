@@ -247,6 +247,17 @@ if ($hassiteconfig) {
             $status
         ));
 
+        // Where Report LMS writes about the licence and the service. Not
+        // advanced: it is the one setting an administrator is expected to
+        // change. Saving it is enough, the next push carries it.
+        $settings->add(new admin_setting_configtext(
+            'local_reportlms/contactemail',
+            get_string('settings:contactemail', 'local_reportlms'),
+            get_string('settings:contactemail_desc', 'local_reportlms'),
+            '',
+            PARAM_EMAIL
+        ));
+
         // Everything below is advanced: an end user only needs the button above.
         // The API key, the signing secret and the salt are written by the connect
         // flow and are never rendered, so they cannot be hand-edited into a

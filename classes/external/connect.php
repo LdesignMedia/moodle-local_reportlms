@@ -31,6 +31,7 @@ use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_reportlms\local\connect_manager;
+use local_reportlms\local\contact_email;
 use local_reportlms\local\privacy_statement;
 
 defined('MOODLE_INTERNAL') || die();
@@ -59,18 +60,26 @@ class connect extends external_api {
      * @return external_function_parameters
      */
     public static function execute_parameters(): external_function_parameters {
-        return new external_function_parameters([]);
+        return new external_function_parameters([
+            'contact_email' => new external_value(
+                PARAM_RAW_TRIMMED,
+                'Where Report LMS may write about the licence and the service, or empty',
+                VALUE_DEFAULT,
+                ''
+            ),
+        ]);
     }
 
     /**
      * Connect this site to Report LMS and report what happened.
      *
+     * @param string $contactemail Where Report LMS may write about the licence, or empty.
      * @return array
      */
-    public static function execute(): array {
+    public static function execute(string $contactemail = ''): array {
         global $USER;
 
-        self::validate_parameters(self::execute_parameters(), []);
+        $params = self::validate_parameters(self::execute_parameters(), ['contact_email' => $contactemail]);
 
         $context = context_system::instance();
         self::validate_context($context);
@@ -95,6 +104,17 @@ class connect extends external_api {
          * this is worth anything.
          */
         privacy_statement::record((int) $USER->id);
+
+        // Stored before connecting, so the request that mints the key already
+        // carries it. An empty value leaves an address already held alone.
+        $contactemail = $params['contact_email'];
+
+        if ($contactemail !== '') {
+            if (!validate_email($contactemail)) {
+                throw new \invalid_parameter_exception('contact_email is not an e-mail address');
+            }
+            contact_email::save($contactemail);
+        }
 
         try {
             (new connect_manager())->connect();

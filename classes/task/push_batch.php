@@ -303,6 +303,10 @@ class push_batch extends \core\task\scheduled_task {
             if (!empty($chunk->settingshash)) {
                 set_config('lastsettingshash', $chunk->settingshash, 'local_reportlms');
             }
+            // Same discipline for the contact address.
+            if (isset($chunk->payload['contact_email'])) {
+                \local_reportlms\local\contact_email::mark_sent((string) $chunk->payload['contact_email']);
+            }
 
             $sent += count($chunk->userids);
             mtrace("chunk $i: $chunk->factrows fact rows for " . count($chunk->userids)

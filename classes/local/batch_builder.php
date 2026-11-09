@@ -432,7 +432,11 @@ class batch_builder {
         $settingshash = sha1(json_encode($settings));
         $settingschanged = $settingshash !== (string) get_config('local_reportlms', 'lastsettingshash');
 
-        if ($orgsection === null && $dimensions === null && !$settingschanged) {
+        // Changing the contact address is a reason to push on its own, for the
+        // same reason as the deadline rule above.
+        $contactchanged = contact_email::unsent();
+
+        if ($orgsection === null && $dimensions === null && !$settingschanged && !$contactchanged) {
             return null;
         }
 
@@ -595,6 +599,8 @@ class batch_builder {
     protected static function envelope(int $snapshotat): array {
         global $CFG;
 
+        $contactemail = contact_email::current();
+
         return [
             'contract_version' => '1.0',
             'platform' => config::PLATFORM,
@@ -607,6 +613,9 @@ class batch_builder {
             'privacy_acknowledged_at' => privacy_statement::acknowledged_at(),
             'environment_id' => (string) get_config('local_reportlms', 'environmentid'),
             'snapshot_at' => self::iso($snapshotat),
+            // Where Report LMS may write about the licence and the service.
+            // Only when the site has one; repeats are ignored over there.
+            ...($contactemail !== '' ? ['contact_email' => $contactemail] : []),
         ];
     }
 

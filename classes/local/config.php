@@ -47,6 +47,9 @@ class config {
     /** @var string Where the plugin asks to be connected. */
     public const CONNECT_PATH = '/api/v1/connect';
 
+    /** @var string Where Report LMS answers a key holder asking how things stand. */
+    public const HEALTH_PATH = '/api/v1/push/health';
+
     /** @var string Where the SaaS serves the embedded dashboard. */
     public const DEFAULT_EMBED_PATH = '/embed';
 

@@ -10,9 +10,6 @@ jobs:
       # are the dashboard block and the embedded report, and both need a
       # connected Report LMS environment that CI has no way to reach.
       disable_behat: true
-      # No templates directory: every bit of markup this plugin renders comes
-      # from html_writer or from the Report LMS side.
-      disable_mustache: true
       # No Gruntfile.js and no package.json. The one AMD module is built with
       # the moodle CLI in Docker rather than in CI, so the catalyst grunt runner
       # fails with "Unable to find local grunt".

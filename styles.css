@@ -358,3 +358,29 @@ body.local-reportlms-branded .local-reportlms-btn-danger:focus {
     border-color: #d64550;
     color: #fff;
 }
+
+/* Contact question, shown to a site administrator in place of the report. */
+.local-reportlms-contact {
+    margin: 2rem auto;
+    max-width: 32rem;
+    padding: 0 1rem;
+}
+
+.local-reportlms-contact .local-reportlms-contact-title {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.local-reportlms-contact .local-reportlms-contact-intro {
+    margin-bottom: 1.25rem;
+}
+
+.local-reportlms-contact .local-reportlms-contact-label {
+    font-weight: 600;
+}
+
+.local-reportlms-contact .local-reportlms-contact-help {
+    font-size: 0.875rem;
+    margin: 0.5rem 0 1.25rem;
+    opacity: 0.8;
+}

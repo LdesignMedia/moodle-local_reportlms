@@ -50,10 +50,16 @@ class api_client {
      * @param string $siteurl This site's wwwroot.
      * @param string $verificationtoken The token verify.php is currently serving.
      * @param int $acknowledgedat When somebody here read the data statement, or 0.
+     * @param string $contactemail Where Report LMS may write about the licence, or an empty string.
      * @return array environment_id, api_key, signing_secret, push_path, expires_at, tier.
      * @throws \moodle_exception When Report LMS refuses the connection.
      */
-    public function connect(string $siteurl, string $verificationtoken, int $acknowledgedat = 0): array {
+    public function connect(
+        string $siteurl,
+        string $verificationtoken,
+        int $acknowledgedat = 0,
+        string $contactemail = ''
+    ): array {
         $data = $this->post(config::CONNECT_PATH, [
             'site_url' => $siteurl,
             'verification_token' => $verificationtoken,
@@ -81,6 +87,10 @@ class api_client {
              * field means "this is when it happened" and never "it did not".
              */
             'privacy_acknowledged_at' => $acknowledgedat > 0 ? $acknowledgedat : null,
+            // Where Report LMS may write about the licence and the service.
+            // Left out when nobody gave one, so an older Report LMS and a
+            // site without an address look the same on the wire.
+            ...($contactemail !== '' ? ['contact_email' => $contactemail] : []),
         ]);
 
         foreach (['environment_id', 'api_key', 'signing_secret', 'launch_secret'] as $required) {
@@ -90,6 +100,48 @@ class api_client {
         }
 
         return $data;
+    }
+
+    /**
+     * Ask Report LMS how this key stands.
+     *
+     * Answered for a key that has ended too, so a site can learn that. Fields
+     * this plugin does not know are ignored by the callers, and fields an older
+     * Report LMS does not send are simply absent.
+     *
+     * @param string $apikey Bearer key identifying the environment.
+     * @return array Decoded response.
+     * @throws \moodle_exception On transport failure or a non-2xx reply.
+     */
+    public function health(string $apikey): array {
+        global $CFG;
+        require_once($CFG->libdir . '/filelib.php');
+
+        // Same rationale as post(): the admin-configured first-party endpoint
+        // must not be rejected by the cURL SSRF blocklist.
+        $curl = new \curl(['ignoresecurity' => true]);
+        $curl->setHeader([
+            'Accept: application/json',
+            'Authorization: Bearer ' . $apikey,
+        ]);
+
+        $response = $curl->get($this->baseurl . config::HEALTH_PATH, [], [
+            'CURLOPT_TIMEOUT' => 15,
+            'CURLOPT_CONNECTTIMEOUT' => 10,
+        ]);
+
+        if ($curl->get_errno()) {
+            throw new \moodle_exception('error:connectfailed', 'local_reportlms', '', $curl->error);
+        }
+
+        $httpcode = (int) ($curl->get_info()['http_code'] ?? 0);
+        $decoded = json_decode((string) $response, true);
+
+        if ($httpcode < 200 || $httpcode >= 300 || !is_array($decoded)) {
+            throw new \moodle_exception('error:connectrejected', 'local_reportlms', '', 'HTTP ' . $httpcode);
+        }
+
+        return $decoded;
     }
 
     /**

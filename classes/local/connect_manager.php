@@ -87,7 +87,12 @@ class connect_manager {
 
         try {
             $client = $this->client ?? new api_client(config::baseurl());
-            $data = $client->connect($CFG->wwwroot, $token, privacy_statement::acknowledged_at());
+            $data = $client->connect(
+                $CFG->wwwroot,
+                $token,
+                privacy_statement::acknowledged_at(),
+                contact_email::current()
+            );
         } finally {
             // The token is single use whatever happened. Leaving it live would
             // keep a public endpoint serving a value for no reason.
@@ -143,6 +148,9 @@ class connect_manager {
         // too: what the SaaS held before this connection is not assumed.
         unset_config('lastorghash', 'local_reportlms');
         unset_config('lastdimhash', 'local_reportlms');
+        // Same for the contact address: a new connection is told it again.
+        unset_config('lastcontacthash', 'local_reportlms');
+        unset_config('contactemailset', 'local_reportlms');
 
         // Start the backfill at the next cron tick rather than whenever the
         // fifteen-minute schedule next fires: an admin who just connected

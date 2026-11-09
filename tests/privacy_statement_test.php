@@ -67,10 +67,16 @@ final class privacy_statement_test extends \advanced_testcase {
              * @param string $siteurl
              * @param string $verificationtoken
              * @param int $acknowledgedat
+             * @param string $contactemail
              *
              * @return array
              */
-            public function connect(string $siteurl, string $verificationtoken, int $acknowledgedat = 0): array {
+            public function connect(
+                string $siteurl,
+                string $verificationtoken,
+                int $acknowledgedat = 0,
+                string $contactemail = ''
+            ): array {
                 $this->captured = [
                     'site_url' => $siteurl,
                     'privacy_acknowledged_at' => $acknowledgedat,
