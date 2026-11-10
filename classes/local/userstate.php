@@ -196,6 +196,71 @@ class userstate {
     }
 
     /**
+     * Mark tracking rows whose user is gone from the user table as dirty.
+     *
+     * The next push then sends them as deleted, once, and drops them (see
+     * purge_orphans). One LEFT JOIN selects the orphans in batches, so a large
+     * site costs a few indexed queries rather than a lookup per row. Rows
+     * already dirty are skipped, which is also what lets the loop finish.
+     *
+     * @param int $batchsize Rows handled per query.
+     *
+     * @return int Rows newly marked.
+     */
+    public static function mark_orphans_dirty(int $batchsize = 1000): int {
+        global $DB;
+
+        $marked = 0;
+        $now = time();
+
+        do {
+            $sql = 'SELECT s.userid
+                      FROM {' . self::TABLE . '} s
+                 LEFT JOIN {user} u ON u.id = s.userid
+                     WHERE u.id IS NULL
+                       AND s.dirty = 0
+                  ORDER BY s.userid ASC';
+            $userids = array_map('intval', array_keys($DB->get_records_sql($sql, [], 0, $batchsize)));
+
+            if (!$userids) {
+                break;
+            }
+
+            [$insql, $params] = $DB->get_in_or_equal($userids);
+            $DB->execute(
+                'UPDATE {' . self::TABLE . '} SET dirty = 1, timechanged = ? WHERE userid ' . $insql,
+                array_merge([$now], $params),
+            );
+            $marked += count($userids);
+        } while (count($userids) === $batchsize);
+
+        return $marked;
+    }
+
+    /**
+     * Drop the tracking rows of these users when the user no longer exists.
+     *
+     * Called after a push that carried them as deleted was accepted. A user who
+     * still has a row in the user table, deleted or not, is left alone: that
+     * row stays so a later change can still be tracked.
+     *
+     * @param array<int, int> $userids
+     */
+    public static function purge_orphans(array $userids): void {
+        global $DB;
+
+        foreach (array_chunk($userids, 500) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk);
+            $DB->execute(
+                'DELETE FROM {' . self::TABLE . '}
+                       WHERE userid ' . $insql . '
+                         AND NOT EXISTS (SELECT 1 FROM {user} u WHERE u.id = {' . self::TABLE . '}.userid)',
+                $params,
+            );
+        }
+    }
+
+    /**
      * The hash of the slice last accepted for a learner.
      *
      * Lets the sender skip a learner whose data is byte-identical to what the

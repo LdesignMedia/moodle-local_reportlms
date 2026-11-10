@@ -272,6 +272,10 @@ class push_batch extends \core\task\scheduled_task {
 
             userstate::clear($chunk->userids);
 
+            // Rows for users that no longer exist have now been reported as
+            // deleted once, so they are dropped rather than kept dirty.
+            userstate::purge_orphans($chunk->userids);
+
             // Report LMS refuses a batch from a site that has not read the
             // statement, so an accepted one is proof it knows.
             \local_reportlms\local\privacy_statement::accepted_in_push();

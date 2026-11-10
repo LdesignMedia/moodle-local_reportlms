@@ -52,16 +52,21 @@ class batch_builder {
     public const MAX_FACT_ROWS = 5000;
 
     /**
-     * Which of these users Moodle now reports deleted.
+     * Which of these users Moodle now reports deleted, or no longer holds at all.
      *
      * Asked of the user table rather than tracked, because deletion is Moodle's
      * fact and the plugin's own tracking table only ever learns about it
-     * second-hand. A user row survives deletion — it is flagged, not removed —
+     * second-hand. A user row survives deletion, it is flagged, not removed,
      * which is also why their coded id can still be computed for the block.
+     *
+     * A tracked id with no user row at all is treated the same way. Moodle does
+     * not hard-delete users, but a site restored or migrated from a database
+     * copy can hold tracking rows for ids its user table never had, and sending
+     * those as active learners inflates the learner and licence counts.
      *
      * @param array<int, int> $userids
      *
-     * @return array<int, int> User ids, in the order they were given.
+     * @return array<int, int> User ids, in ascending order.
      */
     protected static function departed(array $userids): array {
         global $DB;
@@ -72,13 +77,17 @@ class batch_builder {
 
         [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
 
-        return array_map('intval', array_keys($DB->get_records_select(
-            'user',
-            "deleted = 1 AND id $insql",
-            $params,
-            'id ASC',
-            'id'
-        )));
+        $present = $DB->get_records_select('user', "id $insql", $params, 'id ASC', 'id, deleted');
+
+        $departed = [];
+        foreach ($userids as $userid) {
+            if (!isset($present[$userid]) || (int) $present[$userid]->deleted === 1) {
+                $departed[] = (int) $userid;
+            }
+        }
+        sort($departed);
+
+        return $departed;
     }
 
     /**

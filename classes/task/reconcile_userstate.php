@@ -156,6 +156,14 @@ class reconcile_userstate extends \core\task\scheduled_task {
             $marked += source_sweep::sweep($key, $source);
         }
 
+        // Tracking rows for users Moodle does not hold. They go out once as
+        // deleted on the next push and are then removed.
+        $orphans = userstate::mark_orphans_dirty();
+        if ($orphans) {
+            mtrace("Report LMS reconcile found {$orphans} tracking rows without a user.");
+            $marked += $orphans;
+        }
+
         mtrace("Report LMS reconcile marked {$marked} learner rows, "
             . userstate::count_dirty() . ' now waiting to be sent.');
     }
