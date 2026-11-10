@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Serves this site's connect verification token.
+ * Proves this site's open connect attempt to Report LMS.
  *
  * Report LMS fetches this while an admin is connecting, to confirm that the
  * site claiming an address really is that address. Only whoever operates this
@@ -26,8 +26,10 @@
  * invisible to us and the check would fail for exactly the corporate sites we
  * are aiming at.
  *
- * There is nothing to leak here. The token is random, single purpose, and only
- * present while a connect attempt is open.
+ * The page never serves the token. Report LMS sends a fresh nonce and gets
+ * back an HMAC of it keyed by the token. Anybody can call this page, but a
+ * proof for their own nonce is no use for Report LMS's nonce. Answers only
+ * while a connect attempt is open.
  *
  * @package    local_reportlms
  * @copyright  2026 Luuk Verhoeven, ldesignmedia.nl <info@ldesignmedia.nl>
@@ -42,17 +44,27 @@ require(__DIR__ . '/../../config.php');
 
 use local_reportlms\local\connect_manager;
 
-$token = connect_manager::current_verification_token();
+// Report LMS sends 32 hex characters. Anything else gets no proof.
+$nonce = optional_param('nonce', '', PARAM_ALPHANUM);
+$nonce = preg_match('/^[0-9a-f]{32,64}$/', $nonce) ? $nonce : '';
 
 header('Content-Type: text/plain; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 header('X-Robots-Tag: noindex, nofollow');
 
-if ($token === '') {
+if ($nonce === '') {
+    header('HTTP/1.1 400 Bad Request');
+    echo 'nonce required';
+    exit;
+}
+
+$proof = connect_manager::verification_proof($nonce);
+
+if ($proof === '') {
     // No connect attempt is open, so there is nothing to verify against.
     header('HTTP/1.1 404 Not Found');
     echo 'no pending verification';
     exit;
 }
 
-echo $token;
+echo $proof;
