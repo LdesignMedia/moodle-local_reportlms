@@ -136,9 +136,12 @@ class connect_manager {
         if (!empty($data['push_path'])) {
             set_config('pushpath', $data['push_path'], 'local_reportlms');
         }
-        if (!empty($data['embed_path'])) {
-            set_config('embedpath', $data['embed_path'], 'local_reportlms');
-        }
+        // Replaced on every connect, so a path from an earlier connection never outlives it.
+        set_config(
+            'embedpath',
+            !empty($data['embed_path']) ? (string) $data['embed_path'] : config::DEFAULT_EMBED_PATH,
+            'local_reportlms'
+        );
         if (!empty($data['tier'])) {
             set_config('tier', $data['tier'], 'local_reportlms');
         }
@@ -198,6 +201,7 @@ class connect_manager {
     public static function disconnect(): void {
         unset_config('apikey', 'local_reportlms');
         unset_config('signingsecret', 'local_reportlms');
+        unset_config('embedpath', 'local_reportlms');
         unset_config('launchsecret', 'local_reportlms');
         unset_config('environmentid', 'local_reportlms');
         unset_config('tier', 'local_reportlms');

@@ -308,10 +308,7 @@ class batch_builder {
              * mention. Chunking already guarantees a learner is never split
              * across two chunks, which is what makes the claim safe to make.
              */
-            $payload['learners'] = array_values(array_map(
-                static fn(int $userid): string => pseudonym::learner($userid),
-                $chunk['userids']
-            ));
+            $payload['learners'] = self::learner_pids($chunk['userids']);
             /*
              * Which of them count in no figure: the site administrators.
              *
@@ -332,10 +329,7 @@ class batch_builder {
              * and repeating them per chunk would say the same thing many times.
              */
             if ($i === 0 && $departed !== []) {
-                $payload['departures'] = array_values(array_map(
-                    static fn(int $userid): string => pseudonym::learner($userid),
-                    $departed
-                ));
+                $payload['departures'] = self::learner_pids($departed);
             }
             $payload['facts'] = array_filter($chunk['facts']);
             $result[] = (object) [
@@ -358,6 +352,42 @@ class batch_builder {
         }
 
         return $result;
+    }
+
+    /**
+     * A batch that only says these people are gone, for a privacy erasure.
+     *
+     * Same shape as the departures a normal push carries, named by an explicit
+     * list instead of by the deleted flag, so a living account can be sent too.
+     *
+     * @param array<int, int> $userids
+     * @param int $snapshotat
+     *
+     * @return array The payload, json-ready.
+     */
+    public static function erasure_payload(array $userids, int $snapshotat): array {
+        $payload = self::envelope($snapshotat);
+        $payload['settings'] = self::settings_section();
+        $payload['learners'] = [];
+        $payload['uncounted'] = [];
+        $payload['departures'] = self::learner_pids($userids);
+        $payload['facts'] = [];
+
+        return $payload;
+    }
+
+    /**
+     * The coded ids of these people, in the order given.
+     *
+     * @param array<int, int> $userids
+     *
+     * @return array<int, string>
+     */
+    protected static function learner_pids(array $userids): array {
+        return array_values(array_map(
+            static fn(int $userid): string => pseudonym::learner($userid),
+            $userids
+        ));
     }
 
     /**

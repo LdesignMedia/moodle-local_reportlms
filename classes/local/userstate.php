@@ -172,8 +172,11 @@ class userstate {
      *
      * @param array<int, int> $userids
      * @param array<int, string> $hashes Optional userid => slice hash.
+     * @param int|null $readat When the batch was read. A learner changed after
+     *                         that moment stays dirty, because what was sent
+     *                         predates the change. Null clears regardless.
      */
-    public static function clear(array $userids, array $hashes = []): void {
+    public static function clear(array $userids, array $hashes = [], ?int $readat = null): void {
         global $DB;
 
         if (!$userids) {
@@ -184,8 +187,15 @@ class userstate {
 
         foreach (array_chunk($userids, 500) as $chunk) {
             [$insql, $params] = $DB->get_in_or_equal($chunk);
+            $unchanged = '';
+
+            if ($readat !== null) {
+                $unchanged = ' AND timechanged <= ?';
+                $params[] = $readat;
+            }
+
             $DB->execute(
-                'UPDATE {' . self::TABLE . '} SET dirty = 0, timepushed = ? WHERE userid ' . $insql,
+                'UPDATE {' . self::TABLE . '} SET dirty = 0, timepushed = ? WHERE userid ' . $insql . $unchanged,
                 array_merge([$now], $params),
             );
         }

@@ -132,27 +132,22 @@ if ($action !== '' && confirm_sesskey()) {
             $parentid = optional_param('parentid', 0, PARAM_INT) ?: null;
 
             if ($name !== '') {
-                /*
-                 * Checked here so the person gets a sentence, rather than
-                 * letting save_node() throw. The exception behind it stays,
-                 * because this is not the only caller and a duplicate name
-                 * produces two units with one key.
-                 */
-                if (mapping::name_taken($name, $kind === 'sector' ? 'sector' : 'department', $parentid)) {
-                    redirect(
-                        $returnurl,
-                        get_string('manage:nametaken', 'local_reportlms', s($name)),
-                        null,
-                        \core\output\notification::NOTIFY_ERROR
-                    );
+                // save_node() refuses a taken name, a slash and a shared key, and the
+                // person gets its sentence instead of an error page.
+                try {
+                    mapping::save_node($name, $kind, $parentid);
+                } catch (\moodle_exception $e) {
+                    redirect($returnurl, s($e->getMessage()), null, \core\output\notification::NOTIFY_ERROR);
                 }
-
-                mapping::save_node($name, $kind, $parentid);
             }
             break;
 
         case 'deletenode':
-            mapping::delete_node(required_param('nodeid', PARAM_INT));
+            try {
+                mapping::delete_node(required_param('nodeid', PARAM_INT));
+            } catch (\moodle_exception $e) {
+                redirect($returnurl, s($e->getMessage()), null, \core\output\notification::NOTIFY_ERROR);
+            }
             break;
 
         case 'place':
@@ -183,6 +178,13 @@ if ($action !== '' && confirm_sesskey()) {
 
             if ($nodeid === 0) {
                 break;
+            }
+
+            // Every list, the Person box included, is checked before any of them is saved.
+            try {
+                mapping::assert_list_limits($sources + ['userid' => $chosen]);
+            } catch (\moodle_exception $e) {
+                redirect($returnurl, s($e->getMessage()), null, \core\output\notification::NOTIFY_ERROR);
             }
 
             /*

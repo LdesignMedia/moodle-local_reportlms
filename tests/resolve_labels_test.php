@@ -172,6 +172,62 @@ final class resolve_labels_test extends \advanced_testcase {
     }
 
     /**
+     * The label map is cached, so a category hidden after it was filled still reads as visible there.
+     */
+    public function test_a_category_hidden_after_the_map_was_filled_is_not_named(): void {
+        global $DB;
+
+        $category = $this->getDataGenerator()->create_category(['name' => 'TM - Hidden later']);
+        $manager = $this->make_manager_of('Rotterdam');
+        label_map::purge();
+        $code = pseudonym::category((int) $category->id);
+
+        // Fill the cache while it is still visible, then hide it without purging.
+        label_map::all();
+        $DB->set_field('course_categories', 'visible', 0, ['id' => $category->id]);
+
+        $this->setUser($manager);
+        $this->assertSame([], resolve_labels::execute([$code])['labels']);
+
+        // Somebody who may see hidden categories still gets the name.
+        $this->setAdminUser();
+        $this->assertSame([$code], $this->codes_returned([$code]));
+    }
+
+    /**
+     * The same hide takes a stale-visible top category out of the prefix.
+     */
+    public function test_a_top_category_hidden_after_the_map_was_filled_leaves_the_prefix(): void {
+        global $DB;
+
+        $year = $this->getDataGenerator()->create_category(['name' => 'Archive 2025']);
+        $team = $this->getDataGenerator()->create_category(['name' => 'TM - Jane Doe', 'parent' => $year->id]);
+        $manager = $this->make_manager_of('Rotterdam');
+        label_map::purge();
+        label_map::all();
+        $DB->set_field('course_categories', 'visible', 0, ['id' => $year->id]);
+
+        $this->setUser($manager);
+        $labels = resolve_labels::execute([pseudonym::category((int) $team->id)])['labels'];
+
+        $this->assertSame('TM - Jane Doe', $labels[0]['label']);
+    }
+
+    /**
+     * A category that is visible is still labelled.
+     */
+    public function test_a_visible_category_is_still_named_to_a_manager(): void {
+        $category = $this->getDataGenerator()->create_category(['name' => 'TM - Open']);
+        $manager = $this->make_manager_of('Rotterdam');
+        label_map::purge();
+
+        $this->setUser($manager);
+        $labels = resolve_labels::execute([pseudonym::category((int) $category->id)])['labels'];
+
+        $this->assertSame('TM - Open', $labels[0]['label']);
+    }
+
+    /**
      * An administrator still names everything, which is what the org-wide
      * viewer is for.
      */

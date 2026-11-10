@@ -100,6 +100,14 @@ class push_batch extends \core\task\scheduled_task {
             return;
         }
 
+        // The switch on the settings page: connected, and still not sending.
+        // Only a stored 1 means on, so an unset value is as good as a zero.
+        if ((int) get_config('local_reportlms', 'enabled') !== 1) {
+            mtrace('Report LMS: sending is turned off, skipping the push.');
+
+            return;
+        }
+
         // One push at a time: the ad-hoc run queued at connect and the
         // fifteen-minute schedule may fire together, and while re-sending is
         // harmless (upserts), sending the same learners twice side by side
@@ -181,6 +189,9 @@ class push_batch extends \core\task\scheduled_task {
             mtrace('Report LMS: ' . $certificates . ' person(s) with a new certificate to send.');
         }
 
+        // Taken before the batch is read: a change after this moment is newer than
+        // what is about to be sent, and must stay dirty when the push is accepted.
+        $readat = time();
         $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN);
 
         if ($userids) {
@@ -223,20 +234,13 @@ class push_batch extends \core\task\scheduled_task {
 
         // Injectable so a test can hand back a refusal without a network.
         $client = $this->client ?? new api_client(config::baseurl());
-        $pushpath = config::pushpath();
-        $apikey = (string) get_config('local_reportlms', 'apikey');
-        $signingsecret = (string) get_config('local_reportlms', 'signingsecret');
-        $environment = (string) get_config('local_reportlms', 'environmentid');
 
         $sent = 0;
         foreach ($chunks as $i => $chunk) {
-            $rawbody = json_encode($chunk->payload);
-            $idempotencykey = $environment . ':' . $chunk->payload['snapshot_at'] . ':' . hash('sha256', $rawbody);
-
             try {
-                $reply = $client->push($pushpath, $rawbody, $apikey, $signingsecret, $idempotencykey);
+                $reply = $client->push_payload($chunk->payload);
             } catch (\moodle_exception $e) {
-                mtrace("Report LMS push stopped at chunk {$i}: " . $e->getMessage());
+                mtrace("Report LMS push stopped at chunk {$i}: " . self::single_line($e->getMessage()));
 
                 /*
                  * A refusal for want of the data statement is a decision, not
@@ -270,7 +274,7 @@ class push_batch extends \core\task\scheduled_task {
                 return;
             }
 
-            userstate::clear($chunk->userids);
+            userstate::clear($chunk->userids, [], $readat);
 
             // Rows for users that no longer exist have now been reported as
             // deleted once, so they are dropped rather than kept dirty.
@@ -319,5 +323,16 @@ class push_batch extends \core\task\scheduled_task {
 
         mtrace("Report LMS push complete: {$sent} learners sent, "
             . userstate::count_dirty() . ' still waiting.');
+    }
+
+    /**
+     * A message on one line, so one refusal is one line of the cron log.
+     *
+     * @param string $message
+     *
+     * @return string
+     */
+    protected static function single_line(string $message): string {
+        return trim(preg_replace('/[\r\n]+/', ' ', $message));
     }
 }

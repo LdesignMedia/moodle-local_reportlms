@@ -102,6 +102,9 @@ class mapping {
      */
     public const SOURCE_KINDS = ['group', 'course', 'cohort', 'category', 'profilefield'];
 
+    /** @var int The most entries one list of the place form may hold. */
+    public const MAX_LIST = 500;
+
     /**
      * Forget what was read.
      *
@@ -128,6 +131,12 @@ class mapping {
 
         if (self::$nodes === null) {
             self::$nodes = $DB->get_records('local_reportlms_node', null, 'name ASC');
+
+            // A top-level unit is stored with parent 0 so the unique index covers it,
+            // and read as having no parent, which is what every reader checks for.
+            foreach (self::$nodes as $node) {
+                $node->parentid = empty($node->parentid) ? null : (int) $node->parentid;
+            }
         }
 
         return self::$nodes;
@@ -751,6 +760,22 @@ class mapping {
     }
 
     /**
+     * Refuse any list longer than the cap, rather than cutting it short.
+     *
+     * @param array<string, mixed> $lists Posted lists by name; anything that is not a list is ignored.
+     *
+     * @return void
+     * @throws \moodle_exception When a list is over {@see self::MAX_LIST}.
+     */
+    public static function assert_list_limits(array $lists): void {
+        foreach ($lists as $list) {
+            if (is_array($list) && count($list) > self::MAX_LIST) {
+                throw new \moodle_exception('manage:toomany', 'local_reportlms', '', self::MAX_LIST);
+            }
+        }
+    }
+
+    /**
      * Replace what a unit draws from.
      *
      * Whole-list, because the editor shows the whole list: what comes back from
@@ -764,6 +789,9 @@ class mapping {
      */
     public static function save_sources(int $nodeid, array $sources): void {
         global $DB, $USER;
+
+        // Before a single row is touched: a list that is too long saves nothing.
+        self::assert_list_limits($sources);
 
         $wanted = [];
 
@@ -817,21 +845,33 @@ class mapping {
     public static function nodekey(int $nodeid): ?string {
         $nodes = self::nodes();
 
-        if (!isset($nodes[$nodeid])) {
-            return null;
-        }
+        return isset($nodes[$nodeid]) ? self::key_in($nodes[$nodeid], $nodes) : null;
+    }
 
-        $node = $nodes[$nodeid];
-
+    /**
+     * The key of one unit, given the tree it sits in.
+     *
+     * @param \stdClass $node
+     * @param array<int, \stdClass> $nodes The tree, keyed by id.
+     *
+     * @return string|null Null for a department whose parent is not in the tree.
+     */
+    protected static function key_in(\stdClass $node, array $nodes): ?string {
         if ($node->kind === 'sector') {
             return 'sector:' . $node->name;
         }
 
-        $parent = $node->parentid !== null && isset($nodes[$node->parentid])
-            ? $nodes[$node->parentid]->name
-            : null;
+        if ($node->parentid === null) {
+            return 'department:' . $node->name;
+        }
 
-        return 'department:' . ($parent !== null ? $parent . '/' : '') . $node->name;
+        // A parent that is gone is not the same as no parent: keying the unit as a
+        // top-level one would put it on the wire next to a real top-level unit.
+        if (!isset($nodes[$node->parentid])) {
+            return null;
+        }
+
+        return 'department:' . $nodes[$node->parentid]->name . '/' . $node->name;
     }
 
     /**
@@ -975,6 +1015,7 @@ class mapping {
      * @param int|null $id Existing node to rename.
      *
      * @return int The node id.
+     * @throws \moodle_exception When the name has a slash, the parent is gone, or the name or its key is taken.
      */
     public static function save_node(string $name, string $kind, ?int $parentid = null, ?int $id = null): int {
         global $DB, $USER;
@@ -982,11 +1023,26 @@ class mapping {
         $record = (object) [
             'name' => trim($name),
             'kind' => $kind === 'sector' ? 'sector' : 'department',
-            // A sector has nothing above it, whatever the form said.
-            'parentid' => $kind === 'sector' ? null : $parentid,
+            // A sector has nothing above it, whatever the form said. Nothing above is
+            // stored as 0 and not as null, so the unique index on the name covers it.
+            'parentid' => $kind === 'sector' ? 0 : (int) $parentid,
             'timemodified' => time(),
             'usermodified' => (int) $USER->id,
         ];
+        $parent = $record->parentid > 0 ? $record->parentid : null;
+
+        // Read again, whatever an earlier call in this request left behind: the checks
+        // below are only worth as much as the tree they look at.
+        self::reset();
+
+        // The slash is what joins a parent and a child into one key, so it cannot be in a name.
+        if (strpos($record->name, '/') !== false) {
+            throw new \moodle_exception('manage:nameslash', 'local_reportlms');
+        }
+
+        if ($parent !== null && !isset(self::nodes()[$parent])) {
+            throw new \moodle_exception('manage:parentgone', 'local_reportlms');
+        }
 
         /*
          * One name per parent, and this is not a matter of tidiness.
@@ -1002,20 +1058,82 @@ class mapping {
          * the two the person meant, and quietly folding one into the other is
          * how somebody loses a department they were halfway through building.
          */
-        if (self::name_taken($record->name, $record->kind, $record->parentid, $id)) {
+        if (self::name_taken($record->name, $record->kind, $parent, $id)) {
             throw new \moodle_exception('manage:nametaken', 'local_reportlms', '', $record->name);
         }
 
-        if ($id !== null) {
-            $record->id = $id;
-            $DB->update_record('local_reportlms_node', $record);
-        } else {
-            $id = (int) $DB->insert_record('local_reportlms_node', $record);
+        // The name check above compares parents and names. This one compares what
+        // actually goes on the wire, for this unit and for the units under it.
+        self::assert_keys_free($record, $id);
+
+        try {
+            if ($id !== null) {
+                $record->id = $id;
+                $DB->update_record('local_reportlms_node', $record);
+            } else {
+                $id = (int) $DB->insert_record('local_reportlms_node', $record);
+            }
+        } catch (\dml_write_exception $e) {
+            // Somebody saved the same name between the check and the write; the
+            // unique index on the table is what decided who was first.
+            self::reset();
+
+            throw new \moodle_exception('manage:nametaken', 'local_reportlms', '', $record->name);
         }
 
         self::reset();
 
         return $id;
+    }
+
+    /**
+     * Refuse a unit whose key would be the key of another unit.
+     *
+     * Checks the unit as it would be stored and every unit directly under it,
+     * since renaming a sector renames the keys of its departments. Units that
+     * already share a key and are not part of this save are left alone.
+     *
+     * @param \stdClass $candidate The record about to be written.
+     * @param int|null $id Its id, null for a new unit.
+     *
+     * @return void
+     * @throws \moodle_exception When a key would be shared.
+     */
+    protected static function assert_keys_free(\stdClass $candidate, ?int $id): void {
+        $nodes = self::nodes();
+        $affected = [$id ?? 0];
+
+        foreach ($nodes as $node) {
+            if ($id !== null && (int) $node->parentid === $id) {
+                $affected[] = (int) $node->id;
+            }
+        }
+
+        $future = (object) [
+            'id' => $id ?? 0,
+            'name' => $candidate->name,
+            'kind' => $candidate->kind,
+            'parentid' => $candidate->parentid > 0 ? (int) $candidate->parentid : null,
+        ];
+        $nodes[$future->id] = $future;
+
+        $owners = [];
+
+        foreach ($nodes as $node) {
+            $key = self::key_in($node, $nodes);
+
+            if ($key !== null) {
+                $owners[\core_text::strtolower($key)][] = (int) $node->id;
+            }
+        }
+
+        foreach ($affected as $nodeid) {
+            $key = self::key_in($nodes[$nodeid], $nodes);
+
+            if ($key !== null && count($owners[\core_text::strtolower($key)]) > 1) {
+                throw new \moodle_exception('manage:namekeyclash', 'local_reportlms', '', $candidate->name);
+            }
+        }
     }
 
     /**
@@ -1098,17 +1216,48 @@ class mapping {
      * @param int $nodeid
      *
      * @return void
+     * @throws \moodle_exception When a unit under it would then share a key with a top-level unit.
      */
     public static function delete_node(int $nodeid): void {
         global $DB;
+
+        self::reset();
+
+        // The units under this one move up to the top level. Checked first, so a
+        // unit that would then share a key with another top-level unit makes the
+        // whole delete refuse and nothing has been removed.
+        $moving = [];
+
+        foreach (self::nodes() as $node) {
+            if ((int) $node->parentid === $nodeid) {
+                $moving[] = $node;
+            }
+        }
+
+        foreach ($moving as $child) {
+            $key = \core_text::strtolower('department:' . $child->name);
+
+            foreach (self::nodes() as $other) {
+                $sameplace = (int) $other->id !== (int) $child->id && (int) $other->id !== $nodeid
+                    && $other->kind === 'department' && $other->parentid === null;
+
+                if ($sameplace && \core_text::strtolower('department:' . $other->name) === $key) {
+                    throw new \moodle_exception('manage:deleteclash', 'local_reportlms', '', $child->name);
+                }
+            }
+        }
+
+        $transaction = $DB->start_delegated_transaction();
 
         $DB->delete_records('local_reportlms_member', ['nodeid' => $nodeid]);
         $DB->delete_records('local_reportlms_manager', ['nodeid' => $nodeid]);
         // And what it drew from, or the sources would keep resolving people
         // into a unit nobody can see.
         $DB->delete_records('local_reportlms_source', ['nodeid' => $nodeid]);
-        $DB->set_field('local_reportlms_node', 'parentid', null, ['parentid' => $nodeid]);
+        $DB->set_field('local_reportlms_node', 'parentid', 0, ['parentid' => $nodeid]);
         $DB->delete_records('local_reportlms_node', ['id' => $nodeid]);
+
+        $transaction->allow_commit();
 
         self::reset();
     }

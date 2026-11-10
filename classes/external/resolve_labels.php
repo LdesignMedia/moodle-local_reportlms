@@ -150,12 +150,8 @@ class resolve_labels extends external_api {
             return $own;
         }
 
-        if (!$top['visible']) {
-            $context = \context_coursecat::instance($top['categoryid'], IGNORE_MISSING);
-
-            if (!$context || !has_capability('moodle/category:viewhiddencategories', $context)) {
-                return $own;
-            }
+        if (!access::category_shown((int) $top['categoryid'])) {
+            return $own;
         }
 
         return self::formatted($top) . ' › ' . $own;

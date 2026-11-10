@@ -32,6 +32,7 @@ use core_privacy\local\request\contextlist;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\transform;
 use core_privacy\local\request\writer;
+use local_reportlms\local\erasure;
 
 /**
  * This plugin holds three things about a person and sends a fourth away.
@@ -226,6 +227,17 @@ class provider implements
             return;
         }
 
+        // Named before anything is deleted, because afterwards nobody can say who was here.
+        // Report LMS is told first; a refusal leaves every row where it is.
+        $userids = $DB->get_fieldset_sql(
+            "SELECT userid FROM {local_reportlms_userstate}
+              UNION
+             SELECT userid FROM {local_reportlms_member}
+              UNION
+             SELECT userid FROM {local_reportlms_manager} WHERE userid IS NOT NULL"
+        );
+        erasure::send($userids);
+
         $DB->delete_records('local_reportlms_userstate');
         $DB->delete_records('local_reportlms_member');
         $DB->delete_records('local_reportlms_manager');
@@ -267,7 +279,8 @@ class provider implements
      * Deleting the rows here would leave the coded identifiers standing on the
      * other side, which is the half nobody sees. The next push cannot carry the
      * request either, because a person who has been forgotten is no longer in
-     * anything the push collects.
+     * anything the push collects. So Report LMS is told first, and when it does
+     * not accept that the rows stay.
      *
      * @param array<int, int> $userids
      *
@@ -279,6 +292,8 @@ class provider implements
         if (!$userids) {
             return;
         }
+
+        erasure::send($userids);
 
         [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
 

@@ -452,5 +452,40 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026102303, 'local', 'reportlms');
     }
 
+    if ($oldversion < 2026111004) {
+        $table = new xmldb_table('local_reportlms_node');
+        $index = new xmldb_index('kindparentname', XMLDB_INDEX_UNIQUE, ['kind', 'parentid', 'name']);
+
+        if (!$dbman->index_exists($table, $index)) {
+            // Top-level units were stored without a parent; the index only covers them with a 0.
+            $DB->set_field_select('local_reportlms_node', 'parentid', 0, 'parentid IS NULL');
+
+            // Units that already share a kind, parent and name cannot both stay. The first
+            // keeps its name and the others get a number, so nobody and nothing is deleted.
+            $taken = [];
+
+            foreach ($DB->get_records('local_reportlms_node', null, 'id ASC', 'id, kind, parentid, name') as $node) {
+                $group = $node->kind . ':' . (int) $node->parentid . ':';
+                $name = trim($node->name);
+                $candidate = $name;
+
+                for ($n = 2; isset($taken[$group . core_text::strtolower($candidate)]); $n++) {
+                    $suffix = ' (' . $n . ')';
+                    $candidate = core_text::substr($name, 0, 255 - core_text::strlen($suffix)) . $suffix;
+                }
+
+                $taken[$group . core_text::strtolower($candidate)] = true;
+
+                if ($candidate !== $node->name) {
+                    $DB->set_field('local_reportlms_node', 'name', $candidate, ['id' => $node->id]);
+                }
+            }
+
+            $dbman->add_index($table, $index);
+        }
+
+        upgrade_plugin_savepoint(true, 2026111004, 'local', 'reportlms');
+    }
+
     return true;
 }

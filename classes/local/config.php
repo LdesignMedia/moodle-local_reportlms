@@ -166,4 +166,25 @@ class config {
     public static function pushendpoint(): string {
         return self::baseurl() . self::pushpath();
     }
+
+    /**
+     * The path of the embedded report, always a plain path on the configured host.
+     *
+     * The stored value arrives from the connect response, so it is only used when
+     * it is a path: anything holding whitespace, a line break, a backslash or a
+     * query or fragment marker falls back to the default. One leading slash is
+     * forced, so the value can never take over the part of the URL before it.
+     *
+     * @return string
+     */
+    public static function embedpath(): string {
+        $stored = (string) get_config('local_reportlms', 'embedpath');
+
+        // Checked before trimming, so a line break at either end is a refusal and not trimmed away.
+        if (trim($stored) === '' || preg_match('/[\s\x00-\x1f\x7f\\\\?#]/', $stored)) {
+            return self::DEFAULT_EMBED_PATH;
+        }
+
+        return '/' . ltrim($stored, '/');
+    }
 }

@@ -217,6 +217,30 @@ class api_client {
     }
 
     /**
+     * Send one payload to the batch endpoint with this site's own credentials.
+     *
+     * The one place a payload is encoded, keyed and signed for the push path,
+     * so the scheduled push and a privacy erasure cannot drift apart.
+     *
+     * @param array $payload The batch, json-ready.
+     * @return array Decoded response, carrying batch_id on a 202.
+     * @throws \moodle_exception On transport failure or a non-2xx reply.
+     */
+    public function push_payload(array $payload): array {
+        $rawbody = json_encode($payload);
+        $environment = (string) get_config('local_reportlms', 'environmentid');
+        $idempotencykey = $environment . ':' . $payload['snapshot_at'] . ':' . hash('sha256', $rawbody);
+
+        return $this->push(
+            config::pushpath(),
+            $rawbody,
+            (string) get_config('local_reportlms', 'apikey'),
+            (string) get_config('local_reportlms', 'signingsecret'),
+            $idempotencykey
+        );
+    }
+
+    /**
      * Send the contact email on its own signed call.
      *
      * Keyed and signed like push(), so a key without the signing secret is not

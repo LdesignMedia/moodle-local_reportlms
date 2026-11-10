@@ -26,7 +26,7 @@
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="What people call it. Hashed on the way out like any profile-field value, so this never leaves the site."/>
-        <FIELD NAME="parentid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The sector above it, or null for a top-level unit."/>
+        <FIELD NAME="parentid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The sector above it, or 0 for a top-level unit. Never null in new rows, so the unique index below covers top-level units."/>
         <FIELD NAME="kind" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="department" SEQUENCE="false" COMMENT="sector or department, matching the wire contract."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="usermodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
@@ -35,6 +35,9 @@
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="parentid" TYPE="foreign" FIELDS="parentid" REFTABLE="local_reportlms_node" REFFIELDS="id"/>
       </KEYS>
+      <INDEXES>
+        <INDEX NAME="kindparentname" UNIQUE="true" FIELDS="kind, parentid, name" COMMENT="One unit of a kind and name per parent, so two saves at once cannot both store it."/>
+      </INDEXES>
     </TABLE>
 
     <TABLE NAME="local_reportlms_member" COMMENT="Who is in which unit. One row per learner per node.">

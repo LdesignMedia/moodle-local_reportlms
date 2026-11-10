@@ -46,17 +46,11 @@ class launch {
      */
     public static function embed_url(bool $welcome = false): string {
         $environmentid = (string) get_config('local_reportlms', 'environmentid');
-        $embedpath = (string) get_config('local_reportlms', 'embedpath');
-
-        if ($embedpath === '') {
-            $embedpath = config::DEFAULT_EMBED_PATH;
-        }
-
         // The separator is passed explicitly. Moodle sets PHP's
         // arg_separator.output to &amp;, so the default would return entities,
         // html_writer would escape them again, and the parameter would arrive
         // named "amp;token".
-        return config::baseurl() . $embedpath . '?' . http_build_query([
+        return config::baseurl() . config::embedpath() . '?' . http_build_query([
             'env' => $environmentid,
             'token' => self::mint(),
             // The iframe shares no cookies with the SaaS, so the viewer's

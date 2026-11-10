@@ -408,13 +408,37 @@ class access {
                 return false;
             }
 
-            if ($map[$code]['visible']) {
-                return true;
-            }
-
-            $context = \context_coursecat::instance($map[$code]['categoryid'], IGNORE_MISSING);
-
-            return $context && has_capability('moodle/category:viewhiddencategories', $context);
+            return self::category_shown((int) $map[$code]['categoryid']);
         }));
+    }
+
+    /**
+     * Whether this viewer may be told a category's name.
+     *
+     * Reads whether the category is hidden now, not from the cached label map:
+     * the map lives for half an hour and hiding a category does not purge it. The
+     * map still supplies the name.
+     *
+     * @param int $categoryid
+     *
+     * @return bool
+     */
+    public static function category_shown(int $categoryid): bool {
+        global $DB;
+
+        $visible = $DB->get_field('course_categories', 'visible', ['id' => $categoryid]);
+
+        // Gone altogether: nothing to name.
+        if ($visible === false) {
+            return false;
+        }
+
+        if ((int) $visible === 1) {
+            return true;
+        }
+
+        $context = \context_coursecat::instance($categoryid, IGNORE_MISSING);
+
+        return $context && has_capability('moodle/category:viewhiddencategories', $context);
     }
 }
