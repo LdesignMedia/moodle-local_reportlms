@@ -50,6 +50,9 @@ class config {
     /** @var string Where Report LMS answers a key holder asking how things stand. */
     public const HEALTH_PATH = '/api/v1/push/health';
 
+    /** @var string Where the plugin sends the contact email the moment it is saved. */
+    public const CONTACT_PATH = '/api/v1/push/contact';
+
     /** @var string Where the SaaS serves the embedded dashboard. */
     public const DEFAULT_EMBED_PATH = '/embed';
 

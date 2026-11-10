@@ -99,6 +99,9 @@ if (
     $contactemail = optional_param('contactemail', '', PARAM_EMAIL);
 
     if (contact_email::save($contactemail)) {
+        // Straight away rather than with the next push. A failure here is
+        // not the admin's problem: the push carries it as before.
+        contact_email::send_now();
         redirect($PAGE->url);
     }
 

@@ -249,14 +249,17 @@ if ($hassiteconfig) {
 
         // Where Report LMS writes about the licence and the service. Not
         // advanced: it is the one setting an administrator is expected to
-        // change. Saving it is enough, the next push carries it.
-        $settings->add(new admin_setting_configtext(
+        // change. Saving it sends it, and the next push carries it too.
+        $contactsetting = new admin_setting_configtext(
             'local_reportlms/contactemail',
             get_string('settings:contactemail', 'local_reportlms'),
             get_string('settings:contactemail_desc', 'local_reportlms'),
             '',
             PARAM_EMAIL
-        ));
+        );
+        // Sent to Report LMS as soon as it is saved; the push stays the fallback.
+        $contactsetting->set_updatedcallback('\\local_reportlms\\local\\contact_email::setting_updated');
+        $settings->add($contactsetting);
 
         // Everything below is advanced: an end user only needs the button above.
         // The API key, the signing secret and the salt are written by the connect

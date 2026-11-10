@@ -49,6 +49,9 @@ try {
     redirect($returnurl, $exception->getMessage(), null, \core\output\notification::NOTIFY_ERROR);
 }
 
+// Confirms the contact email with Report LMS straight away. Never fails the connect.
+\local_reportlms\local\contact_email::send_now();
+
 redirect(
     $returnurl,
     get_string('connect:success', 'local_reportlms'),

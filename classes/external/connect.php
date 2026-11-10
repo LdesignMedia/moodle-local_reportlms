@@ -125,6 +125,10 @@ class connect extends external_api {
             ];
         }
 
+        // Confirms the address with Report LMS and records its answer, so the
+        // first push does not have to. Never fails the connect.
+        contact_email::send_now();
+
         return [
             'connected' => connect_manager::is_connected(),
             'error' => '',

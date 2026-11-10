@@ -217,6 +217,57 @@ class api_client {
     }
 
     /**
+     * Send the contact email on its own signed call.
+     *
+     * Keyed and signed like push(), so a key without the signing secret is not
+     * enough. Report LMS answers whether it now holds any contact for this
+     * site, never the address.
+     *
+     * @param string $apikey Bearer key identifying the environment.
+     * @param string $signingsecret Secret the body signature is built with.
+     * @param string $email The contact email.
+     * @return array Decoded response, carrying contact_email_set.
+     * @throws \moodle_exception On transport failure or a non-2xx reply.
+     */
+    public function contact(string $apikey, string $signingsecret, string $email): array {
+        global $CFG;
+        require_once($CFG->libdir . '/filelib.php');
+
+        $rawbody = json_encode(['contact_email' => $email]);
+        $timestamp = time();
+        $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawbody, $signingsecret);
+
+        // Same rationale as post(): the admin-configured first-party endpoint
+        // must not be rejected by the cURL SSRF blocklist.
+        $curl = new \curl(['ignoresecurity' => true]);
+        $curl->setHeader([
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Authorization: Bearer ' . $apikey,
+            'X-RL-Timestamp: ' . $timestamp,
+            'X-RL-Signature: ' . $signature,
+        ]);
+
+        $response = $curl->post($this->baseurl . config::CONTACT_PATH, $rawbody, [
+            'CURLOPT_TIMEOUT' => 15,
+            'CURLOPT_CONNECTTIMEOUT' => 10,
+        ]);
+
+        if ($curl->get_errno()) {
+            throw new \moodle_exception('error:connectfailed', 'local_reportlms', '', $curl->error);
+        }
+
+        $httpcode = (int) ($curl->get_info()['http_code'] ?? 0);
+        $decoded = json_decode((string) $response, true);
+
+        if ($httpcode < 200 || $httpcode >= 300 || !is_array($decoded)) {
+            throw new \moodle_exception('error:connectrejected', 'local_reportlms', '', 'HTTP ' . $httpcode);
+        }
+
+        return $decoded;
+    }
+
+    /**
      * POST JSON and decode the reply.
      *
      * @param string $path Path on the Report LMS host.

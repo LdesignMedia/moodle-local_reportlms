@@ -98,6 +98,57 @@ class contact_email {
     }
 
     /**
+     * Send the address to Report LMS straight away instead of with the next push.
+     *
+     * The push still carries it as the fallback. Never throws: a Report LMS
+     * that cannot be reached leaves the address unsent, and the next push
+     * tries again.
+     *
+     * @param api_client|null $client Optional client override for tests.
+     *
+     * @return bool Whether Report LMS took it.
+     */
+    public static function send_now(?api_client $client = null): bool {
+        $email = self::current();
+        $apikey = trim((string) get_config('local_reportlms', 'apikey'));
+        $signingsecret = trim((string) get_config('local_reportlms', 'signingsecret'));
+
+        if ($email === '' || !connect_manager::is_connected()) {
+            return false;
+        }
+
+        try {
+            $client = $client ?? new api_client(config::baseurl());
+            $answer = $client->contact($apikey, $signingsecret, $email);
+        } catch (\Throwable $exception) {
+            // Silent on purpose: this runs right before a redirect, and any
+            // output would stop it. The next push carries the address.
+            return false;
+        }
+
+        if (array_key_exists('contact_email_set', $answer) && is_bool($answer['contact_email_set'])) {
+            set_config('contactemailset', $answer['contact_email_set'] ? '1' : '0', 'local_reportlms');
+        }
+
+        // The same record the push keeps, so the next push does not resend it
+        // just for this.
+        self::mark_sent($email);
+
+        return true;
+    }
+
+    /**
+     * Admin setting callback: the contact email setting was saved.
+     *
+     * @param string $fullname The setting's full name, passed by the admin tree.
+     *
+     * @return void
+     */
+    public static function setting_updated(string $fullname = ''): void {
+        self::send_now();
+    }
+
+    /**
      * Whether Report LMS has said it holds no contact for this site.
      *
      * @return bool False for "has one" and for "has not said".
