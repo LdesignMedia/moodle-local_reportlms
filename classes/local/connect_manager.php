@@ -53,11 +53,14 @@ class connect_manager {
         $this->client = $client;
     }
 
+    /** @var string Prefix of the HMAC message, so a proof cannot be reused for anything else. */
+    public const PROOF_CONTEXT = 'reportlms-verify:';
+
     /**
-     * The verification token verify.php should currently serve.
+     * The verification token of the connect attempt that is open now.
      *
-     * Empty when no connect attempt is open or the last one has expired, so the
-     * endpoint stops answering once it is no longer needed.
+     * Empty when no connect attempt is open or the last one has expired. Never
+     * served as it is: verify.php answers with {@see self::verification_proof()}.
      *
      * @return string
      */
@@ -72,6 +75,28 @@ class connect_manager {
     }
 
     /**
+     * The proof verify.php serves for a nonce sent by Report LMS.
+     *
+     * An HMAC of the nonce keyed by the open token. Report LMS knows the token
+     * from the connect request and checks the proof for its own fresh nonce.
+     * The page is public, so anybody can ask it for a proof, but a proof for
+     * their own nonce is useless for Report LMS's nonce, and the token itself
+     * never leaves this site except in the connect request.
+     *
+     * @param string $nonce The nonce from the request.
+     * @return string Hex HMAC-SHA256, or empty when no connect attempt is open.
+     */
+    public static function verification_proof(string $nonce): string {
+        $token = self::current_verification_token();
+
+        if ($token === '' || $nonce === '') {
+            return '';
+        }
+
+        return hash_hmac('sha256', self::PROOF_CONTEXT . $nonce, $token);
+    }
+
+    /**
      * Connect this site to Report LMS.
      *
      * @throws \moodle_exception When the licence check, the domain check or the request itself fails.
@@ -79,8 +104,8 @@ class connect_manager {
     public function connect(): void {
         global $CFG;
 
-        // Publish a fresh token before asking, so verify.php can answer the
-        // moment Report LMS calls back for it.
+        // Store a fresh token before asking, so verify.php can answer with its
+        // proof the moment Report LMS calls back.
         $token = random_string(64);
         set_config('verifytoken', $token, 'local_reportlms');
         set_config('verifyexpires', time() + self::TOKEN_TTL, 'local_reportlms');

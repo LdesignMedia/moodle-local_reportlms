@@ -48,7 +48,7 @@ class api_client {
      * verification token back off the site before it mints anything.
      *
      * @param string $siteurl This site's wwwroot.
-     * @param string $verificationtoken The token verify.php is currently serving.
+     * @param string $verificationtoken The token of this connect attempt; verify.php only serves a proof of it.
      * @param int $acknowledgedat When somebody here read the data statement, or 0.
      * @param string $contactemail Where Report LMS may write about the licence, or an empty string.
      * @return array environment_id, api_key, signing_secret, push_path, expires_at, tier.
