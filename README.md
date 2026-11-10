@@ -30,7 +30,20 @@ dashboard adds them in the manager's browser, straight from your own Moodle.
 ## Requirements
 
 - Moodle **3.9+** and PHP **8.0+**, using a PHP version supported by your Moodle release.
-- A Report LMS subscription, outbound HTTPS access and working Moodle cron.
+- A Report LMS free trial or subscription (see [Pricing](#pricing)), outbound HTTPS
+  access and working Moodle cron.
+
+## Pricing
+
+The plugin itself is free and open source. The dashboards are served by the
+Report LMS service at [reportlms.com](https://reportlms.com), which needs a licence
+for your site address:
+
+- **Free trial**: 7 days, up to 100 users, no payment details. Request it in the
+  first setup step or on [reportlms.com/pricing](https://reportlms.com/pricing).
+- **Subscription**: after the trial, one plan per site, priced by the number of
+  users, monthly or yearly. Every plan has the same features. See
+  [reportlms.com/pricing](https://reportlms.com/pricing).
 
 ## Install and connect
 
@@ -58,9 +71,13 @@ site again, also when the previous key expired or was lost.
 
 ## Privacy
 
-Report LMS never receives names, email addresses or other free text. Learner ids
+Report LMS never receives learner names, email addresses or other free text. Learner ids
 are coded with a key that stays on your Moodle site, so only your site can link a
 code back to a person. Results are sent as numbers and dates.
+
+The one personal detail that is sent is the contact email a site administrator
+gives for licence and service messages. It is used only for those messages and is
+never linked to the figures.
 
 Everything the plugin stores and sends is declared through the Moodle Privacy API.
 
