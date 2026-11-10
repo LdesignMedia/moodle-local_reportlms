@@ -218,7 +218,7 @@ $string['dashboard:title'] = 'Report LMS dashboard';
 $string['dashboard:notconnected'] = 'This site is not connected to Report LMS yet, so there is no report to show.';
 $string['dashboard:back'] = 'Back';
 $string['dashboard:settings'] = 'Report LMS settings';
-$string['dashboard:manage'] = 'Organisation and managers';
+$string['dashboard:manage'] = 'Organisation structure';
 
 // Capabilities.
 $string['reportlms:view'] = 'Open the Report LMS dashboard';

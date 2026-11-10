@@ -183,26 +183,22 @@ if ($advanced !== null) {
 }
 
 /*
- * The cog goes where the block's cog goes: the mapping editor.
+ * Organisation structure goes where the block's cog goes: the mapping editor.
  *
- * One rule, in access::admin_destination(), so the two cogs cannot come to
+ * One rule, in access::admin_destination(), so the two cannot come to
  * different conclusions about where a person should land. It used to point at
  * the plugin settings for administrators only, which made the organisation
  * editor reachable from the block and not from the report standing in front of
- * it.
+ * it. Words rather than a cog, like Advanced settings beside it: two buttons
+ * that look alike but only one of them says what it does read as a puzzle.
  */
 $destination = access::admin_destination();
 
 if ($destination !== null) {
     $actions .= html_writer::link(
         $destination,
-        // i/settings, not t/cog: not every theme ships the latter, and a
-        // missing pix renders as a broken image rather than as nothing.
-        $OUTPUT->pix_icon('i/settings', get_string('dashboard:manage', 'local_reportlms')),
-        [
-            'class' => 'btn local-reportlms-btn local-reportlms-btn-icon',
-            'title' => get_string('dashboard:manage', 'local_reportlms'),
-        ]
+        get_string('dashboard:manage', 'local_reportlms'),
+        ['class' => 'btn local-reportlms-btn']
     );
 }
 
