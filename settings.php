@@ -117,6 +117,20 @@ if ($hassiteconfig) {
         }
 
         /*
+         * A Report LMS address this plugin will not send the key to.
+         *
+         * Said in red on the ordinary page, because nothing reaches Report LMS
+         * while it stands, and the advanced settings where it is changed are
+         * exactly where nobody looks.
+         */
+        if (!\local_reportlms\local\config::is_secure_url(\local_reportlms\local\config::baseurl())) {
+            $status .= html_writer::div(
+                get_string('error:insecurebaseurl', 'local_reportlms'),
+                'alert alert-danger'
+            );
+        }
+
+        /*
          * The plan limit, when it holds people back.
          *
          * Here because the people it leaves out are this site's, and somebody
@@ -150,7 +164,7 @@ if ($hassiteconfig) {
                 // This is the licence expiry: the key is minted to match it.
                 $details[] = get_string('connect:keyexpires', 'local_reportlms', userdate($keyexpiresat));
             }
-            $lastpush = (int) get_config('local_reportlms', 'lastpush');
+            $lastpush = (int) get_config('local_reportlms', \local_reportlms\local\plan_limit::LAST_PUSH);
             if ($lastpush) {
                 $details[] = get_string('connect:lastpush', 'local_reportlms', userdate($lastpush));
             }

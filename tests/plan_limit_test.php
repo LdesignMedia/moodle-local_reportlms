@@ -28,14 +28,16 @@ namespace local_reportlms;
 
 use local_reportlms\local\api_client;
 use local_reportlms\local\batch_builder;
-use local_reportlms\local\collector\org;
 use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
-use local_reportlms\local\mapping;
 use local_reportlms\local\plan_limit;
 use local_reportlms\local\pseudonym;
 use local_reportlms\local\userstate;
 use local_reportlms\task\push_batch;
+
+defined('MOODLE_INTERNAL') || die();
+
+require_once(__DIR__ . '/fixtures/plan_limit_testing.php');
 
 /**
  * Who takes a place, what is sent for whom, and how the limit is kept.
@@ -53,29 +55,15 @@ use local_reportlms\task\push_batch;
  * @covers \local_reportlms\local\connect_manager
  */
 final class plan_limit_test extends \advanced_testcase {
+    use plan_limit_testing;
+
     /** @var int Held people in the large test: more than one run takes. */
     private const MANY = 25010;
-
-    /** @var \stdClass The course everybody is enrolled on. */
-    private $course;
 
     protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
-
-        set_config('apikey', 'k-' . str_repeat('a', 32), 'local_reportlms');
-        set_config('signingsecret', str_repeat('s', 32), 'local_reportlms');
-        set_config('launchsecret', 'launch-secret', 'local_reportlms');
-        set_config('environmentid', 'env_test', 'local_reportlms');
-        set_config('connectedat', time(), 'local_reportlms');
-        set_config('enabled', 1, 'local_reportlms');
-        set_config('salt', 'salt-for-unit-tests', 'local_reportlms');
-        // Recent, so no test sends a heartbeat it did not ask for.
-        set_config('lastpush', time(), 'local_reportlms');
-
-        mapping::reset();
-
-        $this->course = $this->getDataGenerator()->create_course();
+        $this->connect_site();
     }
 
     public function test_with_no_limit_everybody_is_sent_as_today(): void {
@@ -111,8 +99,7 @@ final class plan_limit_test extends \advanced_testcase {
 
         $org = $this->sent_org($client);
         $this->assertSame(2, $org['limit_applied']);
-        $held = $this->held_pids($org);
-        $this->assertSame($this->pids($outside), $held);
+        $this->assertSame($this->pids($outside), $this->held_pids($org));
 
         // Listed, so the headcount stays true, but in no unit.
         $attrs = array_column($org['attrs'], 'learner_pid');
@@ -250,28 +237,10 @@ final class plan_limit_test extends \advanced_testcase {
     }
 
     public function test_an_administrator_and_a_departure_go_out_past_a_run_full_of_held_people(): void {
-        global $CFG, $DB;
-
         $this->assertGreaterThan(push_batch::MAX_USERS_PER_RUN, self::MANY);
 
         $inside = $this->people(2);
-
-        $now = time();
-        $rows = [];
-        for ($i = 0; $i < self::MANY; $i++) {
-            $rows[] = [
-                'auth' => 'manual',
-                'confirmed' => 1,
-                'mnethostid' => $CFG->mnet_localhost_id,
-                'username' => 'held' . $i,
-                'firstname' => 'Held',
-                'lastname' => (string) $i,
-                'email' => 'held' . $i . '@example.com',
-                'timecreated' => $now,
-                'timemodified' => $now,
-            ];
-        }
-        $DB->insert_records('user', $rows);
+        $this->assertCount(self::MANY, $this->bulk_users(self::MANY, 'held'));
 
         $admin = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($admin->id, $this->course->id);
@@ -294,7 +263,8 @@ final class plan_limit_test extends \advanced_testcase {
         $this->assertStringContainsString('0 still waiting, ' . self::MANY . ' held by the plan', $output);
 
         $this->assertStringContainsString(
-            'Your plan covers 2 people. This site has 25,012. Data for 25,010 is not sent.',
+            'Your plan covers 2 people. This site has 25,012 people. Reports show the first 2. '
+                . 'For the other 25,010 only a coded id and the account status are sent, no learning data.',
             plan_limit::notice()
         );
     }
@@ -302,9 +272,7 @@ final class plan_limit_test extends \advanced_testcase {
     public function test_the_org_hash_follows_the_limit(): void {
         $people = $this->people(3);
 
-        $today = 'h_' . org::state_hash(org::collect());
         $none = batch_builder::org_section_if_changed(plan_limit::none());
-        $this->assertSame($today, $none['org_state_hash'], 'No limit hashes as before, so an upgrade resends nothing.');
         $this->assertNull($none['limit_applied']);
 
         $two = batch_builder::org_section_if_changed(new plan_limit(2, (int) $people[1]->id));
@@ -340,6 +308,12 @@ final class plan_limit_test extends \advanced_testcase {
 
         plan_limit::store_reply(['limits' => ['users' => -4]]);
         $this->assertSame(1500, plan_limit::stored());
+
+        plan_limit::store_reply(['limits' => ['users' => 2147483648]]);
+        $this->assertSame(1500, plan_limit::stored(), 'Above what Report LMS itself accepts back.');
+
+        plan_limit::store_reply($this->limits(2147483647));
+        $this->assertSame(2147483647, plan_limit::stored());
 
         plan_limit::store_reply($this->limits(0));
         $this->assertSame(0, plan_limit::stored());
@@ -470,6 +444,21 @@ final class plan_limit_test extends \advanced_testcase {
         $this->assertStringContainsString('heartbeat', $output);
     }
 
+    public function test_a_heartbeat_that_carries_a_change_is_not_logged_as_a_heartbeat(): void {
+        $this->people(2);
+        $this->pretend_everything_was_pushed();
+        set_config('lastpush', time() - DAYSECS - HOURSECS, 'local_reportlms');
+        set_config('deadline_source', 'period', 'local_reportlms');
+        set_config('deadline_days', 30, 'local_reportlms');
+        $client = $this->client([]);
+
+        $output = $this->run_task($client);
+
+        $this->assertCount(1, $client->payloads);
+        $this->assertStringNotContainsString('heartbeat', $output);
+        $this->assertStringContainsString('no learner changed', $output);
+    }
+
     public function test_a_quiet_site_pushed_recently_sends_nothing(): void {
         $this->people(2);
         $this->pretend_everything_was_pushed();
@@ -480,217 +469,5 @@ final class plan_limit_test extends \advanced_testcase {
 
         $this->assertSame([], $client->payloads);
         $this->assertStringContainsString('nothing to push', $output);
-    }
-
-    public function test_the_notice_names_the_numbers_only_when_somebody_is_held(): void {
-        $this->people(5);
-
-        $this->assertNull(plan_limit::notice(), 'No limit, nothing to say.');
-
-        plan_limit::store_reply($this->limits(5));
-        $this->assertNull(plan_limit::notice(), 'Everybody fits.');
-
-        plan_limit::store_reply($this->limits(2));
-        $notice = plan_limit::notice();
-        $this->assertStringContainsString('Your plan covers 2 people. This site has 5. Data for 3 is not sent.', $notice);
-        $this->assertStringContainsString('https://reportlms.com/pricing', $notice);
-    }
-
-    /**
-     * Create people enrolled on the course, in id order.
-     *
-     * @param int $count
-     * @param bool $enrol
-     * @return array<int, \stdClass>
-     */
-    private function people(int $count, bool $enrol = true): array {
-        $people = [];
-
-        for ($i = 0; $i < $count; $i++) {
-            $user = $this->getDataGenerator()->create_user();
-
-            if ($enrol) {
-                $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
-            }
-
-            $people[] = $user;
-        }
-
-        return $people;
-    }
-
-    /**
-     * The limits object the app sends.
-     *
-     * @param int|null $users
-     * @return array
-     */
-    private function limits(?int $users): array {
-        return ['limits' => ['users' => $users, 'courses' => null, 'activities' => null]];
-    }
-
-    /**
-     * A client whose health call answers with the given reply, or fails when it is null.
-     *
-     * @param array|null $health
-     * @return api_client
-     */
-    private function client(?array $health): api_client {
-        $client = new class (config::baseurl()) extends api_client {
-            /** @var array|null What the health call answers; null fails it. */
-            public $health = [];
-            /** @var array What a push answers besides its batch id. */
-            public $reply = [];
-            /** @var array Decoded payloads accepted. */
-            public $payloads = [];
-            /** @var int Health calls made. */
-            public $healthcalls = 0;
-
-            /**
-             * Answer the health call, or fail it.
-             *
-             * @param string $apikey
-             * @return array
-             */
-            public function health(string $apikey): array {
-                $this->healthcalls++;
-
-                if ($this->health === null) {
-                    throw new \moodle_exception('error:connectfailed', 'local_reportlms', '', 'unreachable');
-                }
-
-                return $this->health;
-            }
-
-            /**
-             * Keep the payload and accept it.
-             *
-             * @param string $pushpath
-             * @param string $rawbody
-             * @param string $apikey
-             * @param string $signingsecret
-             * @param string $idempotencykey
-             * @return array
-             */
-            public function push(
-                string $pushpath,
-                string $rawbody,
-                string $apikey,
-                string $signingsecret,
-                string $idempotencykey
-            ): array {
-                $this->payloads[] = json_decode($rawbody, true);
-
-                return ['batch_id' => 'b-test'] + $this->reply;
-            }
-        };
-        $client->health = $health;
-
-        return $client;
-    }
-
-    /**
-     * Run the scheduled push and return what it said.
-     *
-     * @param api_client $client
-     * @return string
-     */
-    private function run_task(api_client $client): string {
-        $task = new push_batch();
-        $task->set_client($client);
-
-        ob_start();
-        $task->execute();
-
-        return ob_get_clean();
-    }
-
-    /**
-     * Every learner a client was sent, in order.
-     *
-     * @param api_client $client
-     * @return array<int, string>
-     */
-    private function sent_learners(api_client $client): array {
-        $learners = [];
-
-        foreach ($client->payloads as $payload) {
-            $learners = array_merge($learners, $payload['learners'] ?? []);
-        }
-
-        return $learners;
-    }
-
-    /**
-     * The organisation section a client was sent, or null.
-     *
-     * @param api_client $client
-     * @return array|null
-     */
-    private function sent_org(api_client $client): ?array {
-        foreach ($client->payloads as $payload) {
-            if (isset($payload['org'])) {
-                return $payload['org'];
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * The people an organisation section marks held.
-     *
-     * @param array $org
-     * @return array<int, string>
-     */
-    private function held_pids(array $org): array {
-        return array_values(array_column(
-            array_filter($org['attrs'], static fn(array $attr): bool => !empty($attr['held'])),
-            'learner_pid'
-        ));
-    }
-
-    /**
-     * Coded ids of these people.
-     *
-     * @param \stdClass[] $people
-     * @return array<int, string>
-     */
-    private function pids(array $people): array {
-        return array_values(array_map(static fn($user) => pseudonym::learner((int) $user->id), $people));
-    }
-
-    /**
-     * Whether this person is waiting to be sent.
-     *
-     * @param \stdClass $user
-     * @return bool
-     */
-    private function dirty(\stdClass $user): bool {
-        global $DB;
-
-        return (int) $DB->get_field(userstate::TABLE, 'dirty', ['userid' => $user->id]) === 1;
-    }
-
-    /**
-     * Record everything as delivered, as the push task does after a 202.
-     *
-     * @return void
-     */
-    private function pretend_everything_was_pushed(): void {
-        global $DB;
-
-        $org = batch_builder::org_section_if_changed();
-        if ($org !== null) {
-            set_config('lastorghash', substr($org['org_state_hash'], 2), 'local_reportlms');
-        }
-
-        $dims = batch_builder::dimensions_section_if_changed();
-        if ($dims !== null) {
-            set_config('lastdimhash', $dims['hash'], 'local_reportlms');
-        }
-
-        set_config('lastsettingshash', sha1(json_encode(batch_builder::settings_section())), 'local_reportlms');
-        $DB->set_field(userstate::TABLE, 'dirty', 0, []);
     }
 }

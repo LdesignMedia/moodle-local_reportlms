@@ -42,6 +42,22 @@ class api_client {
     }
 
     /**
+     * Refuse to send anything, the key above all, to a base URL that is not https.
+     *
+     * Checked before every request rather than once at construction, so a
+     * caller that only builds a client never fails, and the refusal reaches
+     * the caller the same way any other failed request does.
+     *
+     * @return void
+     * @throws \moodle_exception When the base URL is plain http to a remote host, or not a URL.
+     */
+    protected function require_secure(): void {
+        if (!config::is_secure_url($this->baseurl)) {
+            throw new \moodle_exception('error:insecurebaseurl', 'local_reportlms');
+        }
+    }
+
+    /**
      * Connect this site and receive its keys.
      *
      * Report LMS checks the licence for this site URL, then fetches the
@@ -117,6 +133,8 @@ class api_client {
         global $CFG;
         require_once($CFG->libdir . '/filelib.php');
 
+        $this->require_secure();
+
         // Same rationale as post(): the admin-configured first-party endpoint
         // must not be rejected by the cURL SSRF blocklist.
         $curl = new \curl(['ignoresecurity' => true]);
@@ -169,6 +187,8 @@ class api_client {
     ): array {
         global $CFG;
         require_once($CFG->libdir . '/filelib.php');
+
+        $this->require_secure();
 
         $timestamp = time();
         $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawbody, $signingsecret);
@@ -257,6 +277,8 @@ class api_client {
         global $CFG;
         require_once($CFG->libdir . '/filelib.php');
 
+        $this->require_secure();
+
         $rawbody = json_encode(['contact_email' => $email]);
         $timestamp = time();
         $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawbody, $signingsecret);
@@ -302,6 +324,8 @@ class api_client {
     protected function post(string $path, array $payload): array {
         global $CFG;
         require_once($CFG->libdir . '/filelib.php');
+
+        $this->require_secure();
 
         // ignoresecurity: this call only ever targets the admin-configured
         // Report LMS base URL, a trusted first-party endpoint, so it must not be

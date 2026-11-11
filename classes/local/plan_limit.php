@@ -44,14 +44,20 @@ class plan_limit {
     /** @var string Plugin config key holding the limit; absent means no limit. */
     public const USERS = 'limitusers';
 
+    /** @var int The largest limit kept: Report LMS accepts nothing larger back in limit_applied. */
+    public const MAX_USERS = 2147483647;
+
     /** @var string Plugin config key: when the organisation hash was last accepted. */
     public const ORG_SENT_AT = 'lastorghashat';
+
+    /** @var string Plugin config key: organisation resends in a row that Report LMS did not apply. */
+    public const ORG_RESENDS = 'orgresends';
 
     /** @var string Plugin config key: when Report LMS last accepted a push. */
     public const LAST_PUSH = 'lastpush';
 
-    /** @var int Seconds Report LMS has to apply an organisation before it is sent again. */
-    public const RESEND_AFTER = 3600;
+    /** @var string Plugin config key: set while Report LMS says this site's key has ended. */
+    public const KEY_ENDED = 'keyended';
 
     /** @var string Where a site can buy a bigger plan, on the Report LMS host. */
     public const PRICING_PATH = '/pricing';
@@ -145,7 +151,8 @@ class plan_limit {
      * Keep the limit a reply from Report LMS carries.
      *
      * A reply with no limits (an older Report LMS) keeps what is stored, and so
-     * does a value this plugin cannot read. A null limit clears it.
+     * does a value this plugin cannot read. A null limit clears it. Written
+     * only when it changes, so an unchanged limit costs no write on every run.
      *
      * @param array $reply A decoded connect, health or push reply.
      * @return void
@@ -162,33 +169,85 @@ class plan_limit {
         $users = $reply['limits']['users'];
 
         if ($users === null) {
-            unset_config(self::USERS, 'local_reportlms');
+            if (self::stored() !== null) {
+                unset_config(self::USERS, 'local_reportlms');
+            }
 
             return;
         }
 
-        if (is_int($users) && $users >= 0) {
+        if (is_int($users) && $users >= 0 && $users <= self::MAX_USERS && $users !== self::stored()) {
             set_config(self::USERS, $users, 'local_reportlms');
         }
     }
 
     /**
-     * Forget the limit, for a disconnect.
+     * Forget the limit and the resend count, for a disconnect.
      *
      * @return void
      */
     public static function clear(): void {
-        unset_config(self::USERS, 'local_reportlms');
+        if (self::stored() !== null) {
+            unset_config(self::USERS, 'local_reportlms');
+        }
+
+        self::forget_resends();
+    }
+
+    /**
+     * Start the organisation resend count again.
+     *
+     * @return void
+     */
+    public static function forget_resends(): void {
+        if (get_config('local_reportlms', self::ORG_RESENDS) !== false) {
+            unset_config(self::ORG_RESENDS, 'local_reportlms');
+        }
+    }
+
+    /**
+     * How many times in a row the organisation was sent again without Report LMS applying it.
+     *
+     * @return int
+     */
+    public static function org_resends(): int {
+        return (int) get_config('local_reportlms', self::ORG_RESENDS);
+    }
+
+    /**
+     * Whether a health reply says this site's key has ended.
+     *
+     * Report LMS answers a key that has ended too, so a site can learn that.
+     * The reply's date is the one to trust: the key's end moves with the
+     * licence, so the date stored at connect goes stale on a renewal.
+     *
+     * @param array $health The decoded health reply.
+     * @return bool
+     */
+    public static function key_ended(array $health): bool {
+        $value = $health['key_expires_at'] ?? null;
+
+        if (!is_string($value) || $value === '') {
+            return false;
+        }
+
+        $at = strtotime($value);
+
+        return $at !== false && $at <= time();
     }
 
     /**
      * Follow what a health reply says: the limit, and whether the organisation arrived.
      *
      * Report LMS answers with the organisation hash it last applied. When that
-     * is not the one this site last had accepted, and that was over an hour
+     * is not the one this site last had accepted, and that was long enough
      * ago, Report LMS lost it, so the saved hash is cleared and the
      * organisation goes again on this run. A newer mismatch is left alone:
      * Report LMS works through accepted batches in a queue.
+     *
+     * Long enough is an hour for the first resend, then two, four and so on up
+     * to a day, so a Report LMS that can never apply this organisation is not
+     * sent the whole of it every hour. A match starts the count again.
      *
      * @param array $health The decoded health reply.
      * @return bool Whether the organisation will be sent again.
@@ -213,13 +272,18 @@ class plan_limit {
         }
 
         if ($applied === $saved) {
+            self::forget_resends();
+
             return false;
         }
 
-        if ((int) get_config('local_reportlms', self::ORG_SENT_AT) > time() - self::RESEND_AFTER) {
+        $resends = self::org_resends();
+
+        if ((int) get_config('local_reportlms', self::ORG_SENT_AT) > time() - backoff::wait($resends)) {
             return false;
         }
 
+        set_config(self::ORG_RESENDS, $resends + 1, 'local_reportlms');
         unset_config('lastorghash', 'local_reportlms');
 
         return true;
@@ -270,6 +334,10 @@ class plan_limit {
     /**
      * What the settings and report pages say when the plan holds people back.
      *
+     * Held people are not left out altogether: they are listed by coded id
+     * with their account status, so the headcount stays true. The text says
+     * so, rather than that nothing is sent for them.
+     *
      * @return string|null Null when there is no limit or everybody fits.
      */
     public static function notice(): ?string {
@@ -285,14 +353,37 @@ class plan_limit {
             return null;
         }
 
+        $held = $total - $limit;
         $pricing = config::baseurl() . self::PRICING_PATH;
 
-        return get_string('limit:notice', 'local_reportlms', (object) [
-            'limit' => self::number($limit),
-            'total' => self::number($total),
-            'held' => self::number($total - $limit),
-            'pricing' => \html_writer::link($pricing, $pricing),
-        ]);
+        $sentences = [
+            $limit === 1
+                ? get_string('limit:covers_one', 'local_reportlms')
+                : get_string('limit:covers', 'local_reportlms', self::number($limit)),
+            $total === 1
+                ? get_string('limit:sitehas_one', 'local_reportlms')
+                : get_string('limit:sitehas', 'local_reportlms', self::number($total)),
+        ];
+
+        if ($limit === 0) {
+            $sentences[] = get_string('limit:shown_none', 'local_reportlms');
+            $sentences[] = get_string('limit:held_all', 'local_reportlms');
+        } else {
+            $sentences[] = $limit === 1
+                ? get_string('limit:shown_one', 'local_reportlms')
+                : get_string('limit:shown', 'local_reportlms', self::number($limit));
+            $sentences[] = $held === 1
+                ? get_string('limit:held_one', 'local_reportlms')
+                : get_string('limit:held', 'local_reportlms', self::number($held));
+        }
+
+        $sentences[] = get_string(
+            'limit:upgrade',
+            'local_reportlms',
+            \html_writer::link(new \moodle_url($pricing), s($pricing))
+        );
+
+        return implode(' ', $sentences);
     }
 
     /**
@@ -303,8 +394,8 @@ class plan_limit {
     protected static function counted_where(): array {
         global $DB;
 
-        $where = 'u.deleted = 0 AND u.id >= :firstreportable';
-        $params = ['firstreportable' => userstate::FIRST_REPORTABLE_USERID];
+        [$reportable, $params] = userstate::reportable_sql();
+        $where = "u.deleted = 0 AND {$reportable}";
 
         $admins = site_admins::ids();
 

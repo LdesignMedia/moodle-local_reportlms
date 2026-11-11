@@ -182,6 +182,8 @@ class connect_manager {
         // Same for the contact address: a new connection is told it again.
         unset_config('lastcontacthash', 'local_reportlms');
         unset_config('contactemailset', 'local_reportlms');
+        // And every wait left from failed calls of an earlier connection.
+        self::forget_waits();
 
         // Start the backfill at the next cron tick rather than whenever the
         // fifteen-minute schedule next fires: an admin who just connected
@@ -210,10 +212,25 @@ class connect_manager {
         unset_config('tier', 'local_reportlms');
         // A limit belongs to the connection it came with.
         plan_limit::clear();
+        self::forget_waits();
         unset_config('connectedat', 'local_reportlms');
         unset_config('keyexpiresat', 'local_reportlms');
         unset_config('verifytoken', 'local_reportlms');
         unset_config('verifyexpires', 'local_reportlms');
+    }
+
+    /**
+     * Start every retry wait again: the health call, the heartbeat, the key's end.
+     *
+     * @return void
+     */
+    protected static function forget_waits(): void {
+        backoff::reset_all();
+        plan_limit::forget_resends();
+
+        if (get_config('local_reportlms', plan_limit::KEY_ENDED) !== false) {
+            unset_config(plan_limit::KEY_ENDED, 'local_reportlms');
+        }
     }
 
     /**

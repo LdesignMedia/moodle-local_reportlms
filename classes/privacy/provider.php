@@ -106,6 +106,8 @@ class provider implements
                 'last_attempt_at' => 'privacy:metadata:reportlms:last_attempt_at',
                 'node_id' => 'privacy:metadata:reportlms:node_id',
                 'contact_email' => 'privacy:metadata:reportlms:contact_email',
+                'held' => 'privacy:metadata:reportlms:held',
+                'limit_applied' => 'privacy:metadata:reportlms:limit_applied',
             ],
             'privacy:metadata:reportlms'
         );

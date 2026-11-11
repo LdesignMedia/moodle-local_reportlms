@@ -27,6 +27,7 @@
 namespace local_reportlms\task;
 
 use local_reportlms\local\api_client;
+use local_reportlms\local\backoff;
 use local_reportlms\local\batch_builder;
 use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
@@ -144,21 +145,8 @@ class push_batch extends \core\task\scheduled_task {
         // Injectable so a test can hand back a refusal without a network.
         $client = $this->client ?? new api_client(config::baseurl());
 
-        /*
-         * The plan limit first, so this run sends what the plan allows now.
-         *
-         * A cheap signed GET, and never a reason to stop: Report LMS being
-         * unreachable here says nothing about the push, which is retried on its
-         * own terms. What was stored stays.
-         */
-        try {
-            if (plan_limit::follow_health($client->health((string) get_config('local_reportlms', 'apikey')))) {
-                mtrace('Report LMS has not applied the organisation sent over an hour ago, sending it again.');
-            }
-        } catch (\moodle_exception $e) {
-            mtrace('Report LMS: could not ask for the plan limit, keeping the stored plan limit: '
-                . self::single_line($e->getMessage()));
-        }
+        // The plan limit first, so this run sends what the plan allows now.
+        $this->follow_plan($client);
 
         /*
          * Before the empty-queue return, not after.
@@ -253,7 +241,7 @@ class push_batch extends \core\task\scheduled_task {
              * never, and the dashboard goes on showing an old name against
              * current numbers.
              */
-            $heartbeat = (int) get_config('local_reportlms', plan_limit::LAST_PUSH) < time() - self::HEARTBEAT_AFTER;
+            $heartbeat = self::heartbeat_due();
             $structure = batch_builder::structure_only(time(), $plan, $heartbeat);
 
             if ($structure === null) {
@@ -263,7 +251,7 @@ class push_batch extends \core\task\scheduled_task {
                 return;
             }
 
-            if ($heartbeat && !isset($structure->payload['org']) && empty($structure->dimhash)) {
+            if (!empty($structure->heartbeatonly)) {
                 mtrace('Report LMS: nothing sent for a day, sending a heartbeat.');
             } else {
                 mtrace('Report LMS: no learner changed, sending the organisation and catalogue.');
@@ -272,11 +260,17 @@ class push_batch extends \core\task\scheduled_task {
         }
 
         $sent = 0;
+        $accepted = false;
         foreach ($chunks as $i => $chunk) {
             try {
                 $reply = $client->push_payload($chunk->payload);
             } catch (\moodle_exception $e) {
                 mtrace("Report LMS push stopped at chunk {$i}: " . self::single_line($e->getMessage()));
+
+                // A refused heartbeat waits longer each time instead of going every fifteen minutes.
+                if (!empty($chunk->heartbeatonly)) {
+                    backoff::failed('heartbeat');
+                }
 
                 /*
                  * A refusal for want of the data statement is a decision, not
@@ -312,8 +306,18 @@ class push_batch extends \core\task\scheduled_task {
 
             userstate::clear($chunk->userids, [], $readat);
 
-            // Any accepted push counts, so a quiet site knows when a heartbeat is due.
-            set_config(plan_limit::LAST_PUSH, time(), 'local_reportlms');
+            // Any accepted push counts, so a quiet site knows when a heartbeat
+            // is due. Once per run: a run of many chunks writes it once.
+            if (!$accepted) {
+                $accepted = true;
+                set_config(plan_limit::LAST_PUSH, time(), 'local_reportlms');
+                backoff::succeeded('heartbeat');
+
+                // Accepted, so the key works whatever an earlier answer said.
+                if (get_config('local_reportlms', plan_limit::KEY_ENDED) !== false) {
+                    unset_config(plan_limit::KEY_ENDED, 'local_reportlms');
+                }
+            }
 
             // The reply carries the limit too; an older Report LMS sends none.
             plan_limit::store_reply($reply);
@@ -363,6 +367,22 @@ class push_batch extends \core\task\scheduled_task {
             $sent += count($chunk->userids);
             mtrace("chunk $i: $chunk->factrows fact rows for " . count($chunk->userids)
                 . ' learners accepted (' . ($reply['batch_id'] ?? 'no batch id') . ').');
+
+            /*
+             * A limit that changed while this run was sending.
+             *
+             * Every chunk was built with the limit this run started with. After
+             * a lower one arrives, the rest could carry people the plan no
+             * longer covers, so they wait: still dirty, they are cut again with
+             * the new limit on the next run. After this chunk's own bookkeeping,
+             * so what was accepted is recorded as accepted.
+             */
+            if (plan_limit::stored() !== $plan->limit()) {
+                mtrace('Report LMS: the plan limit changed during this run, the rest goes on the next run.');
+                $plan = plan_limit::current();
+
+                break;
+            }
         }
 
         $waiting = userstate::count_dirty();
@@ -377,6 +397,76 @@ class push_batch extends \core\task\scheduled_task {
         $held = userstate::count_held($plan->cutoff());
         mtrace("Report LMS push complete: {$sent} learners sent, " . ($waiting - $held) . ' still waiting, '
             . "{$held} held by the plan.");
+    }
+
+    /**
+     * Ask Report LMS for the plan limit, unless it has been failing.
+     *
+     * Never a reason to stop: Report LMS being unreachable here says nothing
+     * about the push, which is retried on its own terms, and what was stored
+     * stays. But a key that has ended, or a Report LMS that keeps failing, is
+     * not asked every fifteen minutes forever: each failure doubles the wait,
+     * from an hour up to a day.
+     *
+     * @param api_client $client
+     *
+     * @return void
+     */
+    protected function follow_plan(api_client $client): void {
+        if (!backoff::due('health')) {
+            mtrace('Report LMS: not asking for the plan limit yet after ' . backoff::fails('health')
+                . ' failed tries, keeping the stored plan limit.');
+
+            return;
+        }
+
+        try {
+            $health = $client->health((string) get_config('local_reportlms', 'apikey'));
+        } catch (\moodle_exception $e) {
+            backoff::failed('health');
+            mtrace('Report LMS: could not ask for the plan limit, keeping the stored plan limit: '
+                . self::single_line($e->getMessage()));
+
+            return;
+        }
+
+        // Outside the try: a database error here is not Report LMS being unreachable.
+        if (plan_limit::follow_health($health)) {
+            mtrace('Report LMS has not applied the organisation sent earlier, sending it again (resend '
+                . plan_limit::org_resends() . ').');
+        }
+
+        if (plan_limit::key_ended($health)) {
+            backoff::failed('health');
+
+            if (get_config('local_reportlms', plan_limit::KEY_ENDED) === false) {
+                set_config(plan_limit::KEY_ENDED, 1, 'local_reportlms');
+            }
+
+            mtrace('Report LMS says this site\'s key has ended: no heartbeat, and asking less often until it is renewed.');
+
+            return;
+        }
+
+        backoff::succeeded('health');
+
+        if (get_config('local_reportlms', plan_limit::KEY_ENDED) !== false) {
+            unset_config(plan_limit::KEY_ENDED, 'local_reportlms');
+        }
+    }
+
+    /**
+     * Whether a quiet site should say it is still here.
+     *
+     * After a day without an accepted push, unless Report LMS has said the key
+     * ended or recent heartbeats were refused.
+     *
+     * @return bool
+     */
+    protected static function heartbeat_due(): bool {
+        return (int) get_config('local_reportlms', plan_limit::LAST_PUSH) < time() - self::HEARTBEAT_AFTER
+            && get_config('local_reportlms', plan_limit::KEY_ENDED) === false
+            && backoff::due('heartbeat');
     }
 
     /**

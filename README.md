@@ -45,9 +45,10 @@ for your site address:
   users, monthly or yearly. Every plan has the same features. See
   [reportlms.com/pricing](https://reportlms.com/pricing).
 
-When a site has more people than its plan covers, the places go to the people who
-joined the site first, and data for the rest is not sent until the plan grows. Site
-administrators take no place. The plugin's settings page shows the numbers.
+When a site has more people than its plan covers, reports show the people who joined
+the site first. For the others, only a coded id and the account status are sent, no
+learning data, until the plan grows. Site administrators take no place. The plugin's
+settings page shows the numbers.
 
 ## Install and connect
 

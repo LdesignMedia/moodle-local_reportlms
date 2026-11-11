@@ -512,6 +512,8 @@ class batch_builder {
             'factrows' => 0,
             'dimhash' => $dimensions !== null ? $dimensions['hash'] : null,
             'settingshash' => $settingshash,
+            // Nothing changed: this batch goes only because a heartbeat is due.
+            'heartbeatonly' => $orgsection === null && $dimensions === null && !$settingschanged && !$contactchanged,
         ];
     }
 
@@ -644,15 +646,6 @@ class batch_builder {
         $section['limit_applied'] = $plan !== null ? $plan->limit() : null;
 
         return $section;
-    }
-
-    /**
-     * The raw org state hash, for the push task to remember after a 202.
-     *
-     * @return string
-     */
-    public static function current_org_hash(): string {
-        return org::state_hash(org::collect());
     }
 
     /**

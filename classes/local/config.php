@@ -77,6 +77,38 @@ class config {
     }
 
     /**
+     * Whether a base URL is safe to send this site's key to.
+     *
+     * The key travels on every run, so only https, except on a machine of
+     * one's own: localhost, 127.0.0.1 and any host under .test may use plain
+     * http for development.
+     *
+     * @param string $url
+     *
+     * @return bool
+     */
+    public static function is_secure_url(string $url): bool {
+        $parts = parse_url(trim($url));
+
+        if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return false;
+        }
+
+        $scheme = strtolower($parts['scheme']);
+        $host = strtolower($parts['host']);
+
+        if ($scheme === 'https') {
+            return true;
+        }
+
+        if ($scheme !== 'http') {
+            return false;
+        }
+
+        return $host === 'localhost' || $host === '127.0.0.1' || substr($host, -5) === '.test';
+    }
+
+    /**
      * The Report LMS origin: scheme, host and port, nothing else.
      *
      * postMessage compares origins, not URLs, so a base URL carrying a path

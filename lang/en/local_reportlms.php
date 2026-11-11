@@ -45,6 +45,8 @@ $string['privacy:metadata:reportlms:grade'] = 'The grade on the main test of the
 $string['privacy:metadata:reportlms:attempts'] = 'How many attempts were taken at that test, and when the last one was finished.';
 $string['privacy:metadata:reportlms:last_attempt_at'] = 'When the last of those attempts was finished.';
 $string['privacy:metadata:reportlms:contact_email'] = 'The contact e-mail address given for this site, used only for licence and service messages and never linked to the figures.';
+$string['privacy:metadata:reportlms:held'] = 'Whether a person is outside the site\'s plan. For such a person only a coded identifier, the login method and whether the account is active are sent, never results.';
+$string['privacy:metadata:reportlms:limit_applied'] = 'How many people the site\'s plan covers, as this site applied it when it listed its people.';
 $string['privacy:metadata:reportlms:node_id'] = 'A coded identifier standing for a sector or department.';
 
 // Connect flow.
@@ -174,7 +176,17 @@ $string['connect:tier'] = 'Licence tier: {$a}';
 $string['connect:connectedat'] = 'Connected since {$a}';
 $string['connect:keyexpires'] = 'Licence and key expire on {$a}';
 $string['connect:lastpush'] = 'Last data sent {$a}';
-$string['limit:notice'] = 'Your plan covers {$a->limit} people. This site has {$a->total}. Data for {$a->held} is not sent. Upgrade at {$a->pricing}.';
+$string['limit:covers'] = 'Your plan covers {$a} people.';
+$string['limit:covers_one'] = 'Your plan covers 1 person.';
+$string['limit:sitehas'] = 'This site has {$a} people.';
+$string['limit:sitehas_one'] = 'This site has 1 person.';
+$string['limit:shown'] = 'Reports show the first {$a}.';
+$string['limit:shown_one'] = 'Reports show the first person.';
+$string['limit:shown_none'] = 'Reports show nobody.';
+$string['limit:held'] = 'For the other {$a} only a coded id and the account status are sent, no learning data.';
+$string['limit:held_one'] = 'For the other person only a coded id and the account status are sent, no learning data.';
+$string['limit:held_all'] = 'For everybody only a coded id and the account status are sent, no learning data.';
+$string['limit:upgrade'] = 'Upgrade at {$a}.';
 
 // Profile fields the plugin creates at install. The display names are
 // written into the field records once, so a later language pack change does
@@ -267,6 +279,7 @@ $string['task:reconcile'] = 'Report LMS: find learners changed outside the norma
 $string['error:nohtmlblock'] = 'The HTML block is not available on this site, so the Dashboard block cannot be created.';
 $string['error:nosalt'] = 'This site has no Report LMS coding key yet. Reconnect from the Report LMS settings.';
 $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
+$string['error:insecurebaseurl'] = 'The Report LMS address must start with https://. Nothing is sent to Report LMS until it does. Change it in the advanced settings of this plugin.';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';
 $string['error:pushfailed'] = 'Could not reach Report LMS for the push: {$a}';
 $string['error:pushrejected'] = 'Report LMS refused the push: {$a}';
