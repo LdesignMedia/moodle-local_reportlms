@@ -174,6 +174,7 @@ $string['connect:tier'] = 'Licence tier: {$a}';
 $string['connect:connectedat'] = 'Connected since {$a}';
 $string['connect:keyexpires'] = 'Licence and key expire on {$a}';
 $string['connect:lastpush'] = 'Last data sent {$a}';
+$string['limit:notice'] = 'Your plan covers {$a->limit} people. This site has {$a->total}. Data for {$a->held} is not sent. Upgrade at {$a->pricing}.';
 
 // Profile fields the plugin creates at install. The display names are
 // written into the field records once, so a later language pack change does

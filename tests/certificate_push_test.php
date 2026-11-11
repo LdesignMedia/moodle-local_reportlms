@@ -419,6 +419,16 @@ final class certificate_push_test extends \advanced_testcase {
             }
 
             /**
+             * Answer like a Report LMS that sends no plan limit.
+             *
+             * @param string $apikey
+             * @return array
+             */
+            public function health(string $apikey): array {
+                return [];
+            }
+
+            /**
              * Accept the payload and keep it.
              *
              * @param string $pushpath

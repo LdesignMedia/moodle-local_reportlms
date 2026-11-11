@@ -167,15 +167,79 @@ class userstate {
      * Ordered by id so chunking is stable across runs and a stuck learner does
      * not silently block the rest.
      *
+     * With a plan limit, people outside the plan are left out in the query
+     * itself, not after the read. Otherwise thousands of held people with low
+     * ids would fill every batch, and a site administrator, a departure or a
+     * row whose user is gone, all of which always go out, would wait forever
+     * behind them. Held people stay dirty, so they go once the plan grows.
+     *
      * @param int $limit
+     * @param int|null $cutoff Highest user id inside the plan, or null when nobody is held.
      * @return array<int, int> User ids.
      */
-    public static function get_dirty_batch(int $limit): array {
+    public static function get_dirty_batch(int $limit, ?int $cutoff = null): array {
         global $DB;
 
-        $rows = $DB->get_records_select(self::TABLE, 'dirty = 1', [], 'userid ASC', 'userid', 0, $limit);
+        if ($cutoff === null) {
+            $rows = $DB->get_records_select(self::TABLE, 'dirty = 1', [], 'userid ASC', 'userid', 0, $limit);
 
-        return array_map('intval', array_keys($rows));
+            return array_map('intval', array_keys($rows));
+        }
+
+        [$adminsql, $params] = self::admins_in();
+        $params['cutoff'] = $cutoff;
+
+        $sql = 'SELECT s.userid
+                  FROM {' . self::TABLE . '} s
+             LEFT JOIN {user} u ON u.id = s.userid
+                 WHERE s.dirty = 1
+                   AND (s.userid <= :cutoff OR u.id IS NULL OR u.deleted = 1 OR s.userid ' . $adminsql . ')
+              ORDER BY s.userid ASC';
+
+        return array_map('intval', array_keys($DB->get_records_sql($sql, $params, 0, $limit)));
+    }
+
+    /**
+     * Count of learners waiting who are held by the plan.
+     *
+     * The rest of {@see count_dirty()} is still on its way.
+     *
+     * @param int|null $cutoff Highest user id inside the plan, or null when nobody is held.
+     * @return int
+     */
+    public static function count_held(?int $cutoff): int {
+        global $DB;
+
+        if ($cutoff === null) {
+            return 0;
+        }
+
+        [$adminsql, $params] = self::admins_in(false);
+        $params['cutoff'] = $cutoff;
+
+        return (int) $DB->count_records_sql(
+            'SELECT COUNT(1)
+               FROM {' . self::TABLE . '} s
+               JOIN {user} u ON u.id = s.userid
+              WHERE s.dirty = 1
+                AND u.deleted = 0
+                AND s.userid > :cutoff
+                AND s.userid ' . $adminsql,
+            $params
+        );
+    }
+
+    /**
+     * The site administrators as an SQL list, for the queries above.
+     *
+     * @param bool $in True for IN, false for NOT IN.
+     * @return array{0: string, 1: array}
+     */
+    protected static function admins_in(bool $in = true): array {
+        global $DB;
+
+        // Never empty: user id 0 belongs to nobody, so the list still parses.
+        return $DB->get_in_or_equal(site_admins::ids() ?: [0], SQL_PARAMS_NAMED, 'admin', $in);
     }
 
     /**

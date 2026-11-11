@@ -145,6 +145,9 @@ class connect_manager {
         if (!empty($data['tier'])) {
             set_config('tier', $data['tier'], 'local_reportlms');
         }
+        // How many people the plan covers, when Report LMS says so. An older
+        // Report LMS sends no limit, and then what is stored stays.
+        plan_limit::store_reply($data);
         if (!empty($data['expires_at'])) {
             // The key expires with the licence behind it, so this is also the
             // date the pushes stop if nobody renews.
@@ -205,6 +208,8 @@ class connect_manager {
         unset_config('launchsecret', 'local_reportlms');
         unset_config('environmentid', 'local_reportlms');
         unset_config('tier', 'local_reportlms');
+        // A limit belongs to the connection it came with.
+        plan_limit::clear();
         unset_config('connectedat', 'local_reportlms');
         unset_config('keyexpiresat', 'local_reportlms');
         unset_config('verifytoken', 'local_reportlms');

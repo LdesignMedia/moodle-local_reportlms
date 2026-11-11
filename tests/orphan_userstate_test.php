@@ -91,6 +91,16 @@ final class orphan_userstate_test extends \advanced_testcase {
             /** @var array Decoded payloads received. */
             public $payloads = [];
 
+            /**
+             * Answer like a Report LMS that sends no plan limit.
+             *
+             * @param string $apikey
+             * @return array
+             */
+            public function health(string $apikey): array {
+                return [];
+            }
+
             public function push(
                 string $pushpath,
                 string $rawbody,

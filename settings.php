@@ -116,6 +116,21 @@ if ($hassiteconfig) {
             }
         }
 
+        /*
+         * The plan limit, when it holds people back.
+         *
+         * Here because the people it leaves out are this site's, and somebody
+         * reading this page is the one who can change the plan. Only shown when
+         * somebody is actually held.
+         */
+        if ($connected) {
+            $limitnotice = \local_reportlms\local\plan_limit::notice();
+
+            if ($limitnotice !== null) {
+                $status .= html_writer::div($limitnotice, 'alert alert-warning');
+            }
+        }
+
         $details = [];
         if ($connected) {
             $environmentid = (string) get_config('local_reportlms', 'environmentid');

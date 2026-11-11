@@ -31,6 +31,7 @@ use local_reportlms\local\batch_builder;
 use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
 use local_reportlms\local\label_map;
+use local_reportlms\local\plan_limit;
 use local_reportlms\local\source_sweep;
 use local_reportlms\local\userstate;
 
@@ -82,6 +83,15 @@ class push_batch extends \core\task\scheduled_task {
     public const MAX_USERS_PER_RUN = 25000;
 
     /**
+     * Seconds without an accepted push before a quiet site says it is still here.
+     *
+     * Report LMS takes a site that has not pushed for three days as gone quiet.
+     * A site where nobody and nothing changed pushed nothing at all, so a day
+     * leaves room for a cron that misses a few runs.
+     */
+    public const HEARTBEAT_AFTER = DAYSECS;
+
+    /**
      * Task name shown in the scheduled task admin screen.
      *
      * @return string
@@ -131,6 +141,25 @@ class push_batch extends \core\task\scheduled_task {
      * The push itself, under the lock.
      */
     protected function push(): void {
+        // Injectable so a test can hand back a refusal without a network.
+        $client = $this->client ?? new api_client(config::baseurl());
+
+        /*
+         * The plan limit first, so this run sends what the plan allows now.
+         *
+         * A cheap signed GET, and never a reason to stop: Report LMS being
+         * unreachable here says nothing about the push, which is retried on its
+         * own terms. What was stored stays.
+         */
+        try {
+            if (plan_limit::follow_health($client->health((string) get_config('local_reportlms', 'apikey')))) {
+                mtrace('Report LMS has not applied the organisation sent over an hour ago, sending it again.');
+            }
+        } catch (\moodle_exception $e) {
+            mtrace('Report LMS: could not ask for the plan limit, keeping the stored plan limit: '
+                . self::single_line($e->getMessage()));
+        }
+
         /*
          * Before the empty-queue return, not after.
          *
@@ -189,14 +218,18 @@ class push_batch extends \core\task\scheduled_task {
             mtrace('Report LMS: ' . $certificates . ' person(s) with a new certificate to send.');
         }
 
+        // Who is inside the plan, worked out once for the whole run, after the
+        // administrators above are known: they take no place.
+        $plan = plan_limit::current();
+
         // Taken before the batch is read: a change after this moment is newer than
         // what is about to be sent, and must stay dirty when the push is accepted.
         $readat = time();
-        $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN);
+        $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN, $plan->cutoff());
 
         if ($userids) {
             try {
-                $chunks = batch_builder::build($userids, time());
+                $chunks = batch_builder::build($userids, time(), $plan);
             } catch (\local_reportlms\local\push_refused_exception $e) {
                 // A refusal here is the builder declining to miscount (no
                 // gradable roles, contexts mid-rebuild), not a broken site. The
@@ -220,20 +253,23 @@ class push_batch extends \core\task\scheduled_task {
              * never, and the dashboard goes on showing an old name against
              * current numbers.
              */
-            $structure = batch_builder::structure_only(time());
+            $heartbeat = (int) get_config('local_reportlms', plan_limit::LAST_PUSH) < time() - self::HEARTBEAT_AFTER;
+            $structure = batch_builder::structure_only(time(), $plan, $heartbeat);
 
             if ($structure === null) {
-                mtrace('Report LMS: nothing to push.');
+                $held = userstate::count_held($plan->cutoff());
+                mtrace('Report LMS: nothing to push' . ($held ? ", {$held} held by the plan." : '.'));
 
                 return;
             }
 
-            mtrace('Report LMS: no learner changed, sending the organisation and catalogue.');
+            if ($heartbeat && !isset($structure->payload['org']) && empty($structure->dimhash)) {
+                mtrace('Report LMS: nothing sent for a day, sending a heartbeat.');
+            } else {
+                mtrace('Report LMS: no learner changed, sending the organisation and catalogue.');
+            }
             $chunks = [$structure];
         }
-
-        // Injectable so a test can hand back a refusal without a network.
-        $client = $this->client ?? new api_client(config::baseurl());
 
         $sent = 0;
         foreach ($chunks as $i => $chunk) {
@@ -276,6 +312,12 @@ class push_batch extends \core\task\scheduled_task {
 
             userstate::clear($chunk->userids, [], $readat);
 
+            // Any accepted push counts, so a quiet site knows when a heartbeat is due.
+            set_config(plan_limit::LAST_PUSH, time(), 'local_reportlms');
+
+            // The reply carries the limit too; an older Report LMS sends none.
+            plan_limit::store_reply($reply);
+
             // Rows for users that no longer exist have now been reported as
             // deleted once, so they are dropped rather than kept dirty.
             userstate::purge_orphans($chunk->userids);
@@ -288,6 +330,8 @@ class push_batch extends \core\task\scheduled_task {
             // now holds so unchanged trees are omitted from later pushes.
             if (isset($chunk->payload['org'])) {
                 set_config('lastorghash', substr($chunk->payload['org']['org_state_hash'], 2), 'local_reportlms');
+                // When, so a hash Report LMS has not applied an hour later is sent again.
+                set_config(plan_limit::ORG_SENT_AT, time(), 'local_reportlms');
 
                 // An org section only rides along when the tree changed, so
                 // this is the one moment we know a label may have moved. The
@@ -321,8 +365,18 @@ class push_batch extends \core\task\scheduled_task {
                 . ' learners accepted (' . ($reply['batch_id'] ?? 'no batch id') . ').');
         }
 
-        mtrace("Report LMS push complete: {$sent} learners sent, "
-            . userstate::count_dirty() . ' still waiting.');
+        $waiting = userstate::count_dirty();
+
+        if ($plan->cutoff() === null) {
+            mtrace("Report LMS push complete: {$sent} learners sent, {$waiting} still waiting.");
+
+            return;
+        }
+
+        // Held people are dirty too, but they are not on their way: split them out.
+        $held = userstate::count_held($plan->cutoff());
+        mtrace("Report LMS push complete: {$sent} learners sent, " . ($waiting - $held) . ' still waiting, '
+            . "{$held} held by the plan.");
     }
 
     /**
