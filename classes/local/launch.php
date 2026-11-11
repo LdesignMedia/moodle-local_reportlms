@@ -235,7 +235,7 @@ class launch {
      *
      * The parent's own kind, not an assumed one. This read `'sector'` outright,
      * from when a parent could only be a sector, and a code is built from the
-     * kind and the name together — so once a department could sit under another
+     * kind and the name together, so once a department could sit under another
      * department, the code minted for such a parent matched nothing the SaaS
      * held. It failed silently, the way a wrong hash does: the parent was simply
      * never nameable, with nothing logged and nothing to see but a code.

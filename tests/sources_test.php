@@ -27,6 +27,7 @@ namespace local_reportlms;
 
 use local_reportlms\local\collector\org;
 use local_reportlms\local\mapping;
+use local_reportlms\local\userstate;
 
 /**
  * The point of the whole thing is the second test in this file.
@@ -585,7 +586,7 @@ final class sources_test extends \advanced_testcase {
     private function unplaced_without(array $users): int {
         global $DB;
 
-        return $DB->count_records_select('user', 'deleted = 0 AND id > 2') - count($users);
+        return $DB->count_records_select('user', 'deleted = 0 AND id >= ' . userstate::FIRST_REPORTABLE_USERID) - count($users);
     }
 
     /**

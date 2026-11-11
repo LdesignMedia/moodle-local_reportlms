@@ -353,6 +353,8 @@ class mapping {
     protected static function people_for_profile_values(array $rows): array {
         global $DB;
 
+        [$reportable, $reportableparams] = userstate::reportable_sql();
+
         $found = [];
 
         foreach ($rows as $row) {
@@ -360,9 +362,10 @@ class mapping {
                       FROM {user_info_data} d
                       JOIN {user} u ON u.id = d.userid
                      WHERE d.fieldid = :fieldid AND " . $DB->sql_compare_text('d.data', 255) . " = :value
-                       AND u.deleted = 0 AND u.id > 2";
+                       AND u.deleted = 0 AND {$reportable}";
+            $params = ['fieldid' => (int) $row->itemid, 'value' => $row->itemvalue] + $reportableparams;
 
-            foreach ($DB->get_records_sql($sql, ['fieldid' => (int) $row->itemid, 'value' => $row->itemvalue]) as $hit) {
+            foreach ($DB->get_records_sql($sql, $params) as $hit) {
                 $found[(int) $hit->userid][(int) $row->nodeid] = (int) $row->nodeid;
             }
         }
@@ -496,16 +499,18 @@ class mapping {
     public static function participant_counts(): array {
         global $DB;
 
+        [$reportable, $reportableparams] = userstate::reportable_sql();
+
         $sql = "SELECT e.courseid, COUNT(DISTINCT ue.userid) headcount
                   FROM {user_enrolments} ue
                   JOIN {enrol} e ON e.id = ue.enrolid
                   JOIN {user} u ON u.id = ue.userid
-                 WHERE u.deleted = 0 AND u.id > 2
+                 WHERE u.deleted = 0 AND {$reportable}
               GROUP BY e.courseid";
 
         $counts = [];
 
-        foreach ($DB->get_records_sql($sql) as $row) {
+        foreach ($DB->get_records_sql($sql, $reportableparams) as $row) {
             $counts[(int) $row->courseid] = (int) $row->headcount;
         }
 
@@ -606,6 +611,8 @@ class mapping {
     protected static function people_by_source(string $itemtype, array $rows): array {
         global $DB;
 
+        [$reportable, $reportableparams] = userstate::reportable_sql();
+
         $found = [];
 
         if ($itemtype === 'profilefield') {
@@ -614,9 +621,10 @@ class mapping {
                           FROM {user_info_data} d
                           JOIN {user} u ON u.id = d.userid
                          WHERE d.fieldid = :fieldid AND " . $DB->sql_compare_text('d.data', 255) . " = :value
-                           AND u.deleted = 0 AND u.id > 2";
+                           AND u.deleted = 0 AND {$reportable}";
+                $params = ['fieldid' => (int) $row->itemid, 'value' => $row->itemvalue] + $reportableparams;
 
-                foreach ($DB->get_records_sql($sql, ['fieldid' => (int) $row->itemid, 'value' => $row->itemvalue]) as $hit) {
+                foreach ($DB->get_records_sql($sql, $params) as $hit) {
                     $found[(int) $hit->userid][] = (int) $row->id;
                 }
             }
@@ -935,7 +943,9 @@ class mapping {
 
         $count = 0;
 
-        foreach ($DB->get_fieldset_select('user', 'id', 'deleted = 0 AND id > 2') as $userid) {
+        [$reportable, $reportableparams] = userstate::reportable_sql('');
+
+        foreach ($DB->get_fieldset_select('user', 'id', "deleted = 0 AND {$reportable}", $reportableparams) as $userid) {
             if (empty($placed[(int) $userid]) && !isset($admins[(int) $userid])) {
                 $count++;
             }
@@ -1616,6 +1626,8 @@ class mapping {
             return [];
         }
 
+        [$reportable, $reportableparams] = userstate::reportable_sql();
+
         [$insql, $params] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED);
 
         $sql = "SELECT DISTINCT ue.userid
@@ -1624,9 +1636,9 @@ class mapping {
                   JOIN {user} u ON u.id = ue.userid
                  WHERE e.courseid {$insql}
                    AND u.deleted = 0
-                   AND u.id > 2";
+                   AND {$reportable}";
 
-        return array_map('intval', $DB->get_fieldset_sql($sql, $params));
+        return array_map('intval', $DB->get_fieldset_sql($sql, $params + $reportableparams));
     }
 
     /**

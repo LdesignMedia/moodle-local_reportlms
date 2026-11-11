@@ -115,12 +115,12 @@ class certificates {
                  WHERE u.deleted = 0
                    AND i.archived = 0
                    AND i.courseid IS NOT NULL
-                   AND i.courseid > 1
+                   AND i.courseid <> :siteid
                    AND i.userid {$insql}
               ORDER BY i.userid, i.courseid, i.timecreated";
 
         $rows = [];
-        $recordset = $DB->get_recordset_sql($sql, $params);
+        $recordset = $DB->get_recordset_sql($sql, $params + ['siteid' => SITEID]);
 
         foreach ($recordset as $record) {
             $rows[] = (object) [

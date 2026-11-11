@@ -92,7 +92,7 @@ class dimensions {
         return $DB->get_records_sql(
             "SELECT c.id, c.fullname, c.visible, c.enablecompletion, c.timecreated, c.category
                FROM {course} c
-              WHERE c.id > 1
+              WHERE c.id <> :siteid
                 AND (
                     EXISTS (
                         SELECT 1
@@ -106,7 +106,8 @@ class dimensions {
                          WHERE cc.course = c.id
                     )
                 )
-           ORDER BY c.id"
+           ORDER BY c.id",
+            ['siteid' => SITEID]
         );
     }
 

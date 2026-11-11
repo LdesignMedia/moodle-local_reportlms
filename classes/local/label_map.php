@@ -107,7 +107,7 @@ class label_map {
         if ($map === false) {
             $map = [];
 
-            foreach ($DB->get_fieldset_select('course', 'id', 'id > 1') as $courseid) {
+            foreach ($DB->get_fieldset_select('course', 'id', 'id <> :siteid', ['siteid' => SITEID]) as $courseid) {
                 $map[pseudonym::course((int) $courseid)] = (int) $courseid;
             }
 

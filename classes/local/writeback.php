@@ -210,7 +210,8 @@ class writeback {
         $placed = mapping::resolved_membership();
 
         $wanted = [];
-        $userids = $DB->get_fieldset_select('user', 'id', 'deleted = 0 AND id > 2');
+        [$reportable, $reportableparams] = userstate::reportable_sql('');
+        $userids = $DB->get_fieldset_select('user', 'id', "deleted = 0 AND {$reportable}", $reportableparams);
 
         foreach ($userids as $userid) {
             $userid = (int) $userid;

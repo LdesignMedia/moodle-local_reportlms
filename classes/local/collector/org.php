@@ -27,6 +27,7 @@
 namespace local_reportlms\local\collector;
 
 use local_reportlms\local\mapping;
+use local_reportlms\local\userstate;
 
 /**
  * The org section: the company tree, memberships and learner attributes.
@@ -150,16 +151,17 @@ class org {
             IGNORE_MULTIPLE
         );
 
+        [$reportable, $reportableparams] = userstate::reportable_sql();
         $sql = "SELECT u.id, u.auth, u.suspended, d.data AS functionvalue
                   FROM {user} u
              LEFT JOIN {user_info_data} d ON d.userid = u.id AND d.fieldid = :fieldid
-                 WHERE u.deleted = 0 AND u.id > 2
+                 WHERE u.deleted = 0 AND {$reportable}
               ORDER BY u.id";
 
         $members = [];
         $attrs = [];
 
-        $recordset = $DB->get_recordset_sql($sql, ['fieldid' => $fieldid]);
+        $recordset = $DB->get_recordset_sql($sql, ['fieldid' => $fieldid] + $reportableparams);
 
         foreach ($recordset as $row) {
             $uid = (int) $row->id;

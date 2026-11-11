@@ -111,7 +111,7 @@ class batch_builder {
          *
          * A deleted user has no enrolments left in Moodle and no profile
          * fields, so every collector below would return nothing for them and
-         * they would arrive as a learner whose slice is empty — which the SaaS
+         * they would arrive as a learner whose slice is empty, which the SaaS
          * reads as "taken off every course", not as "gone". The two are
          * different states and the second one cannot be inferred from an
          * absence, so it is stated in its own block instead.
@@ -151,7 +151,7 @@ class batch_builder {
              * their own block while still being enrolled, so the row already on
              * the SaaS had nothing to overwrite it and stayed countable
              * forever. That is open issue #13, and it is also what stopped the
-             * SaaS reading a slice as the whole truth about a learner — the
+             * SaaS reading a slice as the whole truth about a learner, the
              * absence of a course could mean unenrolled or merely not gradable,
              * and no reader can tell those apart.
              *
@@ -303,8 +303,8 @@ class batch_builder {
              *
              * The facts alone cannot say it. A learner who has just been taken
              * off every course sends no enrolment rows at all, so reading the
-             * roster out of the blocks would make the one case that matters —
-             * somebody with nothing left — indistinguishable from somebody who
+             * roster out of the blocks would make the one case that matters,
+             * somebody with nothing left, indistinguishable from somebody who
              * was never in this chunk.
              *
              * Named here, so the SaaS can treat their slice as the whole truth
@@ -342,7 +342,7 @@ class batch_builder {
                  * Whose dirty flag this chunk clears, which is not the same as
                  * whose slice it carries.
                  *
-                 * The departed are deliberately absent from `learners` above —
+                 * The departed are deliberately absent from `learners` above,
                  * that list is a claim to have sent somebody's whole state, and
                  * for them there is none. They are still waiting on a flag,
                  * though, and leaving it set retries the same departure every

@@ -51,6 +51,30 @@ class userstate {
      */
     public const FIRST_REPORTABLE_USERID = 3;
 
+    /** @var string Name of the named placeholder used by {@see reportable_sql()}. */
+    public const REPORTABLE_PARAM = 'firstreportableuserid';
+
+    /**
+     * The SQL condition that keeps the guest and the primary admin out.
+     *
+     * The one place the threshold {@see FIRST_REPORTABLE_USERID} (user ids 1 and 2
+     * are never reported) is turned into SQL, so no query carries the number
+     * itself. Use it in a WHERE clause next to the deleted check.
+     *
+     * @param string $alias Alias of the user table in the query, "u" by default; empty for an unaliased
+     *                      single-table query such as get_fieldset_select().
+     * @return array{0: string, 1: array<string, int>} The condition and its named parameters.
+     */
+    public static function reportable_sql(string $alias = 'u'): array {
+        if ($alias !== '' && !preg_match('/^[a-z][a-z0-9_]*$/i', $alias)) {
+            throw new \coding_exception('Invalid table alias');
+        }
+
+        $column = $alias === '' ? 'id' : "{$alias}.id";
+
+        return ["{$column} >= :" . self::REPORTABLE_PARAM, [self::REPORTABLE_PARAM => self::FIRST_REPORTABLE_USERID]];
+    }
+
     /**
      * Note that a learner changed.
      *
@@ -117,21 +141,22 @@ class userstate {
          * users who have never been tracked. Somebody deleted before the plugin
          * was installed has no enrolments, no completions and no history on the
          * far side, so marking them departed would create a learner who appears
-         * in no course, no department and no figure — noise standing in for
+         * in no course, no department and no figure, noise standing in for
          * information.
          *
          * Deletions that matter are learned from the user_deleted event while
          * the plugin is running, and those users already have a row here, which
          * the statement above marks dirty like any other.
          */
-        $sql = 'INSERT INTO {' . self::TABLE . '} (userid, dirty, timechanged, timepushed)
-                SELECT u.id, 1, ?, 0
+        [$reportable, $reportableparams] = self::reportable_sql();
+        $sql = 'INSERT INTO {' . self::TABLE . "} (userid, dirty, timechanged, timepushed)
+                SELECT u.id, 1, :now, 0
                   FROM {user} u
                  WHERE u.deleted = 0
-                   AND u.id >= ' . self::FIRST_REPORTABLE_USERID . '
-                   AND NOT EXISTS (SELECT 1 FROM {' . self::TABLE . '} s WHERE s.userid = u.id)';
-        // INSERT ... SELECT has no DML-API equivalent; every value is a placeholder or a class constant.
-        $DB->execute($sql, [time()]);
+                   AND {$reportable}
+                   AND NOT EXISTS (SELECT 1 FROM {" . self::TABLE . '} s WHERE s.userid = u.id)';
+        // INSERT ... SELECT has no DML-API equivalent; every value is a placeholder, the table a class constant.
+        $DB->execute($sql, ['now' => time()] + $reportableparams);
 
         return $DB->count_records(self::TABLE, ['dirty' => 1]);
     }

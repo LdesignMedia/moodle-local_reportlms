@@ -829,7 +829,7 @@ foreach (mapping::managers() as $managerrow) {
 /*
  * What a new unit can sit under: any department, at any depth.
  *
- * This offered only sectors, because the tree was two fixed levels — sectors
+ * This offered only sectors, because the tree was two fixed levels, sectors
  * holding departments. It is not any more: a department nests inside a
  * department, as deep as somebody needs, so every unit is a candidate parent
  * and the level picker has nothing left to ask.
@@ -894,7 +894,7 @@ if (!$nodes) {
     /*
      * The tree, as a tree.
      *
-     * The table used to say the shape in two columns — a Level that read
+     * The table used to say the shape in two columns, a Level that read
      * "Department" on every row once sectors were removed, and a "Sector above
      * it" naming a parent that is now itself a department. Indentation says the
      * same thing in no columns at all, and it is the shape somebody is actually
@@ -910,7 +910,7 @@ if (!$nodes) {
      * What the dashboard would say about this unit.
      *
      * The count was direct members only, so Operations read 0 on this page
-     * while its report read 22 — the people are in the departments underneath
+     * while its report read 22, the people are in the departments underneath
      * it. Two screens, one tree, two answers, and no way to tell which was
      * lying. Counted distinct, as the report counts it: somebody in two
      * departments of one sector is one person in that sector.
@@ -946,7 +946,7 @@ if (!$nodes) {
 
     $order(0);
 
-    // Anything the walk could not reach — a unit whose parent row has gone —
+    // Anything the walk could not reach, a unit whose parent row has gone,
     // still belongs on the page rather than disappearing from it.
     $treeorder += $nodes;
 
@@ -1153,7 +1153,7 @@ if (!$nodes) {
          *
          * A filtered table shows a unit whose parent may not be on screen, so
          * an indent would place it under whatever happens to be above it. There
-         * the parent is named beside it instead — the only place that column
+         * the parent is named beside it instead, the only place that column
          * still earns its width.
          */
         $depth = $depthof[(int) $node->id] ?? 0;

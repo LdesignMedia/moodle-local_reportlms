@@ -264,7 +264,9 @@ class learner_names {
         global $DB, $USER;
 
         if (access::can_view_all()) {
-            return $DB->get_fieldset_select('user', 'id', 'deleted = 0 AND id > 2');
+            [$reportable, $params] = userstate::reportable_sql('');
+
+            return $DB->get_fieldset_select('user', 'id', "deleted = 0 AND {$reportable}", $params);
         }
 
         /*

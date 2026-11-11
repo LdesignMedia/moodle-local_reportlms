@@ -156,8 +156,20 @@ class source_sweep {
         // grade and enrolment rows outlive the account, so a plain sweep marks
         // deleted learners dirty and the next push carries people who must not
         // be reported on at all.
+        // Identifiers come from the source lists in this plugin, never from input; checked all the same,
+        // as they are the one part of the statement that cannot be a placeholder.
+        foreach (['table', 'column', 'userfield'] as $part) {
+            if (!preg_match('/^[a-z][a-z0-9_]*$/', (string) $source[$part])) {
+                throw new \coding_exception('Invalid source definition');
+            }
+        }
+
+        // The optional join and where are SQL text written next to the source list (see reconcile_userstate),
+        // with the source table as "s"; they carry no value, so nothing is interpolated into them.
         $join = $source['join'] ?? '';
         $where = $source['where'] ?? '';
+        [$reportable, $reportableparams] = userstate::reportable_sql();
+        $params += $reportableparams;
         $sql = "SELECT s.{$source['userfield']} AS userid, MAX(s.{$source['column']}) AS changed
                   FROM {{$source['table']}} s
                   JOIN {user} u ON u.id = s.{$source['userfield']}
@@ -165,7 +177,7 @@ class source_sweep {
                  WHERE s.{$source['column']} > :from
                        {$window}
                    AND u.deleted = 0
-                   AND u.id >= " . userstate::FIRST_REPORTABLE_USERID . "
+                   AND {$reportable}
                        {$where}
               GROUP BY s.{$source['userfield']}";
 
