@@ -46,9 +46,9 @@ for your site address:
   [reportlms.com/pricing](https://reportlms.com/pricing).
 
 When a site has more people than its plan covers, reports show the people who joined
-the site first. For the others, only a coded id and the account status are sent, no
-learning data, until the plan grows. Site administrators take no place. The plugin's
-settings page shows the numbers.
+the site first. For the others, only a coded id, the account status and login method
+(and any unit they manage) are sent, no learning data, until the plan grows. Site
+administrators take no place. The plugin's settings page shows the numbers.
 
 ## Install and connect
 

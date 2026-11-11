@@ -84,7 +84,8 @@ final class plan_limit_cases_test extends \advanced_testcase {
         $this->assertStringContainsString('0 still waiting, 3 held by the plan', $output);
         $this->assertStringContainsString(
             'Your plan covers 0 people. This site has 3 people. Reports show nobody. '
-                . 'For everybody only a coded id and the account status are sent, no learning data.',
+                . 'For everybody only a coded id, the account status and login method '
+                . '(and any unit they manage) are sent, no learning data.',
             plan_limit::notice()
         );
     }
@@ -194,6 +195,29 @@ final class plan_limit_cases_test extends \advanced_testcase {
         $this->pretend_everything_was_pushed();
         unset_config(plan_limit::ORG_SENT_AT, 'local_reportlms');
         $client = $this->client(['org_state_hash_applied' => 'h_' . get_config('local_reportlms', 'lastorghash')]);
+
+        $this->run_task($client);
+
+        $this->assertSame([], $client->payloads);
+    }
+
+    public function test_a_first_organisation_the_app_never_applied_is_sent_again(): void {
+        $this->people(2);
+        $this->pretend_everything_was_pushed();
+        set_config(plan_limit::ORG_SENT_AT, time() - 2 * HOURSECS, 'local_reportlms');
+        $client = $this->client(['org_state_hash_applied' => null]);
+
+        $this->run_task($client);
+
+        $this->assertCount(1, $client->payloads);
+        $this->assertArrayHasKey('org', $client->payloads[0]);
+    }
+
+    public function test_an_older_app_that_never_says_is_not_sent_anything_again(): void {
+        $this->people(2);
+        $this->pretend_everything_was_pushed();
+        set_config(plan_limit::ORG_SENT_AT, time() - 2 * HOURSECS, 'local_reportlms');
+        $client = $this->client([]);
 
         $this->run_task($client);
 

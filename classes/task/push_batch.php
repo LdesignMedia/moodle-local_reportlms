@@ -414,8 +414,16 @@ class push_batch extends \core\task\scheduled_task {
      */
     protected function follow_plan(api_client $client): void {
         if (!backoff::due('health')) {
-            mtrace('Report LMS: not asking for the plan limit yet after ' . backoff::fails('health')
-                . ' failed tries, keeping the stored plan limit.');
+            // Said as it is: after an answer that the key ended, nothing failed.
+            if (get_config('local_reportlms', plan_limit::KEY_ENDED) !== false) {
+                mtrace('Report LMS: this site\'s key has ended, not asking again yet, keeping the stored plan limit.');
+
+                return;
+            }
+
+            $fails = backoff::fails('health');
+            mtrace('Report LMS: not asking for the plan limit yet after ' . $fails
+                . ($fails === 1 ? ' failed try' : ' failed tries') . ', keeping the stored plan limit.');
 
             return;
         }

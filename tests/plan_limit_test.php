@@ -264,7 +264,8 @@ final class plan_limit_test extends \advanced_testcase {
 
         $this->assertStringContainsString(
             'Your plan covers 2 people. This site has 25,012 people. Reports show the first 2. '
-                . 'For the other 25,010 only a coded id and the account status are sent, no learning data.',
+                . 'For the other 25,010 only a coded id, the account status and login method '
+                . '(and any unit they manage) are sent, no learning data.',
             plan_limit::notice()
         );
     }
@@ -407,9 +408,34 @@ final class plan_limit_test extends \advanced_testcase {
         set_config('lastorghashat', time() - 2 * HOURSECS, 'local_reportlms');
 
         $this->assertFalse(plan_limit::follow_health(['org_state_hash_applied' => 'h_abc']));
-        $this->assertFalse(plan_limit::follow_health(['org_state_hash_applied' => null]));
+        // No key at all is an older Report LMS, which never says.
         $this->assertFalse(plan_limit::follow_health([]));
+        $this->assertFalse(plan_limit::follow_health(['org_state_hash_applied' => 42]));
         $this->assertSame('abc', get_config('local_reportlms', 'lastorghash'));
+    }
+
+    public function test_an_explicit_null_means_the_app_never_applied_one(): void {
+        $never = ['org_state_hash_applied' => null];
+
+        // Fresh: the batch may still be in the queue.
+        set_config('lastorghash', 'abc', 'local_reportlms');
+        set_config('lastorghashat', time() - 600, 'local_reportlms');
+        $this->assertFalse(plan_limit::follow_health($never));
+        $this->assertSame('abc', get_config('local_reportlms', 'lastorghash'));
+
+        // Over an hour: sent again.
+        set_config('lastorghashat', time() - 2 * HOURSECS, 'local_reportlms');
+        $this->assertTrue(plan_limit::follow_health($never));
+        $this->assertFalse(get_config('local_reportlms', 'lastorghash'));
+        $this->assertSame(1, plan_limit::org_resends());
+
+        // And the same backoff: the next resend waits two hours.
+        set_config('lastorghash', 'abc', 'local_reportlms');
+        set_config('lastorghashat', time() - 90 * MINSECS, 'local_reportlms');
+        $this->assertFalse(plan_limit::follow_health($never));
+        set_config('lastorghashat', time() - 2 * HOURSECS - MINSECS, 'local_reportlms');
+        $this->assertTrue(plan_limit::follow_health($never));
+        $this->assertSame(2, plan_limit::org_resends());
     }
 
     public function test_the_task_resends_an_organisation_the_app_lost(): void {

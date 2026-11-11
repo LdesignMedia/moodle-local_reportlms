@@ -239,9 +239,9 @@ class plan_limit {
     /**
      * Follow what a health reply says: the limit, and whether the organisation arrived.
      *
-     * Report LMS answers with the organisation hash it last applied. When that
-     * is not the one this site last had accepted, and that was long enough
-     * ago, Report LMS lost it, so the saved hash is cleared and the
+     * Report LMS answers with the organisation hash it last applied, or null
+     * when it never applied one. When that is not the one this site last had
+     * accepted, and that was long enough ago, Report LMS lost it, so the saved hash is cleared and the
      * organisation goes again on this run. A newer mismatch is left alone:
      * Report LMS works through accepted batches in a queue.
      *
@@ -255,9 +255,15 @@ class plan_limit {
     public static function follow_health(array $health): bool {
         self::store_reply($health);
 
-        $applied = $health['org_state_hash_applied'] ?? null;
+        // No key at all is an older Report LMS, which never says what it applied.
+        if (!array_key_exists('org_state_hash_applied', $health)) {
+            return false;
+        }
 
-        if (!is_string($applied) || $applied === '') {
+        $applied = $health['org_state_hash_applied'];
+
+        // Anything but a hash or an explicit null is not an answer this plugin can read.
+        if ($applied !== null && (!is_string($applied) || $applied === '')) {
             return false;
         }
 
@@ -267,14 +273,19 @@ class plan_limit {
             return false;
         }
 
-        if (strpos($applied, 'h_') === 0) {
-            $applied = substr($applied, 2);
-        }
+        // An explicit null: Report LMS never applied any organisation for this
+        // site, so a first section that was accepted and then lost in its
+        // queue is sent again, by the same rule as a different hash.
+        if ($applied !== null) {
+            if (strpos($applied, 'h_') === 0) {
+                $applied = substr($applied, 2);
+            }
 
-        if ($applied === $saved) {
-            self::forget_resends();
+            if ($applied === $saved) {
+                self::forget_resends();
 
-            return false;
+                return false;
+            }
         }
 
         $resends = self::org_resends();
@@ -377,11 +388,10 @@ class plan_limit {
                 : get_string('limit:held', 'local_reportlms', self::number($held));
         }
 
-        $sentences[] = get_string(
-            'limit:upgrade',
-            'local_reportlms',
-            \html_writer::link(new \moodle_url($pricing), s($pricing))
-        );
+        // A plain string, not a moodle_url: html_writer escapes it either way,
+        // and moodle_url throws on an address parse_url() rejects, which would
+        // take the whole settings page down with it.
+        $sentences[] = get_string('limit:upgrade', 'local_reportlms', \html_writer::link($pricing, s($pricing)));
 
         return implode(' ', $sentences);
     }

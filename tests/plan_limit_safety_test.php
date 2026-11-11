@@ -163,7 +163,7 @@ final class plan_limit_safety_test extends \advanced_testcase {
         $client = $this->client(null);
         $output = $this->run_task($client);
         $this->assertSame(0, $client->healthcalls);
-        $this->assertStringContainsString('keeping the stored plan limit', $output);
+        $this->assertStringContainsString('after 1 failed try, keeping the stored plan limit', $output);
 
         // An hour later it tries again, fails again, and waits two hours.
         set_config('healthfailedat', time() - HOURSECS - MINSECS, 'local_reportlms');
@@ -198,9 +198,11 @@ final class plan_limit_safety_test extends \advanced_testcase {
         $this->assertStringContainsString('key has ended', $output);
 
         $client = $this->client(['key_expires_at' => gmdate('Y-m-d\TH:i:s\Z', time() - DAYSECS)]);
-        $this->run_task($client);
+        $output = $this->run_task($client);
         $this->assertSame(0, $client->healthcalls);
         $this->assertSame(0, $client->pushcalls);
+        $this->assertStringContainsString('key has ended', $output);
+        $this->assertStringNotContainsString('failed tr', $output, 'The call did not fail, it said the key ended.');
 
         // Renewed: the next answer says so, and the heartbeat goes.
         set_config('healthfailedat', time() - HOURSECS - MINSECS, 'local_reportlms');
@@ -274,6 +276,9 @@ final class plan_limit_safety_test extends \advanced_testcase {
                 $this->fail('A plain http address must be refused.');
             } catch (\moodle_exception $e) {
                 $this->assertSame('error:insecurebaseurl', $e->errorcode);
+                // The address may be pinned in config.php, where the settings page cannot change it.
+                $this->assertStringContainsString('https://', $e->getMessage());
+                $this->assertStringContainsString('config.php', $e->getMessage());
             }
         }
     }
@@ -289,7 +294,8 @@ final class plan_limit_safety_test extends \advanced_testcase {
         plan_limit::store_reply($this->limits(2));
         $this->assertSame(
             'Your plan covers 2 people. This site has 5 people. Reports show the first 2. '
-                . 'For the other 3 only a coded id and the account status are sent, no learning data. '
+                . 'For the other 3 only a coded id, the account status and login method '
+                . '(and any unit they manage) are sent, no learning data. '
                 . 'Upgrade at <a href="https://reportlms.com/pricing">https://reportlms.com/pricing</a>.',
             plan_limit::notice()
         );
@@ -302,7 +308,8 @@ final class plan_limit_safety_test extends \advanced_testcase {
 
         plan_limit::store_reply($this->limits(4));
         $this->assertStringContainsString(
-            'Reports show the first 4. For the other person only a coded id and the account status are sent',
+            'Reports show the first 4. For the other person only a coded id, the account status and login method '
+                . '(and any unit they manage) are sent, no learning data.',
             plan_limit::notice()
         );
     }
@@ -316,6 +323,18 @@ final class plan_limit_safety_test extends \advanced_testcase {
 
         $this->assertStringNotContainsString('a=1&b=', $notice);
         $this->assertStringContainsString('a=1&amp;b=', $notice);
+    }
+
+    public function test_a_base_url_moodle_cannot_parse_still_shows_the_notice(): void {
+        $this->people(2);
+        plan_limit::store_reply($this->limits(1));
+        // A port no URL can have: Moodle's own URL class refuses it, and the
+        // settings page must still build. Only config.php can pin such a value.
+        set_config('baseurl', 'https://reportlms.example.com:99999', 'local_reportlms');
+
+        $notice = plan_limit::notice();
+
+        $this->assertStringContainsString('https://reportlms.example.com:99999/pricing', $notice);
     }
 
     /**
