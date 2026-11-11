@@ -1033,9 +1033,7 @@ if (!$nodes) {
                     ? $nodes[$node->parentid]->name
                     : '';
 
-                // Deliberately strpos and not str_contains: $plugin->requires
-                // still names Moodle 3.9, which runs on PHP 7.
-                if (strpos(\core_text::strtolower($node->name . ' ' . $parent), $needle) === false) {
+                if (!str_contains(\core_text::strtolower($node->name . ' ' . $parent), $needle)) {
                     return false;
                 }
             }

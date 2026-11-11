@@ -60,17 +60,16 @@ class block_visibility {
          * $PAGE, not $this->page.
          *
          * The sniff reads any class whose name begins with "block" as a block
-         * class, and this one is not: it is a local helper called from a hook
-         * and from the legacy head callback, neither of which has a block
-         * instance to ask.
+         * class, and this one is not: it is a local helper called from a hook,
+         * which has no block instance to ask.
          */
         // phpcs:ignore moodle.PHP.ForbiddenGlobalUse.BadGlobal
         global $CFG, $PAGE;
 
         try {
-            // The legacy callback path is guarded by core against running
-            // during install and upgrade; the hooks path is not, and half an
-            // upgrade in, our tables and capabilities may not exist yet.
+            // Core does not guard hook callbacks during install and upgrade,
+            // and half an upgrade in, our tables and capabilities may not
+            // exist yet.
             if (during_initial_install() || !empty($CFG->upgraderunning)) {
                 return '';
             }

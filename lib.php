@@ -37,16 +37,3 @@ function local_reportlms_orgfield_updated(): void {
     \local_reportlms\local\userstate::mark_all_dirty();
     \local_reportlms\local\label_map::purge();
 }
-
-/**
- * Per-viewer CSS for the stored dashboard block.
- *
- * The legacy half of the pair in classes/hook/: this one covers
- * Moodle 3.9-4.2; on 4.3+ the registered hook runs instead and core skips
- * this function, so nothing ever runs twice.
- *
- * @return string
- */
-function local_reportlms_before_standard_html_head(): string {
-    return \local_reportlms\local\block_visibility::css();
-}

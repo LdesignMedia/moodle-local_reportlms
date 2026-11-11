@@ -228,12 +228,4 @@ All three keys, because is_connected() checks all three. */
 
         $this->assertSame('', block_visibility::css());
     }
-
-    public function test_the_legacy_callback_and_the_hook_agree(): void {
-        global $CFG;
-        require_once($CFG->dirroot . '/local/reportlms/lib.php');
-        $this->setAdminUser();
-
-        $this->assertSame(block_visibility::css(), local_reportlms_before_standard_html_head());
-    }
 }

@@ -31,12 +31,9 @@ use local_reportlms\local\block_visibility;
 /**
  * Class before_standard_head_html_generation
  *
- * The hooks-API side of the pair in lib.php. Both exist on purpose: this one
- * is what Moodle 4.3+ dispatches (and its presence makes core skip the legacy
- * callback, so nothing runs twice); the lib.php function covers the 3.9-4.2
- * range version.php still claims. Both delegate to block_visibility, which
- * carries its own install/upgrade guard, core guards the legacy path but not
- * this one.
+ * Adds the per-viewer CSS for the stored dashboard block to the page head.
+ * It delegates to block_visibility, which carries its own install/upgrade
+ * guard: core does not guard hook callbacks during install and upgrade.
  *
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  *

@@ -29,7 +29,7 @@ dashboard adds them in the manager's browser, straight from your own Moodle.
 
 ## Requirements
 
-- Moodle **3.9+** and PHP **8.0+**, using a PHP version supported by your Moodle release.
+- Moodle **4.5, 5.0 or 5.1** and PHP **8.1+**, using a PHP version supported by your Moodle release.
 - A Report LMS free trial or subscription (see [Pricing](#pricing)), outbound HTTPS
   access and working Moodle cron.
 
@@ -63,8 +63,8 @@ for your site address:
   <img src=".github/assets/setup.png" alt="Report LMS setup: request a licence, read the statement, connect" width="600">
 </p>
 
-For manual installation, place the plugin in `local/reportlms` on Moodle 3.9–5.0,
-or `public/local/reportlms` on Moodle 5.1 and later.
+For manual installation, place the plugin in `local/reportlms` on Moodle 4.5 and 5.0,
+or `public/local/reportlms` on Moodle 5.1.
 
 Data is sent by cron. **Disconnect** stops all sending. **Reconnect** verifies the
 site again, also when the previous key expired or was lost.
