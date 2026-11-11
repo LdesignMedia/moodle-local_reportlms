@@ -175,4 +175,23 @@ final class manage_actions_test extends \basic_testcase {
             . 'redirect and looks like it worked.'
         );
     }
+
+    /**
+     * Login, the capability and the session key all come before the first action runs.
+     */
+    public function test_login_capability_and_sesskey_precede_the_actions(): void {
+        $page = $this->page();
+
+        $login = strpos($page, 'require_login();');
+        $capability = strpos($page, 'require_capability(access::MANAGE, $context);');
+        $sesskey = strpos($page, 'require_sesskey();');
+        $switch = strpos($page, 'switch ($action) {');
+
+        $this->assertNotFalse($login);
+        $this->assertNotFalse($capability);
+        $this->assertNotFalse($sesskey);
+        $this->assertLessThan($capability, $login);
+        $this->assertLessThan($sesskey, $capability);
+        $this->assertLessThan($switch, $sesskey);
+    }
 }

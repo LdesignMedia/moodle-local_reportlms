@@ -285,11 +285,10 @@ class mapping {
             // A category means the whole branch under it, so the courses are
             // resolved first and then treated exactly like a course source.
             foreach ($nodesfor as $categoryid => $nodeids) {
-                foreach (self::courses_under([$categoryid]) as $courseid) {
-                    foreach (self::participants_of([$courseid]) as $userid) {
-                        foreach ($nodeids as $nodeid) {
-                            $found[(int) $userid][$nodeid] = $nodeid;
-                        }
+                // One participant query per category, not one per course beneath it.
+                foreach (self::participants_of(self::courses_under([$categoryid])) as $userid) {
+                    foreach ($nodeids as $nodeid) {
+                        $found[(int) $userid][$nodeid] = $nodeid;
                     }
                 }
             }
@@ -305,21 +304,21 @@ class mapping {
                           FROM {user_enrolments} ue
                           JOIN {enrol} e ON e.id = ue.enrolid
                           JOIN {user} u ON u.id = ue.userid
-                         WHERE e.courseid {$insql} AND u.deleted = 0 AND u.id > 2";
+                         WHERE e.courseid {$insql} AND u.deleted = 0 AND u.id > :minuserid";
                 break;
 
             case 'group':
                 $sql = "SELECT gm.id, gm.userid, gm.groupid AS item
                           FROM {groups_members} gm
                           JOIN {user} u ON u.id = gm.userid
-                         WHERE gm.groupid {$insql} AND u.deleted = 0 AND u.id > 2";
+                         WHERE gm.groupid {$insql} AND u.deleted = 0 AND u.id > :minuserid";
                 break;
 
             case 'cohort':
                 $sql = "SELECT cm.id, cm.userid, cm.cohortid AS item
                           FROM {cohort_members} cm
                           JOIN {user} u ON u.id = cm.userid
-                         WHERE cm.cohortid {$insql} AND u.deleted = 0 AND u.id > 2";
+                         WHERE cm.cohortid {$insql} AND u.deleted = 0 AND u.id > :minuserid";
                 break;
 
             case 'profilefield':
@@ -328,6 +327,9 @@ class mapping {
             default:
                 return [];
         }
+
+        // Guest and the primary admin account are never participants.
+        $params['minuserid'] = 2;
 
         foreach ($DB->get_recordset_sql($sql, $params) as $row) {
             foreach ($nodesfor[(int) $row->item] ?? [] as $nodeid) {
@@ -653,26 +655,29 @@ class mapping {
                           FROM {user_enrolments} ue
                           JOIN {enrol} e ON e.id = ue.enrolid
                           JOIN {user} u ON u.id = ue.userid
-                         WHERE e.courseid {$insql} AND u.deleted = 0 AND u.id > 2";
+                         WHERE e.courseid {$insql} AND u.deleted = 0 AND u.id > :minuserid";
                 break;
 
             case 'group':
                 $sql = "SELECT gm.id, gm.userid, gm.groupid AS item
                           FROM {groups_members} gm
                           JOIN {user} u ON u.id = gm.userid
-                         WHERE gm.groupid {$insql} AND u.deleted = 0 AND u.id > 2";
+                         WHERE gm.groupid {$insql} AND u.deleted = 0 AND u.id > :minuserid";
                 break;
 
             case 'cohort':
                 $sql = "SELECT cm.id, cm.userid, cm.cohortid AS item
                           FROM {cohort_members} cm
                           JOIN {user} u ON u.id = cm.userid
-                         WHERE cm.cohortid {$insql} AND u.deleted = 0 AND u.id > 2";
+                         WHERE cm.cohortid {$insql} AND u.deleted = 0 AND u.id > :minuserid";
                 break;
 
             default:
                 return [];
         }
+
+        // Guest and the primary admin account are never participants.
+        $params['minuserid'] = 2;
 
         foreach ($DB->get_recordset_sql($sql, $params) as $row) {
             foreach ($rowsfor[(int) $row->item] ?? [] as $sourceid) {

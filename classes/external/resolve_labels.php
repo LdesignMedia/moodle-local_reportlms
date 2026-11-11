@@ -82,6 +82,14 @@ class resolve_labels extends external_api {
         // they are already allowed to see is not a system-level act.
         $context = context_system::instance();
         self::validate_context($context);
+        /*
+         * Capability check: local/reportlms:view, enforced through the shared
+         * access helper so every surface answers the same way. The helper calls
+         * require_capability() on the system context for site administrators and
+         * on every context where the user holds a role, because the manager
+         * role is normally assigned at a course or category rather than at the
+         * system. db/services.php declares the same capability for this function.
+         */
         access::require_view();
 
         $wanted = array_slice(array_values(array_unique($params['codes'])), 0, self::MAX_CODES);

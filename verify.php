@@ -21,15 +21,20 @@
  * site claiming an address really is that address. Only whoever operates this
  * site can make it serve a chosen value.
  *
- * Deliberately public, with NO_MOODLE_COOKIES: a site with forcelogin enabled
- * serves no public HTML at all, so a meta tag on the front page would be
- * invisible to us and the check would fail for exactly the corporate sites we
- * are aiming at.
+ * This endpoint is public by design and has no require_login() on purpose.
+ * Report LMS calls it server to server, without any Moodle session, while an
+ * administrator is connecting this site. NO_MOODLE_COOKIES keeps it from
+ * starting or touching a session, and a site with forcelogin enabled still has
+ * to answer: such a site serves no public HTML at all, so a meta tag on the
+ * front page would be invisible and the check would fail for exactly the
+ * corporate sites this plugin is aimed at.
  *
- * The page never serves the token. Report LMS sends a fresh nonce and gets
- * back an HMAC of it keyed by the token. Anybody can call this page, but a
- * proof for their own nonce is no use for Report LMS's nonce. Answers only
- * while a connect attempt is open.
+ * Nothing sensitive is served and nothing is changed. The page never returns
+ * the verification token. Report LMS sends a fresh nonce and gets back an HMAC
+ * of it keyed by the token. Anybody can call this page, but a proof for their
+ * own nonce is of no use for Report LMS's nonce. It answers only while a
+ * connect attempt is open, and it only reads: it writes no data and runs no
+ * action on behalf of the caller.
  *
  * @package    local_reportlms
  * @copyright  2026 Luuk Verhoeven, ldesignmedia.nl <info@ldesignmedia.nl>
@@ -54,7 +59,7 @@ header('X-Robots-Tag: noindex, nofollow');
 
 if ($nonce === '') {
     header('HTTP/1.1 400 Bad Request');
-    echo 'nonce required';
+    echo get_string('error:verifynoncerequired', 'local_reportlms');
     exit;
 }
 
@@ -63,7 +68,7 @@ $proof = connect_manager::verification_proof($nonce);
 if ($proof === '') {
     // No connect attempt is open, so there is nothing to verify against.
     header('HTTP/1.1 404 Not Found');
-    echo 'no pending verification';
+    echo get_string('error:verifynopending', 'local_reportlms');
     exit;
 }
 

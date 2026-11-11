@@ -269,3 +269,5 @@ $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';
 $string['error:pushfailed'] = 'Could not reach Report LMS for the push: {$a}';
 $string['error:pushrejected'] = 'Report LMS refused the push: {$a}';
+$string['error:verifynoncerequired'] = 'A nonce is required.';
+$string['error:verifynopending'] = 'No connection attempt is waiting to be verified.';

@@ -105,6 +105,14 @@ class resolve_learner_contacts extends external_api {
 
         // Opens the door, exactly as for names. Which codes are answered is
         // still decided per code by the candidate set.
+        /*
+         * Capability check: local/reportlms:view, enforced through the shared
+         * access helper so every surface answers the same way. The helper calls
+         * require_capability() on the system context for site administrators and
+         * on every context where the user holds a role, because the manager
+         * role is normally assigned at a course or category rather than at the
+         * system. db/services.php declares the same capability for this function.
+         */
         access::require_view();
 
         // Asked before the size check, so a viewer who may not export contact

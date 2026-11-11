@@ -87,4 +87,12 @@ final class verification_proof_test extends \advanced_testcase {
         $this->open_attempt(time() + 600);
         $this->assertSame('', connect_manager::verification_proof(''));
     }
+
+    /**
+     * The plain-text answers verify.php gives come from language strings.
+     */
+    public function test_the_error_answers_are_language_strings(): void {
+        $this->assertSame('A nonce is required.', get_string('error:verifynoncerequired', 'local_reportlms'));
+        $this->assertNotEmpty(get_string('error:verifynopending', 'local_reportlms'));
+    }
 }

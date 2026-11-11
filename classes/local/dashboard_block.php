@@ -175,12 +175,16 @@ class dashboard_block {
             return false;
         }
 
-        // Only stdClass, and never a class this site happens to autoload: a
-        // block's configdata is admin-editable, and unserialising it into
-        // arbitrary objects would be an object injection surface.
-        $config = @unserialize($decoded, ['allowed_classes' => ['stdClass']]);
+        // Not a serialised stdClass, so not something Moodle wrote for a block.
+        if (!str_starts_with($decoded, 'O:8:"stdClass":')) {
+            return false;
+        }
 
-        if (!is_object($config) || !isset($config->text)) {
+        // Core's own decoder, as block_base uses for configdata: it only ever
+        // builds a stdClass, whatever the stored string names.
+        $config = unserialize_object($decoded);
+
+        if (!isset($config->text)) {
             return false;
         }
 

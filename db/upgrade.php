@@ -341,9 +341,7 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         if (\local_reportlms\local\connect_manager::is_connected()) {
             require_once($CFG->dirroot . '/completion/criteria/completion_criteria.php');
 
-            $table = '{' . \local_reportlms\local\userstate::TABLE . '}';
             $firstuserid = \local_reportlms\local\userstate::FIRST_REPORTABLE_USERID;
-            $now = time();
 
             $takers = "SELECT qa.userid
                          FROM {quiz_attempts} qa
@@ -355,22 +353,12 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
                              AND ccc.criteriatype = ?
                          JOIN {user} au ON au.id = qa.userid
                         WHERE au.deleted = 0
-                          AND au.id >= {$firstuserid}
+                          AND au.id >= ?
                           AND qa.state = 'finished'
                           AND qa.preview = 0";
 
-            $DB->execute(
-                "UPDATE {$table} SET dirty = 1, timechanged = ? WHERE userid IN ({$takers})",
-                [$now, COMPLETION_CRITERIA_TYPE_ACTIVITY]
-            );
-
-            $DB->execute(
-                "INSERT INTO {$table} (userid, dirty, timechanged, timepushed)
-                 SELECT u.id, 1, ?, 0
-                   FROM {user} u
-                  WHERE u.id IN ({$takers})
-                    AND NOT EXISTS (SELECT 1 FROM {$table} s WHERE s.userid = u.id)",
-                [$now, COMPLETION_CRITERIA_TYPE_ACTIVITY]
+            \local_reportlms\local\userstate::flag_dirty(
+                $DB->get_fieldset_sql($takers, [COMPLETION_CRITERIA_TYPE_ACTIVITY, $firstuserid])
             );
         }
 
@@ -405,15 +393,13 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
         set_config('watermark_courseaccess', time(), 'local_reportlms');
 
         if (\local_reportlms\local\connect_manager::is_connected()) {
-            $table = '{' . \local_reportlms\local\userstate::TABLE . '}';
             $firstuserid = \local_reportlms\local\userstate::FIRST_REPORTABLE_USERID;
-            $now = time();
 
             $unstarted = "SELECT cc.userid
                             FROM {course_completions} cc
                             JOIN {user} au ON au.id = cc.userid
                            WHERE au.deleted = 0
-                             AND au.id >= {$firstuserid}
+                             AND au.id >= ?
                              AND cc.timecompleted IS NULL
                              AND NOT EXISTS (
                                      SELECT 1
@@ -422,19 +408,7 @@ function xmldb_local_reportlms_upgrade(int $oldversion): bool {
                                         AND ula.courseid = cc.course
                                  )";
 
-            $DB->execute(
-                "UPDATE {$table} SET dirty = 1, timechanged = ? WHERE userid IN ({$unstarted})",
-                [$now]
-            );
-
-            $DB->execute(
-                "INSERT INTO {$table} (userid, dirty, timechanged, timepushed)
-                 SELECT u.id, 1, ?, 0
-                   FROM {user} u
-                  WHERE u.id IN ({$unstarted})
-                    AND NOT EXISTS (SELECT 1 FROM {$table} s WHERE s.userid = u.id)",
-                [$now]
-            );
+            \local_reportlms\local\userstate::flag_dirty($DB->get_fieldset_sql($unstarted, [$firstuserid]));
         }
 
         upgrade_plugin_savepoint(true, 2026102300, 'local', 'reportlms');

@@ -106,7 +106,7 @@ class userstate {
 
         // Existing rows first, then everyone missing a row.
         $DB->set_field(self::TABLE, 'dirty', 1, []);
-        $DB->execute('UPDATE {' . self::TABLE . '} SET timechanged = ?', [time()]);
+        $DB->set_field(self::TABLE, 'timechanged', time(), []);
 
         /*
          * Deleted users are not backfilled, and that is deliberate.
@@ -130,6 +130,7 @@ class userstate {
                  WHERE u.deleted = 0
                    AND u.id >= ' . self::FIRST_REPORTABLE_USERID . '
                    AND NOT EXISTS (SELECT 1 FROM {' . self::TABLE . '} s WHERE s.userid = u.id)';
+        // INSERT ... SELECT has no DML-API equivalent; every value is a placeholder or a class constant.
         $DB->execute($sql, [time()]);
 
         return $DB->count_records(self::TABLE, ['dirty' => 1]);
@@ -194,6 +195,7 @@ class userstate {
                 $params[] = $readat;
             }
 
+            // Two columns in one statement, guarded by the read timestamp; set_field_select() sets one column only.
             $DB->execute(
                 'UPDATE {' . self::TABLE . '} SET dirty = 0, timepushed = ? WHERE userid ' . $insql . $unchanged,
                 array_merge([$now], $params),
@@ -202,6 +204,40 @@ class userstate {
 
         foreach ($hashes as $userid => $hash) {
             $DB->set_field(self::TABLE, 'contenthash', $hash, ['userid' => $userid]);
+        }
+    }
+
+    /**
+     * Flag the given users as changed, adding a row for anybody not tracked yet.
+     *
+     * Set-based per chunk: the rows that exist are flagged, then a dirty row is
+     * inserted for each user who has none.
+     *
+     * @param int[] $userids Real, non-deleted users; the caller has already filtered.
+     *
+     * @return void
+     */
+    public static function flag_dirty(array $userids): void {
+        global $DB;
+
+        $now = time();
+
+        foreach (array_chunk(array_values(array_unique(array_map('intval', $userids))), 1000) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);
+
+            $DB->set_field_select(self::TABLE, 'dirty', 1, 'userid ' . $insql, $params);
+            $DB->set_field_select(self::TABLE, 'timechanged', $now, 'userid ' . $insql, $params);
+
+            $tracked = $DB->get_fieldset_select(self::TABLE, 'userid', 'userid ' . $insql, $params);
+            $rows = [];
+
+            foreach (array_diff($chunk, array_map('intval', $tracked)) as $userid) {
+                $rows[] = (object) ['userid' => $userid, 'dirty' => 1, 'timechanged' => $now, 'timepushed' => 0];
+            }
+
+            if ($rows) {
+                $DB->insert_records(self::TABLE, $rows);
+            }
         }
     }
 
@@ -237,6 +273,7 @@ class userstate {
             }
 
             [$insql, $params] = $DB->get_in_or_equal($userids);
+            // Two columns in one statement; set_field_select() sets one column only.
             $DB->execute(
                 'UPDATE {' . self::TABLE . '} SET dirty = 1, timechanged = ? WHERE userid ' . $insql,
                 array_merge([$now], $params),
@@ -261,11 +298,11 @@ class userstate {
 
         foreach (array_chunk($userids, 500) as $chunk) {
             [$insql, $params] = $DB->get_in_or_equal($chunk);
-            $DB->execute(
-                'DELETE FROM {' . self::TABLE . '}
-                       WHERE userid ' . $insql . '
+            $DB->delete_records_select(
+                self::TABLE,
+                'userid ' . $insql . '
                          AND NOT EXISTS (SELECT 1 FROM {user} u WHERE u.id = {' . self::TABLE . '}.userid)',
-                $params,
+                $params
             );
         }
     }

@@ -75,9 +75,13 @@ class batch_builder {
             return [];
         }
 
-        [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
+        // In chunks, so a very large dirty set never becomes one oversized IN list.
+        $present = [];
 
-        $present = $DB->get_records_select('user', "id $insql", $params, 'id ASC', 'id, deleted');
+        foreach (array_chunk($userids, 5000) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);
+            $present += $DB->get_records_select('user', "id $insql", $params, 'id ASC', 'id, deleted');
+        }
 
         $departed = [];
         foreach ($userids as $userid) {

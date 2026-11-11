@@ -38,7 +38,7 @@ $context = context_system::instance();
 // who may state a fact about the organisation is not thereby entitled to read
 // the consequences of it, which is what lets a training coordinator maintain
 // the tree without being given sight of everybody's progress.
-access::require_manage();
+require_capability(access::MANAGE, $context);
 
 $pageurl = new moodle_url('/local/reportlms/view/manage.php');
 
@@ -124,7 +124,10 @@ function local_reportlms_multiselect_param(string $name, string $type): array {
     return optional_param_array($name, [], $type);
 }
 
-if ($action !== '' && confirm_sesskey()) {
+if ($action !== '') {
+    // Every action link and form on this page carries the session key; anything without it is refused.
+    require_sesskey();
+
     switch ($action) {
         case 'addnode':
             $name = trim(required_param('name', PARAM_TEXT));
