@@ -130,14 +130,9 @@ class api_client {
      * @throws \moodle_exception On transport failure or a non-2xx reply.
      */
     public function health(string $apikey): array {
-        global $CFG;
-        require_once($CFG->libdir . '/filelib.php');
-
         $this->require_secure();
 
-        // Same rationale as post(): the admin-configured first-party endpoint
-        // must not be rejected by the cURL SSRF blocklist.
-        $curl = new \curl(['ignoresecurity' => true]);
+        $curl = $this->make_curl();
         $curl->setHeader([
             'Accept: application/json',
             'Authorization: Bearer ' . $apikey,
@@ -185,39 +180,18 @@ class api_client {
         string $signingsecret,
         string $idempotencykey
     ): array {
-        global $CFG;
-        require_once($CFG->libdir . '/filelib.php');
-
-        $this->require_secure();
-
-        $timestamp = time();
-        $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawbody, $signingsecret);
-
-        // Same rationale as post(): the admin-configured first-party endpoint
-        // must not be rejected by the cURL SSRF blocklist.
-        $curl = new \curl(['ignoresecurity' => true]);
-        $curl->setHeader([
-            'Content-Type: application/json',
-            'Accept: application/json',
-            'Authorization: Bearer ' . $apikey,
-            'X-RL-Timestamp: ' . $timestamp,
-            'X-RL-Signature: ' . $signature,
-            'Idempotency-Key: ' . $idempotencykey,
-        ]);
-
-        $response = $curl->post($this->baseurl . $pushpath, $rawbody, [
+        [$httpcode, $response] = $this->signed_post(
+            $pushpath,
+            $rawbody,
+            $apikey,
+            $signingsecret,
+            ['Idempotency-Key: ' . $idempotencykey],
             // Batches run to a few MB on a first backfill.
-            'CURLOPT_TIMEOUT' => 120,
-            'CURLOPT_CONNECTTIMEOUT' => 10,
-        ]);
+            120,
+            'error:pushfailed'
+        );
 
-        if ($curl->get_errno()) {
-            throw new \moodle_exception('error:pushfailed', 'local_reportlms', '', $curl->error);
-        }
-
-        $info = $curl->get_info();
-        $httpcode = (int) ($info['http_code'] ?? 0);
-        $decoded = json_decode((string) $response, true);
+        $decoded = json_decode($response, true);
 
         if ($httpcode < 200 || $httpcode >= 300 || !is_array($decoded)) {
             $message = is_array($decoded) && !empty($decoded['message'])
@@ -274,37 +248,14 @@ class api_client {
      * @throws \moodle_exception On transport failure or a non-2xx reply.
      */
     public function contact(string $apikey, string $signingsecret, string $email): array {
-        global $CFG;
-        require_once($CFG->libdir . '/filelib.php');
+        [$httpcode, $response] = $this->signed_post(
+            config::CONTACT_PATH,
+            json_encode(['contact_email' => $email]),
+            $apikey,
+            $signingsecret
+        );
 
-        $this->require_secure();
-
-        $rawbody = json_encode(['contact_email' => $email]);
-        $timestamp = time();
-        $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawbody, $signingsecret);
-
-        // Same rationale as post(): the admin-configured first-party endpoint
-        // must not be rejected by the cURL SSRF blocklist.
-        $curl = new \curl(['ignoresecurity' => true]);
-        $curl->setHeader([
-            'Content-Type: application/json',
-            'Accept: application/json',
-            'Authorization: Bearer ' . $apikey,
-            'X-RL-Timestamp: ' . $timestamp,
-            'X-RL-Signature: ' . $signature,
-        ]);
-
-        $response = $curl->post($this->baseurl . config::CONTACT_PATH, $rawbody, [
-            'CURLOPT_TIMEOUT' => 15,
-            'CURLOPT_CONNECTTIMEOUT' => 10,
-        ]);
-
-        if ($curl->get_errno()) {
-            throw new \moodle_exception('error:connectfailed', 'local_reportlms', '', $curl->error);
-        }
-
-        $httpcode = (int) ($curl->get_info()['http_code'] ?? 0);
-        $decoded = json_decode((string) $response, true);
+        $decoded = json_decode($response, true);
 
         if ($httpcode < 200 || $httpcode >= 300 || !is_array($decoded)) {
             throw new \moodle_exception('error:connectrejected', 'local_reportlms', '', 'HTTP ' . $httpcode);
@@ -328,36 +279,14 @@ class api_client {
      * @throws \moodle_exception On transport failure or a non-2xx reply.
      */
     public function claim(string $apikey, string $signingsecret, string $code): array {
-        global $CFG;
-        require_once($CFG->libdir . '/filelib.php');
+        [$httpcode, $response] = $this->signed_post(
+            config::CLAIM_PATH,
+            json_encode(['code' => $code]),
+            $apikey,
+            $signingsecret
+        );
 
-        $this->require_secure();
-
-        $rawbody = json_encode(['code' => $code]);
-        $timestamp = time();
-        $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawbody, $signingsecret);
-
-        // Same rationale as post(): the admin-configured first-party endpoint
-        // must not be rejected by the cURL SSRF blocklist.
-        $curl = new \curl(['ignoresecurity' => true]);
-        $curl->setHeader([
-            'Content-Type: application/json',
-            'Accept: application/json',
-            'Authorization: Bearer ' . $apikey,
-            'X-RL-Timestamp: ' . $timestamp,
-            'X-RL-Signature: ' . $signature,
-        ]);
-
-        $response = $curl->post($this->baseurl . config::CLAIM_PATH, $rawbody, [
-            'CURLOPT_TIMEOUT' => 15,
-            'CURLOPT_CONNECTTIMEOUT' => 10,
-        ]);
-
-        if ($curl->get_errno()) {
-            throw new \moodle_exception('error:connectfailed', 'local_reportlms', '', $curl->error);
-        }
-
-        return self::claim_answer((int) ($curl->get_info()['http_code'] ?? 0), (string) $response);
+        return self::claim_answer($httpcode, $response);
     }
 
     /**
@@ -368,6 +297,12 @@ class api_client {
      * administrator reading the page, so that sentence travels with the
      * exception. Too many tries gets a sentence of its own, because the
      * framework that answers it says nothing useful.
+     *
+     * A reply with no sentence in it (a bare server error, a page in front of
+     * Report LMS, a body that is not JSON), any 5xx, and a 409 that is not an
+     * answer to the code (the replay guard, which carries no status) say
+     * nothing about the code. They get "could not answer right now", so an
+     * administrator does not think the code itself was wrong.
      *
      * @param int $httpcode The HTTP status of the reply.
      * @param string $response The body of the reply.
@@ -385,9 +320,12 @@ class api_client {
             throw new \moodle_exception('error:claimtoomany', 'local_reportlms');
         }
 
-        $message = is_array($decoded) && is_string($decoded['message'] ?? null) && trim($decoded['message']) !== ''
-            ? trim($decoded['message'])
-            : 'HTTP ' . $httpcode;
+        $message = is_array($decoded) && is_string($decoded['message'] ?? null) ? trim($decoded['message']) : '';
+        $answered = is_array($decoded) && array_key_exists('status', $decoded);
+
+        if ($message === '' || $httpcode >= 500 || ($httpcode === 409 && !$answered)) {
+            throw new \moodle_exception('error:claimunavailable', 'local_reportlms', '', 'HTTP ' . $httpcode);
+        }
 
         throw new \moodle_exception('error:claimrefused', 'local_reportlms', '', $message);
     }
@@ -401,17 +339,9 @@ class api_client {
      * @throws \moodle_exception On transport failure or a non-2xx reply.
      */
     protected function post(string $path, array $payload): array {
-        global $CFG;
-        require_once($CFG->libdir . '/filelib.php');
-
         $this->require_secure();
 
-        // ignoresecurity: this call only ever targets the admin-configured
-        // Report LMS base URL, a trusted first-party endpoint, so it must not be
-        // rejected by Moodle's cURL SSRF blocklist. Without it a self-hosted
-        // Report LMS on a private network, or any site with hardened
-        // curlsecurityblockedhosts, fails to connect with "The URL is blocked".
-        $curl = new \curl(['ignoresecurity' => true]);
+        $curl = $this->make_curl();
         $curl->setHeader([
             'Content-Type: application/json',
             'Accept: application/json',
@@ -441,5 +371,78 @@ class api_client {
         }
 
         return $decoded;
+    }
+
+    /**
+     * POST a body keyed with the API key and signed with the signing secret.
+     *
+     * The one place the signature is made: an HMAC-SHA256 of the timestamp, a
+     * dot and the exact bytes that go on the wire, so the body is passed in
+     * already encoded. Every call signs afresh with its own timestamp, so a
+     * retry is never a replay.
+     *
+     * @param string $path Path on the Report LMS host.
+     * @param string $rawbody The JSON body, already encoded.
+     * @param string $apikey Bearer key identifying the environment.
+     * @param string $secret Secret the body signature is built with.
+     * @param array $headers More headers, such as an idempotency key.
+     * @param int $timeout Seconds the whole request may take.
+     * @param string $transporterror The error string when Report LMS cannot be reached.
+     * @return array The HTTP status of the reply, then its body.
+     * @throws \moodle_exception When the base URL is not https, or on transport failure.
+     */
+    protected function signed_post(
+        string $path,
+        string $rawbody,
+        string $apikey,
+        string $secret,
+        array $headers = [],
+        int $timeout = 15,
+        string $transporterror = 'error:connectfailed'
+    ): array {
+        $this->require_secure();
+
+        $timestamp = time();
+        $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawbody, $secret);
+
+        $curl = $this->make_curl();
+        $curl->setHeader(array_merge([
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Authorization: Bearer ' . $apikey,
+            'X-RL-Timestamp: ' . $timestamp,
+            'X-RL-Signature: ' . $signature,
+        ], $headers));
+
+        $response = $curl->post($this->baseurl . $path, $rawbody, [
+            'CURLOPT_TIMEOUT' => $timeout,
+            'CURLOPT_CONNECTTIMEOUT' => 10,
+        ]);
+
+        if ($curl->get_errno()) {
+            throw new \moodle_exception($transporterror, 'local_reportlms', '', $curl->error);
+        }
+
+        return [(int) ($curl->get_info()['http_code'] ?? 0), (string) $response];
+    }
+
+    /**
+     * A cURL handle for one request to Report LMS.
+     *
+     * ignoresecurity: every call only ever targets the admin-configured Report
+     * LMS base URL, a trusted first-party endpoint, so it must not be rejected
+     * by Moodle's cURL SSRF blocklist. Without it a self-hosted Report LMS on a
+     * private network, or any site with hardened curlsecurityblockedhosts,
+     * fails to connect with "The URL is blocked".
+     *
+     * Its own method, so a test can see exactly what is sent.
+     *
+     * @return \curl
+     */
+    protected function make_curl(): \curl {
+        global $CFG;
+        require_once($CFG->libdir . '/filelib.php');
+
+        return new \curl(['ignoresecurity' => true]);
     }
 }

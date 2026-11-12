@@ -51,8 +51,10 @@ class claim_form extends \moodleform {
             'spellcheck' => 'false',
             'placeholder' => 'K7QF-29XM',
         ]);
-        // Letters, digits and dashes. Anything else is dropped, so a code
-        // pasted with a space in it still arrives.
+        // PARAM_ALPHANUMEXT keeps letters, digits, dashes and underscores and
+        // drops anything else, so a code pasted with a space in it still
+        // arrives. claim_code::normalise() then drops the dashes and
+        // underscores too.
         $mform->setType('code', PARAM_ALPHANUMEXT);
         $mform->addRule('code', get_string('claim:invalid', 'local_reportlms'), 'required', null, 'client');
 

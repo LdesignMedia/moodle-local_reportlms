@@ -39,6 +39,9 @@ class claim_code {
     /** @var int The longest code worth sending, once spaces and dashes are gone. */
     public const MAX_LENGTH = 32;
 
+    /** @var int The longest answer shown, in characters: the words partly come from Report LMS. */
+    public const MAX_MESSAGE = 500;
+
     /**
      * The one form a code is sent in: upper case, letters and digits only.
      *
@@ -55,12 +58,16 @@ class claim_code {
     /**
      * Send a claim code and say what Report LMS answered.
      *
-     * Never throws for an answer: a refusal is something to show the
-     * administrator, in the words Report LMS chose for it.
+     * Never throws: a refusal is something to show the administrator, in
+     * the words Report LMS chose for it, and anything else that goes wrong
+     * becomes one plain sentence. Nothing about the code, the keys or the
+     * failure is logged.
      *
      * @param string $code What the administrator typed.
      * @param api_client|null $client Optional client override for tests.
-     * @return array{success: bool, message: string}
+     * @return array{success: bool, message: string} The message is plain text,
+     *     partly written by Report LMS, at most MAX_MESSAGE characters: escape it
+     *     before output.
      */
     public static function send(string $code, ?api_client $client = null): array {
         $code = self::normalise($code);
@@ -83,14 +90,32 @@ class claim_code {
                 $code
             );
         } catch (\moodle_exception $exception) {
-            return ['success' => false, 'message' => $exception->getMessage()];
+            return ['success' => false, 'message' => self::shorten($exception->getMessage())];
+        } catch (\Throwable $exception) {
+            // A fault on this side, not an answer: said plainly, and nothing
+            // about it is shown or kept.
+            return ['success' => false, 'message' => get_string('claim:failed', 'local_reportlms')];
         }
 
         $message = is_string($answer['message'] ?? null) ? trim($answer['message']) : '';
 
         return [
             'success' => true,
-            'message' => $message !== '' ? $message : get_string('claim:success', 'local_reportlms'),
+            'message' => $message !== '' ? self::shorten($message) : get_string('claim:success', 'local_reportlms'),
         ];
+    }
+
+    /**
+     * Cut an answer to MAX_MESSAGE characters, so a long reply cannot fill the page.
+     *
+     * @param string $message Plain text.
+     * @return string
+     */
+    protected static function shorten(string $message): string {
+        if (\core_text::strlen($message) <= self::MAX_MESSAGE) {
+            return $message;
+        }
+
+        return rtrim(\core_text::substr($message, 0, self::MAX_MESSAGE - 3)) . '...';
     }
 }

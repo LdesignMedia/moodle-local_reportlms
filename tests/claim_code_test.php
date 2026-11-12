@@ -220,22 +220,229 @@ final class claim_code_test extends \advanced_testcase {
         }
     }
 
-    public function test_an_answer_without_words_is_refused_by_its_status_code(): void {
+    public function test_a_reply_that_says_nothing_about_the_code_is_not_called_a_refusal(): void {
         $answers = [
-            500 => '<html>Server error</html>',
-            404 => '',
+            'a bare server error' => [500, '<html>Server error</html>'],
+            'a server error with words' => [503, json_encode(['message' => 'Service Unavailable'])],
+            'an empty not found' => [404, ''],
             // A success that is not JSON is not a success: nothing says what happened.
-            200 => 'OK',
+            'a success that is not JSON' => [200, 'OK'],
+            // The replay guard answers 409 with words but no status.
+            'the replay guard' => [409, json_encode(['message' => 'Replay detected.'])],
         ];
 
-        foreach ($answers as $httpcode => $body) {
+        foreach ($answers as $label => [$httpcode, $body]) {
             try {
                 api_client::claim_answer($httpcode, $body);
-                $this->fail('HTTP ' . $httpcode . ' without JSON must be refused.');
+                $this->fail($label . ' must not count as an answer.');
             } catch (\moodle_exception $e) {
-                $this->assertSame('error:claimrefused', $e->errorcode);
-                $this->assertStringContainsString('HTTP ' . $httpcode, $e->getMessage());
+                $this->assertSame('error:claimunavailable', $e->errorcode, $label);
+                $this->assertSame(get_string('error:claimunavailable', 'local_reportlms', 'HTTP ' . $httpcode), $e->getMessage());
             }
+        }
+    }
+
+    public function test_an_unexpected_failure_is_one_plain_sentence(): void {
+        $this->connected_site();
+        $calls = [];
+
+        $result = claim_code::send('K7QF-29XM', $this->client($calls, new \RuntimeException('detail from inside')));
+
+        $this->assertFalse($result['success']);
+        $this->assertSame(get_string('claim:failed', 'local_reportlms'), $result['message']);
+    }
+
+    public function test_a_long_answer_is_cut_short(): void {
+        $this->connected_site();
+
+        $answers = [
+            ['message' => str_repeat('Done. ', 400)],
+            new \moodle_exception('error:claimrefused', 'local_reportlms', '', str_repeat('No. ', 600)),
+        ];
+
+        foreach ($answers as $answer) {
+            $calls = [];
+
+            $result = claim_code::send('K7QF-29XM', $this->client($calls, $answer));
+
+            $this->assertLessThanOrEqual(claim_code::MAX_MESSAGE, \core_text::strlen($result['message']));
+            $this->assertStringEndsWith('...', $result['message']);
+        }
+    }
+
+    /**
+     * A client whose cURL handle records what would go on the wire and answers from the script.
+     *
+     * @param array $sent Filled with one entry per request: url, headers and body.
+     * @param int $httpcode The status to answer with.
+     * @param string $body The body to answer with.
+     * @return api_client
+     */
+    private function watched_client(
+        array &$sent,
+        int $httpcode = 200,
+        string $body = '{"status":"claimed","message":"Done."}'
+    ): api_client {
+        global $CFG;
+        require_once($CFG->libdir . '/filelib.php');
+
+        return new class ('https://reportlms.invalid', $sent, $httpcode, $body) extends api_client {
+            /** @var array */
+            private $sent;
+
+            /** @var int */
+            private $httpcode;
+
+            /** @var string */
+            private $body;
+
+            /**
+             * Constructor.
+             *
+             * @param string $baseurl
+             * @param array $sent
+             * @param int $httpcode
+             * @param string $body
+             */
+            public function __construct(string $baseurl, array &$sent, int $httpcode, string $body) {
+                parent::__construct($baseurl);
+                $this->sent = &$sent;
+                $this->httpcode = $httpcode;
+                $this->body = $body;
+            }
+
+            /**
+             * A handle that records instead of sending.
+             *
+             * @return \curl
+             */
+            protected function make_curl(): \curl {
+                return new class ($this->sent, $this->httpcode, $this->body) extends \curl {
+                    /** @var array */
+                    private $sent;
+
+                    /** @var int */
+                    private $httpcode;
+
+                    /** @var string */
+                    private $body;
+
+                    /** @var array */
+                    private $headers = [];
+
+                    /**
+                     * Constructor.
+                     *
+                     * @param array $sent
+                     * @param int $httpcode
+                     * @param string $body
+                     */
+                    public function __construct(array &$sent, int $httpcode, string $body) {
+                        parent::__construct(['ignoresecurity' => true]);
+                        $this->sent = &$sent;
+                        $this->httpcode = $httpcode;
+                        $this->body = $body;
+                    }
+
+                    /**
+                     * Keep the headers.
+                     *
+                     * @param array|string $header
+                     */
+                    public function setHeader($header) { // phpcs:ignore moodle.NamingConventions.ValidFunctionName
+                        $this->headers = array_merge($this->headers, (array) $header);
+                    }
+
+                    /**
+                     * Record the request instead of sending it.
+                     *
+                     * @param string $url
+                     * @param array|string $params
+                     * @param array $options
+                     * @return string
+                     */
+                    public function post($url, $params = '', $options = []) {
+                        $this->sent[] = ['url' => $url, 'headers' => $this->headers, 'body' => $params];
+
+                        return $this->body;
+                    }
+
+                    /**
+                     * Nothing went wrong on the way.
+                     *
+                     * @return int
+                     */
+                    public function get_errno() {
+                        return 0;
+                    }
+
+                    /**
+                     * The scripted status.
+                     *
+                     * @return array
+                     */
+                    public function get_info() {
+                        return ['http_code' => $this->httpcode];
+                    }
+                };
+            }
+        };
+    }
+
+    /**
+     * The headers of a recorded request, by name.
+     *
+     * @param array $request
+     * @return array
+     */
+    private function headers_of(array $request): array {
+        $headers = [];
+
+        foreach ($request['headers'] as $line) {
+            [$name, $value] = explode(':', $line, 2);
+            $headers[trim($name)] = trim($value);
+        }
+
+        return $headers;
+    }
+
+    public function test_the_claim_is_keyed_signed_and_sent_to_the_claim_path(): void {
+        $sent = [];
+
+        $answer = $this->watched_client($sent)->claim('the-key', 'the-secret', 'K7QF29XM');
+
+        $this->assertSame(['status' => 'claimed', 'message' => 'Done.'], $answer);
+        $this->assertCount(1, $sent);
+        $this->assertSame('https://reportlms.invalid/api/v1/push/claim', $sent[0]['url']);
+        $this->assertSame('{"code":"K7QF29XM"}', $sent[0]['body']);
+
+        $headers = $this->headers_of($sent[0]);
+        $this->assertSame('Bearer the-key', $headers['Authorization']);
+        $this->assertEqualsWithDelta(time(), (int) $headers['X-RL-Timestamp'], 5);
+        $this->assertSame(
+            'sha256=' . hash_hmac('sha256', $headers['X-RL-Timestamp'] . '.' . $sent[0]['body'], 'the-secret'),
+            $headers['X-RL-Signature']
+        );
+    }
+
+    public function test_the_contact_and_the_push_are_signed_the_same_way(): void {
+        $sent = [];
+        $client = $this->watched_client($sent, 200, '{"contact_email_set":true,"batch_id":"b1"}');
+
+        $client->contact('the-key', 'the-secret', 'lms@example.org');
+        $client->push('/api/v1/push/batch', '{"rows":[]}', 'the-key', 'the-secret', 'env:1:hash');
+
+        $this->assertSame('https://reportlms.invalid/api/v1/push/contact', $sent[0]['url']);
+        $this->assertSame('https://reportlms.invalid/api/v1/push/batch', $sent[1]['url']);
+        $this->assertSame('{"rows":[]}', $sent[1]['body']);
+        $this->assertSame('env:1:hash', $this->headers_of($sent[1])['Idempotency-Key']);
+
+        foreach ($sent as $request) {
+            $headers = $this->headers_of($request);
+            $this->assertSame(
+                'sha256=' . hash_hmac('sha256', $headers['X-RL-Timestamp'] . '.' . $request['body'], 'the-secret'),
+                $headers['X-RL-Signature']
+            );
         }
     }
 

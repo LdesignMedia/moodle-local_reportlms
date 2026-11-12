@@ -46,7 +46,8 @@ require_sesskey();
 try {
     (new connect_manager())->connect();
 } catch (moodle_exception $exception) {
-    redirect($returnurl, $exception->getMessage(), null, \core\output\notification::NOTIFY_ERROR);
+    // The message can carry words from Report LMS, and a notification prints HTML.
+    redirect($returnurl, s($exception->getMessage()), null, \core\output\notification::NOTIFY_ERROR);
 }
 
 // Confirms the contact email with Report LMS straight away. Never fails the connect.
