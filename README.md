@@ -74,6 +74,11 @@ or `public/local/reportlms` on Moodle 5.1.
 Data is sent by cron. **Disconnect** stops all sending. **Reconnect** verifies the
 site again, also when the previous key expired or was lost.
 
+**Claim code** (since 0.9.1): before your Report LMS account can buy, move or cancel
+the licence of this site online, it has to prove that it runs this site. Copy the
+claim code from your account page on reportlms.com, open **Plugins → Local plugins →
+Report LMS**, press **Enter a claim code** and send it. Connecting does not need it.
+
 ## Privacy
 
 Report LMS never receives learner names, email addresses or other free text. Learner ids

@@ -314,6 +314,85 @@ class api_client {
     }
 
     /**
+     * Send a claim code on its own signed call.
+     *
+     * The code is copied from an account page on Report LMS. Sending it from
+     * here proves that account runs this site. Keyed and signed like push(),
+     * so a key without the signing secret is not enough. Report LMS takes the
+     * site address from its own record of this key, never from the request.
+     *
+     * @param string $apikey Bearer key identifying the environment.
+     * @param string $signingsecret Secret the body signature is built with.
+     * @param string $code The claim code, upper case, letters and digits only.
+     * @return array Decoded response, carrying status and message.
+     * @throws \moodle_exception On transport failure or a non-2xx reply.
+     */
+    public function claim(string $apikey, string $signingsecret, string $code): array {
+        global $CFG;
+        require_once($CFG->libdir . '/filelib.php');
+
+        $this->require_secure();
+
+        $rawbody = json_encode(['code' => $code]);
+        $timestamp = time();
+        $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawbody, $signingsecret);
+
+        // Same rationale as post(): the admin-configured first-party endpoint
+        // must not be rejected by the cURL SSRF blocklist.
+        $curl = new \curl(['ignoresecurity' => true]);
+        $curl->setHeader([
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Authorization: Bearer ' . $apikey,
+            'X-RL-Timestamp: ' . $timestamp,
+            'X-RL-Signature: ' . $signature,
+        ]);
+
+        $response = $curl->post($this->baseurl . config::CLAIM_PATH, $rawbody, [
+            'CURLOPT_TIMEOUT' => 15,
+            'CURLOPT_CONNECTTIMEOUT' => 10,
+        ]);
+
+        if ($curl->get_errno()) {
+            throw new \moodle_exception('error:connectfailed', 'local_reportlms', '', $curl->error);
+        }
+
+        return self::claim_answer((int) ($curl->get_info()['http_code'] ?? 0), (string) $response);
+    }
+
+    /**
+     * Read the answer to a claim code.
+     *
+     * A refusal is an ordinary answer here, not a fault: a wrong code, an
+     * address held by another account. Report LMS writes its sentence for the
+     * administrator reading the page, so that sentence travels with the
+     * exception. Too many tries gets a sentence of its own, because the
+     * framework that answers it says nothing useful.
+     *
+     * @param int $httpcode The HTTP status of the reply.
+     * @param string $response The body of the reply.
+     * @return array Decoded response on a 2xx with a JSON body.
+     * @throws \moodle_exception For anything else.
+     */
+    public static function claim_answer(int $httpcode, string $response): array {
+        $decoded = json_decode($response, true);
+
+        if ($httpcode >= 200 && $httpcode < 300 && is_array($decoded)) {
+            return $decoded;
+        }
+
+        if ($httpcode === 429) {
+            throw new \moodle_exception('error:claimtoomany', 'local_reportlms');
+        }
+
+        $message = is_array($decoded) && is_string($decoded['message'] ?? null) && trim($decoded['message']) !== ''
+            ? trim($decoded['message'])
+            : 'HTTP ' . $httpcode;
+
+        throw new \moodle_exception('error:claimrefused', 'local_reportlms', '', $message);
+    }
+
+    /**
      * POST JSON and decode the reply.
      *
      * @param string $path Path on the Report LMS host.

@@ -53,6 +53,9 @@ class config {
     /** @var string Where the plugin sends the contact email the moment it is saved. */
     public const CONTACT_PATH = '/api/v1/push/contact';
 
+    /** @var string Where the plugin sends a claim code, to prove which account runs this site. */
+    public const CLAIM_PATH = '/api/v1/push/claim';
+
     /** @var string Where the SaaS serves the embedded dashboard. */
     public const DEFAULT_EMBED_PATH = '/embed';
 
