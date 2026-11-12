@@ -1,0 +1,50 @@
+name: release-zip
+
+# Attaches local_reportlms.zip to every published release. The name never
+# changes, so this link always downloads the newest release:
+# https://github.com/LdesignMedia/moodle-local_reportlms/releases/latest/download/local_reportlms.zip
+#
+# The zip holds one folder, reportlms, which is what Moodle's "Install plugin
+# from ZIP" expects. It leaves out .github and .gitignore, like the release
+# zips made by hand.
+#
+# To attach the zip to an existing release, run this workflow by hand with the
+# release's tag.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of the release to attach the zip to, for example v0.9.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Build the zip
+        run: |
+          git archive --format=zip --prefix=reportlms/ -o local_reportlms.zip HEAD -- . ':(exclude).github' ':(exclude).gitignore'
+          # Fails the run when the zip is not shaped the way Moodle needs it.
+          unzip -Z1 local_reportlms.zip > files.txt
+          grep -qx 'reportlms/version.php' files.txt
+          if grep -qv '^reportlms/' files.txt; then
+            echo "Every file must sit inside the reportlms folder." >&2
+            exit 1
+          fi
+
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" local_reportlms.zip --clobber --repo "$GITHUB_REPOSITORY"
