@@ -8,6 +8,11 @@ name: release-zip
 # from ZIP" expects. It leaves out .github and .gitignore, like the release
 # zips made by hand.
 #
+# GitHub points the link at a new release the moment it is published, before
+# this workflow has run, so also attach local_reportlms.zip when creating the
+# release (gh release create TAG local_reportlms.zip ...). This workflow then
+# replaces it with the same build, and covers a release made without it.
+#
 # To attach the zip to an existing release, run this workflow by hand with the
 # release's tag.
 
@@ -32,13 +37,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
 
       - name: Build the zip
         run: |
           git archive --format=zip --prefix=reportlms/ -o local_reportlms.zip HEAD -- . ':(exclude).github' ':(exclude).gitignore'
           # Fails the run when the zip is not shaped the way Moodle needs it.
           unzip -Z1 local_reportlms.zip > files.txt
-          grep -qx 'reportlms/version.php' files.txt
+          if ! grep -qx 'reportlms/version.php' files.txt; then
+            echo "reportlms/version.php is missing." >&2
+            exit 1
+          fi
           if grep -qv '^reportlms/' files.txt; then
             echo "Every file must sit inside the reportlms folder." >&2
             exit 1
