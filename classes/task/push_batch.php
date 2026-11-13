@@ -287,10 +287,10 @@ class push_batch extends \core\task\scheduled_task {
                     backoff::failed('heartbeat');
                 }
 
-                // So does any push while the key has ended.
-                if (backoff::key_has_ended()) {
-                    backoff::failed('push');
-                }
+                // Every refused push counts, so the first one accepted after an
+                // outage is known as a recovery. The count holds the next push
+                // back only while the key has ended.
+                backoff::failed('push');
 
                 /*
                  * A refusal for want of the data statement is a decision, not
@@ -332,11 +332,11 @@ class push_batch extends \core\task\scheduled_task {
                 $accepted = true;
                 set_config(plan_limit::LAST_PUSH, time(), 'local_reportlms');
 
-                // Accepted after the key ended or after refused pushes: a
-                // recovery, so the plan limit is asked on the next run rather
-                // than after the health call's wait. An ordinary accepted push
-                // leaves that wait alone.
-                if (backoff::key_has_ended() || backoff::fails('push') > 0 || backoff::fails('heartbeat') > 0) {
+                // Accepted after the key ended or after refused pushes, the
+                // heartbeat included: a recovery, so the plan limit is asked on
+                // the next run rather than after the health call's wait. An
+                // ordinary accepted push leaves that wait alone.
+                if (backoff::key_has_ended() || backoff::fails('push') > 0) {
                     backoff::succeeded('health');
                 }
 

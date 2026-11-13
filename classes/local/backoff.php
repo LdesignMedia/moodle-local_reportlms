@@ -33,7 +33,9 @@ namespace local_reportlms\local;
  * heartbeat, and every push while Report LMS says the key has ended. A key
  * that has ended, or a Report LMS that keeps refusing, would otherwise get
  * the same call every fifteen minutes for as long as the site runs. One
- * success starts the count again.
+ * success starts the count again. Every refused push is counted, so an
+ * accepted one is known as a recovery, but the count holds pushes back only
+ * while the key has ended.
  *
  * A count belongs to the Report LMS address it was made against, so fixing
  * the address, in the settings or in config.php, starts it again.

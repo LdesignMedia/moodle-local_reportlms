@@ -295,6 +295,34 @@ final class plan_limit_safety_test extends \advanced_testcase {
         $this->assertTrue(backoff::due('push'));
     }
 
+    public function test_the_first_push_accepted_after_an_outage_ends_the_health_wait(): void {
+        $this->people(1);
+        userstate::mark_all_dirty();
+
+        // Report LMS is down: the health call fails and waits, the push is refused.
+        $client = $this->client(null);
+        $client->refuse = 'Service Unavailable';
+        $this->run_task($client);
+        $this->assertSame(1, $client->healthcalls);
+        $this->assertSame(1, $client->pushcalls);
+
+        // Still down on the next run: the push goes again, the health call waits.
+        $client = $this->client(null);
+        $client->refuse = 'Service Unavailable';
+        $this->run_task($client);
+        $this->assertSame(0, $client->healthcalls);
+        $this->assertSame(1, $client->pushcalls, 'An ordinary refusal never holds the next push.');
+        $this->assertFalse(backoff::due('health'));
+
+        // Back up: the first accepted push is a recovery, so the plan limit is asked on the next run.
+        $client = $this->client([]);
+        $this->run_task($client);
+        $this->assertSame(0, $client->healthcalls);
+        $this->assertCount(1, $client->payloads);
+        $this->assertTrue(backoff::due('health'));
+        $this->assertTrue(backoff::due('push'));
+    }
+
     public function test_a_renewed_key_is_noticed_within_an_hour(): void {
         $clock = $this->mock_clock_with_frozen();
         $this->people(1);
