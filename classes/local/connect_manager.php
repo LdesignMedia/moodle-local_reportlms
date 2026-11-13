@@ -145,6 +145,9 @@ class connect_manager {
         if (!empty($data['tier'])) {
             set_config('tier', $data['tier'], 'local_reportlms');
         }
+        // How many people the plan covers, when Report LMS says so. An older
+        // Report LMS sends no limit, and then what is stored stays.
+        plan_limit::store_reply($data);
         if (!empty($data['expires_at'])) {
             // The key expires with the licence behind it, so this is also the
             // date the pushes stop if nobody renews.
@@ -179,6 +182,8 @@ class connect_manager {
         // Same for the contact address: a new connection is told it again.
         unset_config('lastcontacthash', 'local_reportlms');
         unset_config('contactemailset', 'local_reportlms');
+        // And every wait left from failed calls of an earlier connection.
+        self::forget_waits();
 
         // Start the backfill at the next cron tick rather than whenever the
         // fifteen-minute schedule next fires: an admin who just connected
@@ -205,10 +210,24 @@ class connect_manager {
         unset_config('launchsecret', 'local_reportlms');
         unset_config('environmentid', 'local_reportlms');
         unset_config('tier', 'local_reportlms');
+        // A limit belongs to the connection it came with.
+        plan_limit::clear();
+        self::forget_waits();
         unset_config('connectedat', 'local_reportlms');
         unset_config('keyexpiresat', 'local_reportlms');
         unset_config('verifytoken', 'local_reportlms');
         unset_config('verifyexpires', 'local_reportlms');
+    }
+
+    /**
+     * Start every retry wait again: the health call, the heartbeat, the push, the key's end.
+     *
+     * @return void
+     */
+    protected static function forget_waits(): void {
+        backoff::reset_all();
+        backoff::forget_key_ended();
+        plan_limit::forget_resends();
     }
 
     /**

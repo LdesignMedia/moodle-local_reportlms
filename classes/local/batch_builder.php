@@ -99,11 +99,12 @@ class batch_builder {
      *
      * @param array<int, int> $userids Real user ids, already exclusion-filtered.
      * @param int $snapshotat One timestamp shared by every chunk of this push.
+     * @param plan_limit|null $plan The plan limit of this run, for the org section; null for none.
      *
      * @return array<int, \stdClass> Chunks: {payload (array, json-ready),
      *         userids (the learners inside), factrows (int)}.
      */
-    public static function build(array $userids, int $snapshotat): array {
+    public static function build(array $userids, int $snapshotat, ?plan_limit $plan = null): array {
         sort($userids);
 
         /*
@@ -278,7 +279,7 @@ class batch_builder {
 
         // Wrap each chunk in the envelope; the org tree and the dimensions
         // catalogue ride in the first chunk only, and only when they changed.
-        $orgsection = self::org_section_if_changed();
+        $orgsection = self::org_section_if_changed($plan);
         $dimensions = self::dimensions_section_if_changed();
 
         // Read the same way gradable::pairs() read it above. A change between
@@ -455,12 +456,18 @@ class batch_builder {
      * The org tree, the catalogue and the settings, each only when changed since
      * the last accepted push, and no facts.
      *
-     * @param int $snapshotat
+     * A heartbeat goes even when nothing changed. Report LMS takes a site that
+     * has not pushed for a few days as gone quiet, and a site whose people and
+     * structure stay the same is not that.
      *
-     * @return \stdClass|null Null when nothing changed.
+     * @param int $snapshotat
+     * @param plan_limit|null $plan The plan limit of this run, for the org section; null for none.
+     * @param bool $heartbeat Send even when nothing changed.
+     *
+     * @return \stdClass|null Null when nothing changed and no heartbeat is due.
      */
-    public static function structure_only(int $snapshotat): ?\stdClass {
-        $orgsection = self::org_section_if_changed();
+    public static function structure_only(int $snapshotat, ?plan_limit $plan = null, bool $heartbeat = false): ?\stdClass {
+        $orgsection = self::org_section_if_changed($plan);
         $dimensions = self::dimensions_section_if_changed();
         $settings = self::settings_section();
 
@@ -479,7 +486,7 @@ class batch_builder {
         // same reason as the deadline rule above.
         $contactchanged = contact_email::unsent();
 
-        if ($orgsection === null && $dimensions === null && !$settingschanged && !$contactchanged) {
+        if ($orgsection === null && $dimensions === null && !$settingschanged && !$contactchanged && !$heartbeat) {
             return null;
         }
 
@@ -505,6 +512,8 @@ class batch_builder {
             'factrows' => 0,
             'dimhash' => $dimensions !== null ? $dimensions['hash'] : null,
             'settingshash' => $settingshash,
+            // Nothing changed: this batch goes only because a heartbeat is due.
+            'heartbeatonly' => $orgsection === null && $dimensions === null && !$settingschanged && !$contactchanged,
         ];
     }
 
@@ -565,10 +574,14 @@ class batch_builder {
      * a 202, never here: building a payload that is then refused must not
      * mark the tree as delivered.
      *
+     * The plan limit decides who is marked held, and travels as
+     * limit_applied, null when there is none. Both are in the hash.
+     *
+     * @param plan_limit|null $plan The plan limit of this run; null for none.
      * @return array|null
      */
-    public static function org_section_if_changed(): ?array {
-        $org = org::collect();
+    public static function org_section_if_changed(?plan_limit $plan = null): ?array {
+        $org = org::collect($plan);
         $hash = org::state_hash($org);
 
         if ($hash === (string) get_config('local_reportlms', 'lastorghash')) {
@@ -612,24 +625,27 @@ class batch_builder {
             ];
         }
         foreach ($org->attrs as $attr) {
-            $section['attrs'][] = [
+            $row = [
                 'learner_pid' => pseudonym::learner($attr->userid),
                 'auth' => $attr->auth,
                 'active' => $attr->active,
                 'function' => $attr->function !== null ? pseudonym::functionref($attr->function) : null,
             ];
+
+            // Left out rather than false when not held: full state, so a row
+            // without the mark is a person inside the plan.
+            if (!empty($attr->held)) {
+                $row['held'] = true;
+            }
+
+            $section['attrs'][] = $row;
         }
 
-        return $section;
-    }
+        // The limit this section was built with, so Report LMS can tell
+        // whether this site has caught up with a change. Null for no limit.
+        $section['limit_applied'] = $plan !== null ? $plan->limit() : null;
 
-    /**
-     * The raw org state hash, for the push task to remember after a 202.
-     *
-     * @return string
-     */
-    public static function current_org_hash(): string {
-        return org::state_hash(org::collect());
+        return $section;
     }
 
     /**

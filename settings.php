@@ -29,6 +29,16 @@ if ($hassiteconfig) {
     $settings = new admin_settingpage('local_reportlms', get_string('pluginname', 'local_reportlms'));
     $ADMIN->add('localplugins', $settings);
 
+    // The claim code page. Hidden from the menu: the button on this settings
+    // page is the way in, and it only shows while the site is connected.
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_reportlms_claim',
+        get_string('claim:title', 'local_reportlms'),
+        new moodle_url('/local/reportlms/claim.php'),
+        'moodle/site:config',
+        true
+    ));
+
     if ($ADMIN->fulltree) {
         // Advanced mode hides the connection internals from the ordinary view:
         // /admin/settings.php?section=local_reportlms&mode=advanced, reached by
@@ -116,6 +126,35 @@ if ($hassiteconfig) {
             }
         }
 
+        /*
+         * A Report LMS address this plugin will not send the key to.
+         *
+         * Said in red on the ordinary page, because nothing reaches Report LMS
+         * while it stands, and the advanced settings where it is changed are
+         * exactly where nobody looks.
+         */
+        if (!\local_reportlms\local\config::is_secure_url(\local_reportlms\local\config::baseurl())) {
+            $status .= html_writer::div(
+                get_string('error:insecurebaseurl', 'local_reportlms'),
+                'alert alert-danger'
+            );
+        }
+
+        /*
+         * The plan limit, when it holds people back.
+         *
+         * Here because the people it leaves out are this site's, and somebody
+         * reading this page is the one who can change the plan. Only shown when
+         * somebody is actually held.
+         */
+        if ($connected) {
+            $limitnotice = \local_reportlms\local\plan_limit::notice();
+
+            if ($limitnotice !== null) {
+                $status .= html_writer::div($limitnotice, 'alert alert-warning');
+            }
+        }
+
         $details = [];
         if ($connected) {
             $environmentid = (string) get_config('local_reportlms', 'environmentid');
@@ -135,7 +174,7 @@ if ($hassiteconfig) {
                 // This is the licence expiry: the key is minted to match it.
                 $details[] = get_string('connect:keyexpires', 'local_reportlms', userdate($keyexpiresat));
             }
-            $lastpush = (int) get_config('local_reportlms', 'lastpush');
+            $lastpush = (int) get_config('local_reportlms', \local_reportlms\local\plan_limit::LAST_PUSH);
             if ($lastpush) {
                 $details[] = get_string('connect:lastpush', 'local_reportlms', userdate($lastpush));
             }
@@ -215,6 +254,14 @@ if ($hassiteconfig) {
                 $hasblock
                     ? get_string('block:removebutton', 'local_reportlms')
                     : get_string('block:addbutton', 'local_reportlms'),
+                ['class' => 'btn btn-secondary']
+            );
+
+            // Proves which Report LMS account runs this site. Only offered
+            // while connected, because the code goes out over the connection.
+            $buttons .= ' ' . html_writer::link(
+                new moodle_url('/local/reportlms/claim.php'),
+                get_string('claim:button', 'local_reportlms'),
                 ['class' => 'btn btn-secondary']
             );
         }

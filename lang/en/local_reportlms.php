@@ -45,6 +45,8 @@ $string['privacy:metadata:reportlms:grade'] = 'The grade on the main test of the
 $string['privacy:metadata:reportlms:attempts'] = 'How many attempts were taken at that test, and when the last one was finished.';
 $string['privacy:metadata:reportlms:last_attempt_at'] = 'When the last of those attempts was finished.';
 $string['privacy:metadata:reportlms:contact_email'] = 'The contact e-mail address given for this site, used only for licence and service messages and never linked to the figures.';
+$string['privacy:metadata:reportlms:held'] = 'Whether a person is outside the site\'s plan. For such a person only a coded identifier, the login method, whether the account is active and any unit they manage are sent, never results.';
+$string['privacy:metadata:reportlms:limit_applied'] = 'How many people the site\'s plan covers, as this site applied it when it listed its people.';
 $string['privacy:metadata:reportlms:node_id'] = 'A coded identifier standing for a sector or department.';
 
 // Connect flow.
@@ -174,6 +176,26 @@ $string['connect:tier'] = 'Licence tier: {$a}';
 $string['connect:connectedat'] = 'Connected since {$a}';
 $string['connect:keyexpires'] = 'Licence and key expire on {$a}';
 $string['connect:lastpush'] = 'Last data sent {$a}';
+$string['claim:button'] = 'Enter a claim code';
+$string['claim:title'] = 'Claim code';
+$string['claim:intro'] = 'Your account page on Report LMS shows a claim code. Enter it here to prove that your account runs this site. Your account needs this before it can buy, move or cancel the licence of this site online. Connecting does not need it.';
+$string['claim:code'] = 'Claim code';
+$string['claim:submit'] = 'Send the code';
+$string['claim:success'] = 'Report LMS accepted the claim code.';
+$string['claim:invalid'] = 'Enter the claim code from your account page on Report LMS, for example K7QF-29XM.';
+$string['claim:notconnected'] = 'Connect this site to Report LMS first. The claim code is sent over that connection.';
+$string['claim:failed'] = 'The claim code could not be sent. Try again in a minute.';
+$string['limit:covers'] = 'Your plan covers {$a} people.';
+$string['limit:covers_one'] = 'Your plan covers 1 person.';
+$string['limit:sitehas'] = 'This site has {$a} people.';
+$string['limit:sitehas_one'] = 'This site has 1 person.';
+$string['limit:shown'] = 'Reports show the first {$a}.';
+$string['limit:shown_one'] = 'Reports show the first person.';
+$string['limit:shown_none'] = 'Reports show nobody.';
+$string['limit:held'] = 'For the other {$a} only a coded id, the account status and login method (and any unit they manage) are sent, no learning data.';
+$string['limit:held_one'] = 'For the other person only a coded id, the account status and login method (and any unit they manage) are sent, no learning data.';
+$string['limit:held_all'] = 'For everybody only a coded id, the account status and login method (and any unit they manage) are sent, no learning data.';
+$string['limit:upgrade'] = 'Upgrade at {$a}.';
 
 // Profile fields the plugin creates at install. The display names are
 // written into the field records once, so a later language pack change does
@@ -212,7 +234,7 @@ $string['settings:advancedwarning'] = 'These settings are managed by the connect
 $string['settings:contactemail'] = 'Contact email';
 $string['settings:contactemail_desc'] = 'Report LMS writes to this address about the licence and service. Sent as soon as it is saved. An address set by Report LMS staff is kept.';
 $string['settings:baseurl'] = 'Report LMS URL';
-$string['settings:baseurl_desc'] = 'The Report LMS instance this site connects to.';
+$string['settings:baseurl_desc'] = 'The Report LMS instance this site connects to. It must start with https://.';
 $string['settings:pushpath'] = 'Push path';
 $string['settings:pushpath_desc'] = 'The endpoint on the Report LMS host that receives data batches.';
 $string['settings:enabled'] = 'Send data';
@@ -266,7 +288,12 @@ $string['task:reconcile'] = 'Report LMS: find learners changed outside the norma
 $string['error:nohtmlblock'] = 'The HTML block is not available on this site, so the Dashboard block cannot be created.';
 $string['error:nosalt'] = 'This site has no Report LMS coding key yet. Reconnect from the Report LMS settings.';
 $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
+$string['error:insecurebaseurl'] = 'The Report LMS address must start with https://. Nothing is sent to Report LMS until it does. Change it in the plugin settings, or in config.php if it is set there.';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';
+$string['error:claimanswer'] = '{$a}';
+$string['error:claimrefused'] = 'Report LMS did not accept the claim code: {$a}';
+$string['error:claimtoomany'] = 'Too many tries with a claim code. Wait a while, then try again.';
+$string['error:claimunavailable'] = 'Report LMS could not answer right now ({$a}). Try again in a minute.';
 $string['error:pushfailed'] = 'Could not reach Report LMS for the push: {$a}';
 $string['error:pushrejected'] = 'Report LMS refused the push: {$a}';
 $string['error:verifynoncerequired'] = 'A nonce is required.';

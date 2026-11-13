@@ -79,6 +79,16 @@ final class push_safety_test extends \advanced_testcase {
                 $this->calls = &$calls;
             }
 
+            /**
+             * Answer like a Report LMS that sends no plan limit.
+             *
+             * @param string $apikey
+             * @return array
+             */
+            public function health(string $apikey): array {
+                return [];
+            }
+
             public function push(
                 string $pushpath,
                 string $rawbody,
@@ -206,6 +216,16 @@ final class push_safety_test extends \advanced_testcase {
         set_config('enabled', 1, 'local_reportlms');
 
         $client = new class (\local_reportlms\local\config::baseurl()) extends api_client {
+            /**
+             * Answer like a Report LMS that sends no plan limit.
+             *
+             * @param string $apikey
+             * @return array
+             */
+            public function health(string $apikey): array {
+                return [];
+            }
+
             public function push(
                 string $pushpath,
                 string $rawbody,

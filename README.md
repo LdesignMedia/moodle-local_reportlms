@@ -45,6 +45,11 @@ for your site address:
   users, monthly or yearly. Every plan has the same features. See
   [reportlms.com/pricing](https://reportlms.com/pricing).
 
+When a site has more people than its plan covers, reports show the people who joined
+the site first. For the others, only a coded id, the account status and login method
+(and any unit they manage) are sent, no learning data, until the plan grows. Site
+administrators take no place. The plugin's settings page shows the numbers.
+
 ## Install and connect
 
 1. Install through **Site administration → Plugins → Install plugins**.
@@ -66,8 +71,17 @@ for your site address:
 For manual installation, place the plugin in `local/reportlms` on Moodle 4.5 and 5.0,
 or `public/local/reportlms` on Moodle 5.1.
 
+The Report LMS address must start with `https://`, except on a development machine
+(localhost, 127.0.0.1 or a `.test` host). Until it does, the plugin sends nothing, and
+its settings page says so in red.
+
 Data is sent by cron. **Disconnect** stops all sending. **Reconnect** verifies the
 site again, also when the previous key expired or was lost.
+
+**Claim code** (since 0.9.1): before your Report LMS account can buy, move or cancel
+the licence of this site online, it has to prove that it runs this site. Copy the
+claim code from your account page on reportlms.com, open **Plugins → Local plugins →
+Report LMS**, press **Enter a claim code** and send it. Connecting does not need it.
 
 ## Privacy
 
