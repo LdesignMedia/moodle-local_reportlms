@@ -332,10 +332,16 @@ class push_batch extends \core\task\scheduled_task {
                 $accepted = true;
                 set_config(plan_limit::LAST_PUSH, time(), 'local_reportlms');
 
-                // Accepted, so Report LMS is reachable and the key works,
-                // whatever an earlier answer said: every wait starts again, the
-                // health call's too, so the plan limit is asked on the next run.
-                backoff::reset_all();
+                // Accepted after the key ended or after refused pushes: a
+                // recovery, so the plan limit is asked on the next run rather
+                // than after the health call's wait. An ordinary accepted push
+                // leaves that wait alone.
+                if (backoff::key_has_ended() || backoff::fails('push') > 0 || backoff::fails('heartbeat') > 0) {
+                    backoff::succeeded('health');
+                }
+
+                // Accepted, so the key works whatever an earlier answer said.
+                backoff::succeeded('heartbeat');
                 backoff::forget_key_ended();
             }
 
@@ -434,15 +440,22 @@ class push_batch extends \core\task\scheduled_task {
      * about the push, which is retried on its own terms, and what was stored
      * stays. But a key that has ended, or a Report LMS that keeps failing, is
      * not asked every fifteen minutes forever: each failure doubles the wait,
-     * from an hour up to a day. An accepted push or a new Report LMS address
-     * ends the wait.
+     * from an hour up to a day. A push accepted after failing, or a new Report
+     * LMS address, ends the wait.
+     *
+     * While the key has ended the wait stops at an hour. A renewal moves the
+     * end date of the same key, and only this call hears of it, so the pushes
+     * held meanwhile go out within an hour of it. The pushes themselves still
+     * wait up to a day.
      *
      * @param api_client $client
      *
      * @return void
      */
     protected function follow_plan(api_client $client): void {
-        if (!backoff::due('health')) {
+        $cap = backoff::key_has_ended() ? backoff::FIRST : backoff::CAP;
+
+        if (!backoff::due('health', $cap)) {
             // Said as it is: after an answer that the key ended, nothing failed.
             if (backoff::key_has_ended()) {
                 mtrace('Report LMS: this site\'s key has ended, not asking again yet, keeping the stored plan limit.');

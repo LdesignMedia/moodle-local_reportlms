@@ -202,11 +202,11 @@ final class claim_code_test extends \advanced_testcase {
         $this->assertSame(['status' => 'moved', 'message' => 'Done.'], $answer);
     }
 
-    public function test_a_refusal_carries_the_words_of_the_answer(): void {
+    public function test_an_answer_to_the_code_is_shown_in_the_words_of_report_lms_alone(): void {
         $refusals = [
             422 => 'That claim code is not right.',
             409 => 'This LMS address has no Report LMS licence yet.',
-            401 => 'This API key has expired.',
+            403 => 'Confirm your email address first.',
         ];
 
         foreach ($refusals as $httpcode => $words) {
@@ -214,9 +214,20 @@ final class claim_code_test extends \advanced_testcase {
                 api_client::claim_answer($httpcode, json_encode(['status' => 'any', 'message' => $words]));
                 $this->fail('HTTP ' . $httpcode . ' must be refused.');
             } catch (\moodle_exception $e) {
-                $this->assertSame('error:claimrefused', $e->errorcode);
-                $this->assertSame(get_string('error:claimrefused', 'local_reportlms', $words), $e->getMessage());
+                // A status means the sentence answers the code, written to be read as it is.
+                $this->assertSame('error:claimanswer', $e->errorcode);
+                $this->assertSame($words, $e->getMessage());
             }
+        }
+    }
+
+    public function test_a_refusal_without_a_status_says_the_code_was_not_accepted(): void {
+        try {
+            api_client::claim_answer(401, json_encode(['message' => 'Unauthenticated.']));
+            $this->fail('HTTP 401 must be refused.');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('error:claimrefused', $e->errorcode);
+            $this->assertSame(get_string('error:claimrefused', 'local_reportlms', 'Unauthenticated.'), $e->getMessage());
         }
     }
 
@@ -515,8 +526,8 @@ final class claim_code_test extends \advanced_testcase {
             api_client::claim_answer(503, json_encode(['status' => 'busy', 'message' => $words]));
             $this->fail('HTTP 503 must be refused.');
         } catch (\moodle_exception $e) {
-            $this->assertSame('error:claimrefused', $e->errorcode);
-            $this->assertSame(get_string('error:claimrefused', 'local_reportlms', $words), $e->getMessage());
+            $this->assertSame('error:claimanswer', $e->errorcode);
+            $this->assertSame($words, $e->getMessage());
         }
     }
 

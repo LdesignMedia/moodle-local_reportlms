@@ -278,6 +278,50 @@ final class plan_limit_safety_test extends \advanced_testcase {
         $this->assertFalse(get_config('local_reportlms', 'healthfails'));
     }
 
+    public function test_only_a_push_accepted_after_failing_ends_the_health_wait(): void {
+        $this->people(1);
+        userstate::mark_all_dirty();
+
+        // An ordinary run: the health call fails, the push goes through. Not a
+        // recovery, so the health call keeps its wait.
+        $this->run_task($this->client(null));
+        $this->assertFalse(backoff::due('health'));
+
+        // A push accepted after refused ones is a recovery: asked on the next run.
+        userstate::mark_all_dirty();
+        backoff::failed('push');
+        $this->run_task($this->client(null));
+        $this->assertTrue(backoff::due('health'));
+        $this->assertTrue(backoff::due('push'));
+    }
+
+    public function test_a_renewed_key_is_noticed_within_an_hour(): void {
+        $clock = $this->mock_clock_with_frozen();
+        $this->people(1);
+        userstate::mark_all_dirty();
+        $ended = ['key_expires_at' => gmdate('Y-m-d\TH:i:s\Z', $clock->time() - DAYSECS)];
+
+        // Ended for a while: the health call goes every hour, one small request.
+        for ($hour = 0; $hour < 6; $hour++) {
+            $client = $this->refusing_client($ended);
+            $this->run_task($client);
+            $this->assertSame(1, $client->healthcalls, 'Hour ' . $hour);
+            $clock->bump(HOURSECS);
+        }
+
+        // The pushes still wait longer each time.
+        $this->assertGreaterThan(HOURSECS, backoff::wait(backoff::fails('push') - 1));
+
+        // The app renews the same key: noticed on the next hourly ask, and what
+        // waited goes out in that same run.
+        $client = $this->client(['key_expires_at' => gmdate('Y-m-d\TH:i:s\Z', $clock->time() + 30 * DAYSECS)]);
+        $this->run_task($client);
+        $this->assertSame(1, $client->healthcalls);
+        $this->assertCount(1, $client->payloads);
+        $this->assertFalse(backoff::key_has_ended());
+        $this->assertSame(0, userstate::count_dirty());
+    }
+
     public function test_a_new_report_lms_address_is_tried_at_once(): void {
         set_config('baseurl', 'http://reportlms.example.com', 'local_reportlms');
         backoff::failed('health');

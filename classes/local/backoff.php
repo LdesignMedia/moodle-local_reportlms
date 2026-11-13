@@ -58,27 +58,29 @@ class backoff {
      * How long to wait after this many earlier tries.
      *
      * @param int $tries Earlier consecutive tries, 0 for the first.
+     * @param int $cap The longest wait, in seconds.
      * @return int Seconds.
      */
-    public static function wait(int $tries): int {
+    public static function wait(int $tries, int $cap = self::CAP): int {
         // Past five doublings the cap applies anyway; this keeps the power small.
-        return (int) min(self::FIRST * (2 ** min(max($tries, 0), 6)), self::CAP);
+        return (int) min(self::FIRST * (2 ** min(max($tries, 0), 6)), $cap);
     }
 
     /**
      * Whether the call may be made now.
      *
      * @param string $name
+     * @param int $cap The longest wait, in seconds.
      * @return bool
      */
-    public static function due(string $name): bool {
+    public static function due(string $name, int $cap = self::CAP): bool {
         $fails = self::fails($name);
 
         if ($fails <= 0) {
             return true;
         }
 
-        return time() >= (int) get_config('local_reportlms', $name . 'failedat') + self::wait($fails - 1);
+        return self::now() >= (int) get_config('local_reportlms', $name . 'failedat') + self::wait($fails - 1, $cap);
     }
 
     /**
@@ -105,7 +107,7 @@ class backoff {
      */
     public static function failed(string $name): void {
         set_config($name . 'fails', self::fails($name) + 1, 'local_reportlms');
-        set_config($name . 'failedat', time(), 'local_reportlms');
+        set_config($name . 'failedat', self::now(), 'local_reportlms');
         set_config($name . 'failedurl', config::baseurl(), 'local_reportlms');
     }
 
@@ -129,7 +131,7 @@ class backoff {
     }
 
     /**
-     * Start every count again: for a new or ended connection, or a push Report LMS accepted.
+     * Start every count again, for a new or ended connection.
      *
      * @return void
      */
@@ -161,5 +163,14 @@ class backoff {
         }
 
         self::succeeded('push');
+    }
+
+    /**
+     * The time now, from Moodle's clock, so a test can move it.
+     *
+     * @return int
+     */
+    protected static function now(): int {
+        return \core\di::get(\core\clock::class)->time();
     }
 }

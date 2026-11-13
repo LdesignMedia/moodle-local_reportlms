@@ -290,6 +290,7 @@ $string['error:nosalt'] = 'This site has no Report LMS coding key yet. Reconnect
 $string['error:connectfailed'] = 'Could not reach Report LMS: {$a}';
 $string['error:insecurebaseurl'] = 'The Report LMS address must start with https://. Nothing is sent to Report LMS until it does. Change it in the plugin settings, or in config.php if it is set there.';
 $string['error:connectrejected'] = 'Report LMS refused the connection: {$a}';
+$string['error:claimanswer'] = '{$a}';
 $string['error:claimrefused'] = 'Report LMS did not accept the claim code: {$a}';
 $string['error:claimtoomany'] = 'Too many tries with a claim code. Wait a while, then try again.';
 $string['error:claimunavailable'] = 'Report LMS could not answer right now ({$a}). Try again in a minute.';
