@@ -71,6 +71,9 @@ administrators take no place. The plugin's settings page shows the numbers.
 For manual installation, place the plugin in `local/reportlms` on Moodle 4.5 and 5.0,
 or `public/local/reportlms` on Moodle 5.1.
 
+The Report LMS address must start with `https://`. Until it does, the plugin sends
+nothing, and its settings page says so in red.
+
 Data is sent by cron. **Disconnect** stops all sending. **Reconnect** verifies the
 site again, also when the previous key expired or was lost.
 

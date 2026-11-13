@@ -299,10 +299,11 @@ class api_client {
      * framework that answers it says nothing useful.
      *
      * A reply with no sentence in it (a bare server error, a page in front of
-     * Report LMS, a body that is not JSON), any 5xx, and a 409 that is not an
-     * answer to the code (the replay guard, which carries no status) say
+     * Report LMS, a body that is not JSON), and a 5xx or a 409 that is not an
+     * answer to the code (it carries no status, like the replay guard) say
      * nothing about the code. They get "could not answer right now", so an
-     * administrator does not think the code itself was wrong.
+     * administrator does not think the code itself was wrong. A 5xx that does
+     * carry a status, such as busy, keeps the sentence Report LMS wrote.
      *
      * @param int $httpcode The HTTP status of the reply.
      * @param string $response The body of the reply.
@@ -323,7 +324,7 @@ class api_client {
         $message = is_array($decoded) && is_string($decoded['message'] ?? null) ? trim($decoded['message']) : '';
         $answered = is_array($decoded) && array_key_exists('status', $decoded);
 
-        if ($message === '' || $httpcode >= 500 || ($httpcode === 409 && !$answered)) {
+        if ($message === '' || ($httpcode >= 500 && !$answered) || ($httpcode === 409 && !$answered)) {
             throw new \moodle_exception('error:claimunavailable', 'local_reportlms', '', 'HTTP ' . $httpcode);
         }
 

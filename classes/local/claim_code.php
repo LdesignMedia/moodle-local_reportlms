@@ -60,8 +60,9 @@ class claim_code {
      *
      * Never throws: a refusal is something to show the administrator, in
      * the words Report LMS chose for it, and anything else that goes wrong
-     * becomes one plain sentence. Nothing about the code, the keys or the
-     * failure is logged.
+     * becomes one plain sentence. Nothing about the code or the keys is
+     * logged, and of an unexpected fault only its class, as a developer
+     * debugging message.
      *
      * @param string $code What the administrator typed.
      * @param api_client|null $client Optional client override for tests.
@@ -92,8 +93,10 @@ class claim_code {
         } catch (\moodle_exception $exception) {
             return ['success' => false, 'message' => self::shorten($exception->getMessage())];
         } catch (\Throwable $exception) {
-            // A fault on this side, not an answer: said plainly, and nothing
-            // about it is shown or kept.
+            // A fault on this side, not an answer: said plainly. A developer
+            // sees its class, never its message, which could hold the code.
+            debugging(get_class($exception), DEBUG_DEVELOPER);
+
             return ['success' => false, 'message' => get_string('claim:failed', 'local_reportlms')];
         }
 

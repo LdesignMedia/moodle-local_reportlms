@@ -87,9 +87,8 @@ class org {
      * With a plan limit, everybody is still listed, so the headcount stays
      * true, but a person outside the plan gets an attrs row marked held, with
      * no job function and no membership: they are in no unit until the plan
-     * grows. Managers are
-     * unchanged, because they say who may look at a unit, not who is in it.
-     * Site administrators take no place and are never held.
+     * grows. Managers are unchanged, because they say who may look at a unit,
+     * not who is in it. Site administrators take no place and are never held.
      *
      * The limit itself is part of the state only while there is one, so a
      * site without a limit hashes exactly as before and an upgrade resends

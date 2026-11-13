@@ -212,6 +212,39 @@ trait plan_limit_testing {
     }
 
     /**
+     * A fake Report LMS that answers a connect with keys and a plan limit.
+     *
+     * @return api_client
+     */
+    protected function connector(): api_client {
+        return new class (config::baseurl()) extends api_client {
+            /**
+             * Answer a connect with keys and a plan limit.
+             *
+             * @param string $siteurl
+             * @param string $verificationtoken
+             * @param int $acknowledgedat
+             * @param string $contactemail
+             * @return array
+             */
+            public function connect(
+                string $siteurl,
+                string $verificationtoken,
+                int $acknowledgedat = 0,
+                string $contactemail = ''
+            ): array {
+                return [
+                    'environment_id' => 'env-1',
+                    'api_key' => 'key-1',
+                    'signing_secret' => 'secret-1',
+                    'launch_secret' => 'launch-1',
+                    'limits' => ['users' => 1500, 'courses' => null, 'activities' => null],
+                ];
+            }
+        };
+    }
+
+    /**
      * Run the scheduled push and return what it said.
      *
      * @param api_client $client

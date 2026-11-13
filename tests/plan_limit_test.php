@@ -26,9 +26,7 @@
 
 namespace local_reportlms;
 
-use local_reportlms\local\api_client;
 use local_reportlms\local\batch_builder;
-use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
 use local_reportlms\local\plan_limit;
 use local_reportlms\local\pseudonym;
@@ -350,32 +348,7 @@ final class plan_limit_test extends \advanced_testcase {
     }
 
     public function test_the_connect_reply_and_the_push_reply_store_the_limit(): void {
-        $connector = new class (config::baseurl()) extends api_client {
-            /**
-             * Answer a connect with keys and a plan limit.
-             *
-             * @param string $siteurl
-             * @param string $verificationtoken
-             * @param int $acknowledgedat
-             * @param string $contactemail
-             * @return array
-             */
-            public function connect(
-                string $siteurl,
-                string $verificationtoken,
-                int $acknowledgedat = 0,
-                string $contactemail = ''
-            ): array {
-                return [
-                    'environment_id' => 'env-1',
-                    'api_key' => 'key-1',
-                    'signing_secret' => 'secret-1',
-                    'launch_secret' => 'launch-1',
-                    'limits' => ['users' => 1500, 'courses' => null, 'activities' => null],
-                ];
-            }
-        };
-        (new connect_manager($connector))->connect();
+        (new connect_manager($this->connector()))->connect();
         $this->assertSame(1500, plan_limit::stored());
 
         $this->people(1);
@@ -436,6 +409,15 @@ final class plan_limit_test extends \advanced_testcase {
         set_config('lastorghashat', time() - 2 * HOURSECS - MINSECS, 'local_reportlms');
         $this->assertTrue(plan_limit::follow_health($never));
         $this->assertSame(2, plan_limit::org_resends());
+    }
+
+    public function test_an_explicit_null_with_nothing_saved_sends_nothing_again(): void {
+        // Nothing was accepted yet, so nothing can have been lost.
+        unset_config('lastorghash', 'local_reportlms');
+        set_config('lastorghashat', time() - 2 * HOURSECS, 'local_reportlms');
+
+        $this->assertFalse(plan_limit::follow_health(['org_state_hash_applied' => null]));
+        $this->assertSame(0, plan_limit::org_resends());
     }
 
     public function test_the_task_resends_an_organisation_the_app_lost(): void {

@@ -220,17 +220,14 @@ class connect_manager {
     }
 
     /**
-     * Start every retry wait again: the health call, the heartbeat, the key's end.
+     * Start every retry wait again: the health call, the heartbeat, the push, the key's end.
      *
      * @return void
      */
     protected static function forget_waits(): void {
         backoff::reset_all();
+        backoff::forget_key_ended();
         plan_limit::forget_resends();
-
-        if (get_config('local_reportlms', plan_limit::KEY_ENDED) !== false) {
-            unset_config(plan_limit::KEY_ENDED, 'local_reportlms');
-        }
     }
 
     /**

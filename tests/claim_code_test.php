@@ -250,6 +250,8 @@ final class claim_code_test extends \advanced_testcase {
 
         $this->assertFalse($result['success']);
         $this->assertSame(get_string('claim:failed', 'local_reportlms'), $result['message']);
+        // Named for a developer by its kind only, never by its message.
+        $this->assertDebuggingCalled(\RuntimeException::class, DEBUG_DEVELOPER);
     }
 
     public function test_a_long_answer_is_cut_short(): void {
@@ -273,20 +275,24 @@ final class claim_code_test extends \advanced_testcase {
     /**
      * A client whose cURL handle records what would go on the wire and answers from the script.
      *
-     * @param array $sent Filled with one entry per request: url, headers and body.
+     * @param array $sent Filled with one entry per request: url, headers, body and options.
      * @param int $httpcode The status to answer with.
      * @param string $body The body to answer with.
+     * @param int $errno The cURL error number to fail with, or 0 for none.
+     * @param string $error The cURL error text that goes with it.
      * @return api_client
      */
     private function watched_client(
         array &$sent,
         int $httpcode = 200,
-        string $body = '{"status":"claimed","message":"Done."}'
+        string $body = '{"status":"claimed","message":"Done."}',
+        int $errno = 0,
+        string $error = ''
     ): api_client {
         global $CFG;
         require_once($CFG->libdir . '/filelib.php');
 
-        return new class ('https://reportlms.invalid', $sent, $httpcode, $body) extends api_client {
+        return new class ('https://reportlms.invalid', $sent, $httpcode, $body, $errno, $error) extends api_client {
             /** @var array */
             private $sent;
 
@@ -296,6 +302,12 @@ final class claim_code_test extends \advanced_testcase {
             /** @var string */
             private $body;
 
+            /** @var int */
+            private $errno;
+
+            /** @var string */
+            private $error;
+
             /**
              * Constructor.
              *
@@ -303,12 +315,16 @@ final class claim_code_test extends \advanced_testcase {
              * @param array $sent
              * @param int $httpcode
              * @param string $body
+             * @param int $errno
+             * @param string $error
              */
-            public function __construct(string $baseurl, array &$sent, int $httpcode, string $body) {
+            public function __construct(string $baseurl, array &$sent, int $httpcode, string $body, int $errno, string $error) {
                 parent::__construct($baseurl);
                 $this->sent = &$sent;
                 $this->httpcode = $httpcode;
                 $this->body = $body;
+                $this->errno = $errno;
+                $this->error = $error;
             }
 
             /**
@@ -317,7 +333,7 @@ final class claim_code_test extends \advanced_testcase {
              * @return \curl
              */
             protected function make_curl(): \curl {
-                return new class ($this->sent, $this->httpcode, $this->body) extends \curl {
+                return new class ($this->sent, $this->httpcode, $this->body, $this->errno, $this->error) extends \curl {
                     /** @var array */
                     private $sent;
 
@@ -326,6 +342,12 @@ final class claim_code_test extends \advanced_testcase {
 
                     /** @var string */
                     private $body;
+
+                    /** @var int */
+                    private $scriptederrno;
+
+                    /** @var string */
+                    private $scriptederror;
 
                     /** @var array */
                     private $headers = [];
@@ -336,12 +358,16 @@ final class claim_code_test extends \advanced_testcase {
                      * @param array $sent
                      * @param int $httpcode
                      * @param string $body
+                     * @param int $errno
+                     * @param string $error
                      */
-                    public function __construct(array &$sent, int $httpcode, string $body) {
+                    public function __construct(array &$sent, int $httpcode, string $body, int $errno, string $error) {
                         parent::__construct(['ignoresecurity' => true]);
                         $this->sent = &$sent;
                         $this->httpcode = $httpcode;
                         $this->body = $body;
+                        $this->scriptederrno = $errno;
+                        $this->scriptederror = $error;
                     }
 
                     /**
@@ -362,18 +388,19 @@ final class claim_code_test extends \advanced_testcase {
                      * @return string
                      */
                     public function post($url, $params = '', $options = []) {
-                        $this->sent[] = ['url' => $url, 'headers' => $this->headers, 'body' => $params];
+                        $this->sent[] = ['url' => $url, 'headers' => $this->headers, 'body' => $params, 'options' => $options];
+                        $this->error = $this->scriptederror;
 
                         return $this->body;
                     }
 
                     /**
-                     * Nothing went wrong on the way.
+                     * The scripted error number, 0 when nothing went wrong on the way.
                      *
                      * @return int
                      */
                     public function get_errno() {
-                        return 0;
+                        return $this->scriptederrno;
                     }
 
                     /**
@@ -443,6 +470,53 @@ final class claim_code_test extends \advanced_testcase {
                 'sha256=' . hash_hmac('sha256', $headers['X-RL-Timestamp'] . '.' . $request['body'], 'the-secret'),
                 $headers['X-RL-Signature']
             );
+        }
+    }
+
+    public function test_the_claim_and_the_push_each_wait_their_own_time(): void {
+        $sent = [];
+        $client = $this->watched_client($sent);
+
+        $client->claim('the-key', 'the-secret', 'K7QF29XM');
+        $client->push('/api/v1/push/batch', '{"rows":[]}', 'the-key', 'the-secret', 'env:1:hash');
+
+        $this->assertSame(15, $sent[0]['options']['CURLOPT_TIMEOUT']);
+        $this->assertSame(10, $sent[0]['options']['CURLOPT_CONNECTTIMEOUT']);
+        // Batches run to a few MB on a first backfill.
+        $this->assertSame(120, $sent[1]['options']['CURLOPT_TIMEOUT']);
+        $this->assertSame(10, $sent[1]['options']['CURLOPT_CONNECTTIMEOUT']);
+    }
+
+    public function test_a_claim_and_a_push_that_cannot_get_through_say_so_in_their_own_words(): void {
+        $sent = [];
+        $client = $this->watched_client($sent, 0, '', 28, 'Operation timed out');
+        $calls = [
+            'error:connectfailed' => static fn() => $client->claim('the-key', 'the-secret', 'K7QF29XM'),
+            'error:pushfailed' => static fn() => $client->push('/api/v1/push/batch', '{}', 'the-key', 'the-secret', 'env:1:h'),
+        ];
+
+        foreach ($calls as $errorcode => $call) {
+            try {
+                $call();
+                $this->fail($errorcode . ' must be thrown.');
+            } catch (\moodle_exception $e) {
+                $this->assertSame($errorcode, $e->errorcode);
+                $this->assertSame(get_string($errorcode, 'local_reportlms', 'Operation timed out'), $e->getMessage());
+            }
+        }
+
+        $this->assertCount(2, $sent);
+    }
+
+    public function test_a_busy_answer_keeps_the_words_report_lms_sent(): void {
+        $words = 'Busy with this licence right now. Wait a minute and try again.';
+
+        try {
+            api_client::claim_answer(503, json_encode(['status' => 'busy', 'message' => $words]));
+            $this->fail('HTTP 503 must be refused.');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('error:claimrefused', $e->errorcode);
+            $this->assertSame(get_string('error:claimrefused', 'local_reportlms', $words), $e->getMessage());
         }
     }
 
