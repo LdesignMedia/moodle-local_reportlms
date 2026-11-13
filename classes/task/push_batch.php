@@ -206,6 +206,21 @@ class push_batch extends \core\task\scheduled_task {
             mtrace('Report LMS: ' . $certificates . ' person(s) with a new certificate to send.');
         }
 
+        /*
+         * After Report LMS said the key ended, a refused push waits longer each
+         * time, like the heartbeat. Whatever it carries, learners, a change to
+         * the organisation, the catalogue, the settings or the contact, or a
+         * resend, the same key is refused again, so it does not go every
+         * fifteen minutes. What waits stays waiting and goes once it can.
+         */
+        if (backoff::key_has_ended() && !backoff::due('push')) {
+            $fails = backoff::fails('push');
+            mtrace('Report LMS: this site\'s key has ended, not sending again yet after ' . $fails
+                . ($fails === 1 ? ' failed try.' : ' failed tries.'));
+
+            return;
+        }
+
         // Who is inside the plan, worked out once for the whole run, after the
         // administrators above are known: they take no place.
         $plan = plan_limit::current();
@@ -272,6 +287,11 @@ class push_batch extends \core\task\scheduled_task {
                     backoff::failed('heartbeat');
                 }
 
+                // Every refused push counts, so the first one accepted after an
+                // outage is known as a recovery. The count holds the next push
+                // back only while the key has ended.
+                backoff::failed('push');
+
                 /*
                  * A refusal for want of the data statement is a decision, not
                  * weather, and retrying it every fifteen minutes for months
@@ -311,12 +331,18 @@ class push_batch extends \core\task\scheduled_task {
             if (!$accepted) {
                 $accepted = true;
                 set_config(plan_limit::LAST_PUSH, time(), 'local_reportlms');
-                backoff::succeeded('heartbeat');
+
+                // Accepted after the key ended or after refused pushes, the
+                // heartbeat included: a recovery, so the plan limit is asked on
+                // the next run rather than after the health call's wait. An
+                // ordinary accepted push leaves that wait alone.
+                if (backoff::key_has_ended() || backoff::fails('push') > 0) {
+                    backoff::succeeded('health');
+                }
 
                 // Accepted, so the key works whatever an earlier answer said.
-                if (get_config('local_reportlms', plan_limit::KEY_ENDED) !== false) {
-                    unset_config(plan_limit::KEY_ENDED, 'local_reportlms');
-                }
+                backoff::succeeded('heartbeat');
+                backoff::forget_key_ended();
             }
 
             // The reply carries the limit too; an older Report LMS sends none.
@@ -333,6 +359,12 @@ class push_batch extends \core\task\scheduled_task {
             // The first chunk carried the org tree; remember what the SaaS
             // now holds so unchanged trees are omitted from later pushes.
             if (isset($chunk->payload['org'])) {
+                // Sent because it changed, not because it went missing: if this
+                // one is lost, that is a new loss, and its resend waits an hour.
+                if ((string) get_config('local_reportlms', 'lastorghash') !== '') {
+                    plan_limit::forget_resends();
+                }
+
                 set_config('lastorghash', substr($chunk->payload['org']['org_state_hash'], 2), 'local_reportlms');
                 // When, so a hash Report LMS has not applied an hour later is sent again.
                 set_config(plan_limit::ORG_SENT_AT, time(), 'local_reportlms');
@@ -374,8 +406,10 @@ class push_batch extends \core\task\scheduled_task {
              * Every chunk was built with the limit this run started with. After
              * a lower one arrives, the rest could carry people the plan no
              * longer covers, so they wait: still dirty, they are cut again with
-             * the new limit on the next run. After this chunk's own bookkeeping,
-             * so what was accepted is recorded as accepted.
+             * the new limit on the next run. A higher one stops the run the same
+             * way, and the next run takes the people it now covers along. After
+             * this chunk's own bookkeeping, so what was accepted is recorded as
+             * accepted.
              */
             if (plan_limit::stored() !== $plan->limit()) {
                 mtrace('Report LMS: the plan limit changed during this run, the rest goes on the next run.');
@@ -406,16 +440,24 @@ class push_batch extends \core\task\scheduled_task {
      * about the push, which is retried on its own terms, and what was stored
      * stays. But a key that has ended, or a Report LMS that keeps failing, is
      * not asked every fifteen minutes forever: each failure doubles the wait,
-     * from an hour up to a day.
+     * from an hour up to a day. A push accepted after failing, or a new Report
+     * LMS address, ends the wait.
+     *
+     * While the key has ended the wait stops at an hour. A renewal moves the
+     * end date of the same key, and only this call hears of it, so the pushes
+     * held meanwhile go out within an hour of it. The pushes themselves still
+     * wait up to a day.
      *
      * @param api_client $client
      *
      * @return void
      */
     protected function follow_plan(api_client $client): void {
-        if (!backoff::due('health')) {
+        $cap = backoff::key_has_ended() ? backoff::FIRST : backoff::CAP;
+
+        if (!backoff::due('health', $cap)) {
             // Said as it is: after an answer that the key ended, nothing failed.
-            if (get_config('local_reportlms', plan_limit::KEY_ENDED) !== false) {
+            if (backoff::key_has_ended()) {
                 mtrace('Report LMS: this site\'s key has ended, not asking again yet, keeping the stored plan limit.');
 
                 return;
@@ -447,8 +489,8 @@ class push_batch extends \core\task\scheduled_task {
         if (plan_limit::key_ended($health)) {
             backoff::failed('health');
 
-            if (get_config('local_reportlms', plan_limit::KEY_ENDED) === false) {
-                set_config(plan_limit::KEY_ENDED, 1, 'local_reportlms');
+            if (!backoff::key_has_ended()) {
+                set_config(backoff::KEY_ENDED, 1, 'local_reportlms');
             }
 
             mtrace('Report LMS says this site\'s key has ended: no heartbeat, and asking less often until it is renewed.');
@@ -457,10 +499,7 @@ class push_batch extends \core\task\scheduled_task {
         }
 
         backoff::succeeded('health');
-
-        if (get_config('local_reportlms', plan_limit::KEY_ENDED) !== false) {
-            unset_config(plan_limit::KEY_ENDED, 'local_reportlms');
-        }
+        backoff::forget_key_ended();
     }
 
     /**
@@ -473,7 +512,7 @@ class push_batch extends \core\task\scheduled_task {
      */
     protected static function heartbeat_due(): bool {
         return (int) get_config('local_reportlms', plan_limit::LAST_PUSH) < time() - self::HEARTBEAT_AFTER
-            && get_config('local_reportlms', plan_limit::KEY_ENDED) === false
+            && !backoff::key_has_ended()
             && backoff::due('heartbeat');
     }
 

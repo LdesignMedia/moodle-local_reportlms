@@ -29,6 +29,16 @@ if ($hassiteconfig) {
     $settings = new admin_settingpage('local_reportlms', get_string('pluginname', 'local_reportlms'));
     $ADMIN->add('localplugins', $settings);
 
+    // The claim code page. Hidden from the menu: the button on this settings
+    // page is the way in, and it only shows while the site is connected.
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_reportlms_claim',
+        get_string('claim:title', 'local_reportlms'),
+        new moodle_url('/local/reportlms/claim.php'),
+        'moodle/site:config',
+        true
+    ));
+
     if ($ADMIN->fulltree) {
         // Advanced mode hides the connection internals from the ordinary view:
         // /admin/settings.php?section=local_reportlms&mode=advanced, reached by
@@ -244,6 +254,14 @@ if ($hassiteconfig) {
                 $hasblock
                     ? get_string('block:removebutton', 'local_reportlms')
                     : get_string('block:addbutton', 'local_reportlms'),
+                ['class' => 'btn btn-secondary']
+            );
+
+            // Proves which Report LMS account runs this site. Only offered
+            // while connected, because the code goes out over the connection.
+            $buttons .= ' ' . html_writer::link(
+                new moodle_url('/local/reportlms/claim.php'),
+                get_string('claim:button', 'local_reportlms'),
                 ['class' => 'btn btn-secondary']
             );
         }

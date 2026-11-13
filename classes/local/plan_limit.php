@@ -56,9 +56,6 @@ class plan_limit {
     /** @var string Plugin config key: when Report LMS last accepted a push. */
     public const LAST_PUSH = 'lastpush';
 
-    /** @var string Plugin config key: set while Report LMS says this site's key has ended. */
-    public const KEY_ENDED = 'keyended';
-
     /** @var string Where a site can buy a bigger plan, on the Report LMS host. */
     public const PRICING_PATH = '/pricing';
 
@@ -241,13 +238,16 @@ class plan_limit {
      *
      * Report LMS answers with the organisation hash it last applied, or null
      * when it never applied one. When that is not the one this site last had
-     * accepted, and that was long enough ago, Report LMS lost it, so the saved hash is cleared and the
-     * organisation goes again on this run. A newer mismatch is left alone:
-     * Report LMS works through accepted batches in a queue.
+     * accepted, and that was long enough ago, Report LMS lost it, so the saved
+     * hash is cleared and the organisation goes again on this run. A newer
+     * mismatch is left alone: Report LMS works through accepted batches in a
+     * queue.
      *
      * Long enough is an hour for the first resend, then two, four and so on up
      * to a day, so a Report LMS that can never apply this organisation is not
-     * sent the whole of it every hour. A match starts the count again.
+     * sent the whole of it every hour. A match starts the count again, and so
+     * does an organisation accepted because it changed rather than because it
+     * went missing: losing that one is a new loss.
      *
      * @param array $health The decoded health reply.
      * @return bool Whether the organisation will be sent again.
@@ -346,8 +346,9 @@ class plan_limit {
      * What the settings and report pages say when the plan holds people back.
      *
      * Held people are not left out altogether: they are listed by coded id
-     * with their account status, so the headcount stays true. The text says
-     * so, rather than that nothing is sent for them.
+     * with their account status and login method, and any unit they manage,
+     * so the headcount stays true. The text says so, rather than that nothing
+     * is sent for them.
      *
      * @return string|null Null when there is no limit or everybody fits.
      */
