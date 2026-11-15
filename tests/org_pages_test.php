@@ -111,6 +111,8 @@ final class org_pages_test extends \advanced_testcase {
         $structureafter = batch_builder::structure_only($now, $plan, false, $org);
 
         $this->assertSame([], $org->pages);
+        $this->assertNotNull($org->section);
+        $this->assertArrayHasKey('org', $after[0]->payload, 'The comparison covers the organisation section.');
         $this->assertSame(
             json_encode(array_column($before, 'payload')),
             json_encode(array_column($after, 'payload'))
@@ -164,6 +166,9 @@ final class org_pages_test extends \advanced_testcase {
         $this->assertStringContainsString("org page 1 of {$count} accepted", $output);
         $this->assertStringContainsString("org page {$count} of {$count} accepted", $output);
         $this->assertStringContainsString('chunk 0: ', $output);
+
+        // A push reply says nothing about pages, and leaves the offer alone.
+        $this->assertSame(self::OFFER, org_pages::rows());
     }
 
     public function test_every_page_names_its_set_place_hash_and_limit(): void {
@@ -284,6 +289,7 @@ final class org_pages_test extends \advanced_testcase {
      */
     public static function refused_pages(): array {
         return [
+            'the first page' => ['first'],
             'the second page' => ['second'],
             'the last page' => ['last'],
         ];
@@ -299,7 +305,11 @@ final class org_pages_test extends \advanced_testcase {
         $people = $this->people(4);
         userstate::mark_all_dirty();
         $count = count(org_pages::split($this->whole(), self::OFFER));
-        $refused = $which === 'last' ? $count - 1 : 1;
+        $refused = match ($which) {
+            'first' => 0,
+            'last' => $count - 1,
+            default => 1,
+        };
         $client = $this->pager();
         $client->refuseat = $refused;
 
@@ -314,6 +324,69 @@ final class org_pages_test extends \advanced_testcase {
         $this->assertFalse(get_config('local_reportlms', plan_limit::ORG_SENT_AT));
         $this->assertStringContainsString('stopped at org page ' . ($refused + 1) . " of {$count}", $output);
         $this->assertStringContainsString('stay dirty', $output);
+    }
+
+    public function test_the_resend_count_and_the_labels_wait_for_the_last_page(): void {
+        $this->people(4);
+        $this->pretend_everything_was_pushed();
+        // Changed since the hash Report LMS holds, after earlier resends.
+        set_config('lastorghash', 'stale', 'local_reportlms');
+        set_config(plan_limit::ORG_RESENDS, 3, 'local_reportlms');
+        $labels = \cache::make('local_reportlms', 'labels');
+        $labels->set('labelmap', ['seeded' => 'Seeded']);
+        $count = count(org_pages::split($this->whole(), self::OFFER));
+
+        $refused = $this->pager();
+        $refused->refuseat = $count - 1;
+        $this->run_task($refused);
+
+        $this->assertCount($count - 1, $refused->payloads);
+        $this->assertSame(3, plan_limit::org_resends());
+        $this->assertSame(['seeded' => 'Seeded'], $labels->get('labelmap'));
+        $this->assertSame('stale', get_config('local_reportlms', 'lastorghash'));
+
+        $accepted = $this->pager();
+        $this->run_task($accepted);
+
+        $this->assertCount($count, $accepted->payloads, 'Only the pages: nothing else changed.');
+        $this->assertSame(0, plan_limit::org_resends());
+        $this->assertFalse($labels->get('labelmap'));
+        $this->assertSame(substr($this->whole()['org_state_hash'], 2), get_config('local_reportlms', 'lastorghash'));
+    }
+
+    public function test_a_lost_organisation_is_sent_again_in_pages(): void {
+        $this->people(4);
+        $this->pretend_everything_was_pushed();
+        set_config(plan_limit::ORG_SENT_AT, time() - 2 * HOURSECS, 'local_reportlms');
+        $hash = $this->whole()['org_state_hash'];
+        $lost = ['org_page_rows' => self::OFFER, 'org_state_hash_applied' => 'h_somethingelse'];
+
+        // Found lost and counted; the set stops at its second page.
+        $first = $this->pager($lost);
+        $first->refuseat = 1;
+        $output = $this->run_task($first);
+
+        $this->assertStringContainsString('sending it again (resend 1)', $output);
+        $this->assertSame(1, plan_limit::org_resends());
+        $this->assertFalse(get_config('local_reportlms', 'lastorghash'));
+
+        // The next run sends the whole set again, and the count stays as it is.
+        $second = $this->pager($lost);
+        $output = $this->run_task($second);
+
+        $pages = $this->pages($second);
+        $this->assertGreaterThan(1, count($pages));
+        $this->assertCount(count($pages), $second->payloads);
+        $this->assertSame(0, $pages[0]['page']);
+        $this->assertStringNotContainsString('sending it again', $output);
+        $this->assertSame(array_fill(0, count($pages), 1), $second->resends);
+        $this->assertSame(1, plan_limit::org_resends(), 'A resend is not a change, so the last page keeps the count.');
+        $this->assertSame(substr($hash, 2), get_config('local_reportlms', 'lastorghash'));
+        $this->assertGreaterThan(time() - MINSECS, (int) get_config('local_reportlms', plan_limit::ORG_SENT_AT));
+
+        // Once Report LMS says it applied that hash, the count starts again.
+        $this->run_task($this->pager(['org_page_rows' => self::OFFER, 'org_state_hash_applied' => $hash]));
+        $this->assertSame(0, plan_limit::org_resends());
     }
 
     public function test_the_next_run_after_a_refusal_starts_a_new_set(): void {
@@ -484,7 +557,7 @@ final class org_pages_test extends \advanced_testcase {
         unset_config('lastdimhash', 'local_reportlms');
         $client = $this->pager();
 
-        $this->run_task($client);
+        $output = $this->run_task($client);
 
         $count = count($this->pages($client));
         $this->assertCount($count + 1, $client->payloads);
@@ -492,6 +565,8 @@ final class org_pages_test extends \advanced_testcase {
         $this->assertArrayHasKey('dimensions', $last);
         $this->assertArrayNotHasKey('org', $last);
         $this->assertSame('1.0', $last['contract_version']);
+        $this->assertStringContainsString('sending the catalogue and settings after the organisation pages', $output);
+        $this->assertStringNotContainsString('sending the organisation and catalogue', $output);
     }
 
     public function test_paging_does_not_change_the_organisation_hash(): void {
@@ -620,6 +695,8 @@ final class org_pages_test extends \advanced_testcase {
             public $keys = [];
             /** @var array The remembered organisation hash as each try began. */
             public $saved = [];
+            /** @var int[] The organisation resend count as each try began. */
+            public $resends = [];
             /** @var int Pushes tried, accepted or not. */
             public $tries = 0;
 
@@ -656,6 +733,7 @@ final class org_pages_test extends \advanced_testcase {
             ): array {
                 $try = $this->tries++;
                 $this->saved[] = get_config('local_reportlms', 'lastorghash');
+                $this->resends[] = (int) get_config('local_reportlms', 'orgresends');
 
                 if ($try === $this->refuseat) {
                     throw new push_refused_exception('', 'Refused for the test.');
