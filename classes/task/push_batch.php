@@ -290,6 +290,9 @@ class push_batch extends \core\task\scheduled_task {
             if ($structure !== null) {
                 if (!empty($structure->heartbeatonly)) {
                     mtrace('Report LMS: nothing sent for a day, sending a heartbeat.');
+                } else if ($org->pages) {
+                    // The organisation has pages of its own, so this chunk does not carry it.
+                    mtrace('Report LMS: no learner changed, sending the catalogue and settings after the organisation pages.');
                 } else {
                     mtrace('Report LMS: no learner changed, sending the organisation and catalogue.');
                 }
@@ -299,10 +302,10 @@ class push_batch extends \core\task\scheduled_task {
 
         // The pages first: the organisation reaches Report LMS before the
         // learners in it, and a run that stops at a page sends no learner.
-        $pages = count($org->pages);
+        $pagecount = count($org->pages);
 
-        if ($pages) {
-            mtrace("Report LMS: sending the organisation in {$pages} pages.");
+        if ($pagecount) {
+            mtrace("Report LMS: sending the organisation in {$pagecount} pages.");
             $chunks = array_merge($org->pages, $chunks);
         }
 
@@ -312,7 +315,7 @@ class push_batch extends \core\task\scheduled_task {
             // Pages are named by page, the chunks after them counted from 0 as before.
             $name = isset($chunk->orgpages)
                 ? 'org page ' . ($chunk->orgpage + 1) . " of {$chunk->orgpages}"
-                : 'chunk ' . ($i - $pages);
+                : 'chunk ' . ($i - $pagecount);
 
             try {
                 $reply = $client->push_payload($chunk->payload);
@@ -439,6 +442,10 @@ class push_batch extends \core\task\scheduled_task {
 
             if (isset($chunk->orgpages)) {
                 mtrace("{$name} accepted (" . ($reply['batch_id'] ?? 'no batch id') . ').');
+
+                // Accepted and accounted for, and nothing below reads it: free
+                // its rows before the chunks after it are encoded and sent.
+                $chunk->payload = null;
             } else {
                 mtrace("{$name}: $chunk->factrows fact rows for " . count($chunk->userids)
                     . ' learners accepted (' . ($reply['batch_id'] ?? 'no batch id') . ').');
