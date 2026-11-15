@@ -45,7 +45,9 @@ use local_reportlms\local\collector\org;
  * state, and half a slice means wrong data on the SaaS.
  *
  * The org section is full state and rides in the first chunk only, and only
- * when its state hash differs from the last one the SaaS accepted.
+ * when its state hash differs from the last one the SaaS accepted. A section
+ * larger than one page goes in pages of its own under contract 1.1 instead,
+ * when the SaaS takes pages: see {@see org_delivery()}.
  */
 class batch_builder {
     /** @var int Contract cap on fact rows per batch. */
@@ -100,11 +102,12 @@ class batch_builder {
      * @param array<int, int> $userids Real user ids, already exclusion-filtered.
      * @param int $snapshotat One timestamp shared by every chunk of this push.
      * @param plan_limit|null $plan The plan limit of this run, for the org section; null for none.
+     * @param \stdClass|null $org The run's {@see org_delivery()}; null works the section out here.
      *
      * @return array<int, \stdClass> Chunks: {payload (array, json-ready),
-     *         userids (the learners inside), factrows (int)}.
+     *         userids (the learners inside), factrows (int), dimhash, orghash}.
      */
-    public static function build(array $userids, int $snapshotat, ?plan_limit $plan = null): array {
+    public static function build(array $userids, int $snapshotat, ?plan_limit $plan = null, ?\stdClass $org = null): array {
         sort($userids);
 
         /*
@@ -279,7 +282,8 @@ class batch_builder {
 
         // Wrap each chunk in the envelope; the org tree and the dimensions
         // catalogue ride in the first chunk only, and only when they changed.
-        $orgsection = self::org_section_if_changed($plan);
+        // An org tree sent in pages of its own is not here at all.
+        $orgsection = $org !== null ? $org->section : self::org_section_if_changed($plan);
         $dimensions = self::dimensions_section_if_changed();
 
         // Read the same way gradable::pairs() read it above. A change between
@@ -353,6 +357,7 @@ class batch_builder {
                 'factrows' => $chunk['rows'],
                 // For the push task to remember after a 202, never before.
                 'dimhash' => ($i === 0 && $dimensions !== null) ? $dimensions['hash'] : null,
+                'orghash' => ($i === 0 && $orgsection !== null) ? substr($orgsection['org_state_hash'], 2) : null,
             ];
         }
 
@@ -463,11 +468,18 @@ class batch_builder {
      * @param int $snapshotat
      * @param plan_limit|null $plan The plan limit of this run, for the org section; null for none.
      * @param bool $heartbeat Send even when nothing changed.
+     * @param \stdClass|null $org The run's {@see org_delivery()}; null works the section out here.
      *
      * @return \stdClass|null Null when nothing changed and no heartbeat is due.
      */
-    public static function structure_only(int $snapshotat, ?plan_limit $plan = null, bool $heartbeat = false): ?\stdClass {
-        $orgsection = self::org_section_if_changed($plan);
+    public static function structure_only(
+        int $snapshotat,
+        ?plan_limit $plan = null,
+        bool $heartbeat = false,
+        ?\stdClass $org = null
+    ): ?\stdClass {
+        // An org tree sent in pages of its own is not here at all.
+        $orgsection = $org !== null ? $org->section : self::org_section_if_changed($plan);
         $dimensions = self::dimensions_section_if_changed();
         $settings = self::settings_section();
 
@@ -511,6 +523,7 @@ class batch_builder {
             'userids' => [],
             'factrows' => 0,
             'dimhash' => $dimensions !== null ? $dimensions['hash'] : null,
+            'orghash' => $orgsection !== null ? substr($orgsection['org_state_hash'], 2) : null,
             'settingshash' => $settingshash,
             // Nothing changed: this batch goes only because a heartbeat is due.
             'heartbeatonly' => $orgsection === null && $dimensions === null && !$settingschanged && !$contactchanged,
@@ -565,6 +578,62 @@ class batch_builder {
         }
 
         return ['section' => $section, 'hash' => $hash];
+    }
+
+    /**
+     * How the organisation travels on this run: whole in the first chunk, in pages of its own, or not at all.
+     *
+     * Worked out once per run, so the section is collected once and every
+     * page of a set says the same thing. Pages only when Report LMS offered
+     * them and the members and attribute rows together are more than one
+     * page holds; otherwise the section goes whole in the first chunk, exactly
+     * as before pages existed.
+     *
+     * A page carries the organisation and nothing else: no learners, no
+     * departures, no catalogue, no settings, and an empty facts block. Every
+     * page has the same snapshot time, state hash and limit, and only the
+     * last one carries the hash for the push task to remember, so a set that
+     * stops halfway is never taken as delivered.
+     *
+     * @param plan_limit|null $plan The plan limit of this run; null for none.
+     * @param int $snapshotat The run's snapshot time, the same on every page.
+     * @return \stdClass {section (array|null, for the first chunk), pages (chunks,
+     *         shaped like {@see build()} returns them plus orgpage and orgpages),
+     *         hash (the raw state hash, or null when unchanged)}.
+     */
+    public static function org_delivery(?plan_limit $plan, int $snapshotat): \stdClass {
+        $section = self::org_section_if_changed($plan);
+        $hash = $section !== null ? substr($section['org_state_hash'], 2) : null;
+        $rows = org_pages::rows();
+
+        if ($section === null || $rows === 0 || count($section['members']) + count($section['attrs']) <= $rows) {
+            return (object) ['section' => $section, 'pages' => [], 'hash' => $hash];
+        }
+
+        $setid = org_pages::new_set_id();
+        $parts = org_pages::split($section, $rows);
+        $last = count($parts) - 1;
+        $pages = [];
+
+        foreach ($parts as $i => $part) {
+            $payload = self::envelope($snapshotat);
+            $payload['contract_version'] = org_pages::CONTRACT;
+            $payload['org'] = ['set_id' => $setid] + $part;
+            $payload['facts'] = [];
+
+            $pages[] = (object) [
+                'payload' => $payload,
+                'userids' => [],
+                'factrows' => 0,
+                // Counted from 0, like the page number on the wire.
+                'orgpage' => $i,
+                'orgpages' => $last + 1,
+                // Remembered after the last page only.
+                'orghash' => $i === $last ? $hash : null,
+            ];
+        }
+
+        return (object) ['section' => null, 'pages' => $pages, 'hash' => $hash];
     }
 
     /**
