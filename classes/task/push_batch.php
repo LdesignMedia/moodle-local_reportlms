@@ -32,6 +32,7 @@ use local_reportlms\local\batch_builder;
 use local_reportlms\local\config;
 use local_reportlms\local\connect_manager;
 use local_reportlms\local\label_map;
+use local_reportlms\local\org_pages;
 use local_reportlms\local\plan_limit;
 use local_reportlms\local\source_sweep;
 use local_reportlms\local\userstate;
@@ -230,9 +231,24 @@ class push_batch extends \core\task\scheduled_task {
         $readat = time();
         $userids = userstate::get_dirty_batch(self::MAX_USERS_PER_RUN, $plan->cutoff());
 
+        // One snapshot time for everything this run sends, every page of the
+        // organisation included: Report LMS checks a set of pages has one.
+        $snapshotat = time();
+
+        /*
+         * The organisation, worked out once for the run.
+         *
+         * Whole in the first chunk as always, or, on a site too large for one
+         * request when Report LMS takes pages, as pages of its own that go
+         * before anything else. A set that stops halfway is not resumed: the
+         * hash is only remembered after the last page, so the next run builds
+         * the section again and sends it as a new set, with a new snapshot.
+         */
+        $org = batch_builder::org_delivery($plan, $snapshotat);
+
         if ($userids) {
             try {
-                $chunks = batch_builder::build($userids, time(), $plan);
+                $chunks = batch_builder::build($userids, $snapshotat, $plan, $org);
             } catch (\local_reportlms\local\push_refused_exception $e) {
                 // A refusal here is the builder declining to miscount (no
                 // gradable roles, contexts mid-rebuild), not a broken site. The
@@ -255,32 +271,56 @@ class push_batch extends \core\task\scheduled_task {
              * that is days; on a site that has finished its training it is
              * never, and the dashboard goes on showing an old name against
              * current numbers.
+             *
+             * Pages of the organisation are a push of their own, so they need
+             * no heartbeat beside them.
              */
-            $heartbeat = self::heartbeat_due();
-            $structure = batch_builder::structure_only(time(), $plan, $heartbeat);
+            $heartbeat = !$org->pages && self::heartbeat_due();
+            $structure = batch_builder::structure_only($snapshotat, $plan, $heartbeat, $org);
 
-            if ($structure === null) {
+            if ($structure === null && !$org->pages) {
                 $held = userstate::count_held($plan->cutoff());
                 mtrace('Report LMS: nothing to push' . ($held ? ", {$held} held by the plan." : '.'));
 
                 return;
             }
 
-            if (!empty($structure->heartbeatonly)) {
-                mtrace('Report LMS: nothing sent for a day, sending a heartbeat.');
-            } else {
-                mtrace('Report LMS: no learner changed, sending the organisation and catalogue.');
+            $chunks = [];
+
+            if ($structure !== null) {
+                if (!empty($structure->heartbeatonly)) {
+                    mtrace('Report LMS: nothing sent for a day, sending a heartbeat.');
+                } else if ($org->pages) {
+                    // The organisation has pages of its own, so this chunk does not carry it.
+                    mtrace('Report LMS: no learner changed, sending the catalogue and settings after the organisation pages.');
+                } else {
+                    mtrace('Report LMS: no learner changed, sending the organisation and catalogue.');
+                }
+                $chunks = [$structure];
             }
-            $chunks = [$structure];
+        }
+
+        // The pages first: the organisation reaches Report LMS before the
+        // learners in it, and a run that stops at a page sends no learner.
+        $pagecount = count($org->pages);
+
+        if ($pagecount) {
+            mtrace("Report LMS: sending the organisation in {$pagecount} pages.");
+            $chunks = array_merge($org->pages, $chunks);
         }
 
         $sent = 0;
         $accepted = false;
         foreach ($chunks as $i => $chunk) {
+            // Pages are named by page, the chunks after them counted from 0 as before.
+            $name = isset($chunk->orgpages)
+                ? 'org page ' . ($chunk->orgpage + 1) . " of {$chunk->orgpages}"
+                : 'chunk ' . ($i - $pagecount);
+
             try {
                 $reply = $client->push_payload($chunk->payload);
             } catch (\moodle_exception $e) {
-                mtrace("Report LMS push stopped at chunk {$i}: " . self::single_line($e->getMessage()));
+                mtrace("Report LMS push stopped at {$name}: " . self::single_line($e->getMessage()));
 
                 // A refused heartbeat waits longer each time instead of going every fifteen minutes.
                 if (!empty($chunk->heartbeatonly)) {
@@ -356,16 +396,18 @@ class push_batch extends \core\task\scheduled_task {
             // statement, so an accepted one is proof it knows.
             \local_reportlms\local\privacy_statement::accepted_in_push();
 
-            // The first chunk carried the org tree; remember what the SaaS
-            // now holds so unchanged trees are omitted from later pushes.
-            if (isset($chunk->payload['org'])) {
+            // The first chunk carried the org tree, or this was the last of its
+            // pages; remember what the SaaS now holds so unchanged trees are
+            // omitted from later pushes. Never after an earlier page: a set
+            // that stops halfway is not delivered.
+            if (!empty($chunk->orghash)) {
                 // Sent because it changed, not because it went missing: if this
                 // one is lost, that is a new loss, and its resend waits an hour.
                 if ((string) get_config('local_reportlms', 'lastorghash') !== '') {
                     plan_limit::forget_resends();
                 }
 
-                set_config('lastorghash', substr($chunk->payload['org']['org_state_hash'], 2), 'local_reportlms');
+                set_config('lastorghash', $chunk->orghash, 'local_reportlms');
                 // When, so a hash Report LMS has not applied an hour later is sent again.
                 set_config(plan_limit::ORG_SENT_AT, time(), 'local_reportlms');
 
@@ -397,8 +439,24 @@ class push_batch extends \core\task\scheduled_task {
             }
 
             $sent += count($chunk->userids);
-            mtrace("chunk $i: $chunk->factrows fact rows for " . count($chunk->userids)
-                . ' learners accepted (' . ($reply['batch_id'] ?? 'no batch id') . ').');
+
+            if (isset($chunk->orgpages)) {
+                mtrace("{$name} accepted (" . ($reply['batch_id'] ?? 'no batch id') . ').');
+
+                // Accepted and accounted for, and nothing below reads it: free
+                // its rows before the chunks after it are encoded and sent.
+                $chunk->payload = null;
+            } else {
+                mtrace("{$name}: $chunk->factrows fact rows for " . count($chunk->userids)
+                    . ' learners accepted (' . ($reply['batch_id'] ?? 'no batch id') . ').');
+            }
+
+            // The rest of a set goes whatever the reply said: every page was
+            // built with one limit, and a set cut short is thrown away. A limit
+            // that changed is acted on after the last page.
+            if (isset($chunk->orgpages) && empty($chunk->orghash)) {
+                continue;
+            }
 
             /*
              * A limit that changed while this run was sending.
@@ -479,6 +537,10 @@ class push_batch extends \core\task\scheduled_task {
 
             return;
         }
+
+        // Whether Report LMS takes the organisation in pages. Every answer says
+        // so, and one that does not is a Report LMS that cannot.
+        org_pages::store_reply($health);
 
         // Outside the try: a database error here is not Report LMS being unreachable.
         if (plan_limit::follow_health($health)) {

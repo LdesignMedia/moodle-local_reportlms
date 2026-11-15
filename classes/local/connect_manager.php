@@ -148,6 +148,9 @@ class connect_manager {
         // How many people the plan covers, when Report LMS says so. An older
         // Report LMS sends no limit, and then what is stored stays.
         plan_limit::store_reply($data);
+        // Whether it takes the organisation in pages. A reply without the
+        // offer is a Report LMS that cannot, and the organisation goes whole.
+        org_pages::store_reply($data);
         if (!empty($data['expires_at'])) {
             // The key expires with the licence behind it, so this is also the
             // date the pushes stop if nobody renews.
@@ -210,8 +213,9 @@ class connect_manager {
         unset_config('launchsecret', 'local_reportlms');
         unset_config('environmentid', 'local_reportlms');
         unset_config('tier', 'local_reportlms');
-        // A limit belongs to the connection it came with.
+        // A limit belongs to the connection it came with, and so does a page offer.
         plan_limit::clear();
+        org_pages::clear();
         self::forget_waits();
         unset_config('connectedat', 'local_reportlms');
         unset_config('keyexpiresat', 'local_reportlms');
