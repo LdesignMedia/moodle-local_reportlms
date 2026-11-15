@@ -164,7 +164,18 @@ class reconcile_userstate extends \core\task\scheduled_task {
             $marked += $orphans;
         }
 
-        mtrace("Report LMS reconcile marked {$marked} learner rows, "
-            . userstate::count_dirty() . ' now waiting to be sent.');
+        $waiting = userstate::count_dirty();
+        $cutoff = \local_reportlms\local\plan_limit::current()->cutoff();
+
+        if ($cutoff === null) {
+            mtrace("Report LMS reconcile marked {$marked} learner rows, {$waiting} now waiting to be sent.");
+
+            return;
+        }
+
+        // People outside the plan stay marked, but they are not on their way.
+        $held = userstate::count_held($cutoff);
+        mtrace("Report LMS reconcile marked {$marked} learner rows, " . ($waiting - $held) . ' now waiting to be sent, '
+            . "{$held} held by the plan.");
     }
 }

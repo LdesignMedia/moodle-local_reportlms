@@ -27,6 +27,8 @@
 namespace local_reportlms\local\collector;
 
 use local_reportlms\local\mapping;
+use local_reportlms\local\plan_limit;
+use local_reportlms\local\site_admins;
 use local_reportlms\local\userstate;
 
 /**
@@ -82,14 +84,29 @@ class org {
     /**
      * The full org state.
      *
-     * @return \stdClass {nodes, members, managers, attrs}:
+     * With a plan limit, everybody is still listed, so the headcount stays
+     * true, but a person outside the plan gets an attrs row marked held, with
+     * no job function and no membership: they are in no unit until the plan
+     * grows. Managers are unchanged, because they say who may look at a unit,
+     * not who is in it. Site administrators take no place and are never held.
+     *
+     * The limit itself is part of the state only while there is one, so a
+     * site without a limit hashes exactly as before and an upgrade resends
+     * nothing. A limit change, or a change in who is held, changes the hash.
+     *
+     * @param plan_limit|null $plan The plan limit of this run, or null for none.
+     * @return \stdClass {nodes, members, managers, attrs[, limit_applied]}:
      *         nodes    list of {key, parent (key|null), kind}
      *         members  list of {userid, nodekey}
      *         managers list of {userid, nodekey}
-     *         attrs    list of {userid, auth, active, function (value|null)}
+     *         attrs    list of {userid, auth, active, function (value|null)[, held (true)]}
+     *         limit_applied  the plan limit, only when there is one
      */
-    public static function collect(): \stdClass {
+    public static function collect(?plan_limit $plan = null): \stdClass {
         global $DB;
+
+        // Read once, and only when somebody can be held at all.
+        $admins = ($plan !== null && $plan->cutoff() !== null) ? array_flip(site_admins::ids()) : [];
 
         $nodes = [
             self::UNASSIGNED => (object) [
@@ -165,6 +182,7 @@ class org {
 
         foreach ($recordset as $row) {
             $uid = (int) $row->id;
+            $held = $plan !== null && $plan->holds($uid) && !isset($admins[$uid]);
 
             /*
              * One row per unit the person is in.
@@ -194,18 +212,29 @@ class org {
 
             ksort($nodekeys);
 
-            foreach ($nodekeys as $nodekey) {
-                $members[] = (object) ['userid' => $uid, 'nodekey' => $nodekey];
+            // Somebody held by the plan is in no unit.
+            if (!$held) {
+                foreach ($nodekeys as $nodekey) {
+                    $members[] = (object) ['userid' => $uid, 'nodekey' => $nodekey];
+                }
             }
 
             $functionvalue = trim((string) $row->functionvalue);
 
-            $attrs[] = (object) [
+            $attr = (object) [
                 'userid' => $uid,
                 'auth' => $row->auth,
                 'active' => $row->suspended == 0,
-                'function' => $functionvalue === '' ? null : $functionvalue,
+                // Nothing about what a held person does: Report LMS only counts them.
+                'function' => ($held || $functionvalue === '') ? null : $functionvalue,
             ];
+
+            // Only when held, so a row not held hashes exactly as before.
+            if ($held) {
+                $attr->held = true;
+            }
+
+            $attrs[] = $attr;
         }
 
         $recordset->close();
@@ -252,12 +281,18 @@ class org {
 
         ksort($nodes);
 
-        return (object) [
+        $state = (object) [
             'nodes' => array_values($nodes),
             'members' => $members,
             'managers' => $managers,
             'attrs' => $attrs,
         ];
+
+        if ($plan !== null && $plan->limit() !== null) {
+            $state->limit_applied = $plan->limit();
+        }
+
+        return $state;
     }
 
     /**

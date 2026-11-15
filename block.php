@@ -52,7 +52,8 @@ try {
         $message = get_string('block:removed', 'local_reportlms');
     }
 } catch (moodle_exception $exception) {
-    redirect($returnurl, $exception->getMessage(), null, \core\output\notification::NOTIFY_ERROR);
+    // A notification prints HTML, and the message is plain text.
+    redirect($returnurl, s($exception->getMessage()), null, \core\output\notification::NOTIFY_ERROR);
 }
 
 redirect($returnurl, $message, null, \core\output\notification::NOTIFY_SUCCESS);

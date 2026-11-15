@@ -235,6 +235,16 @@ if ($cronproblem !== null) {
     );
 }
 
+// The plan limit, for whoever can change the plan: the report itself shows only
+// the people inside it, so this says why the rest are missing.
+if (has_capability('moodle/site:config', $context)) {
+    $limitnotice = \local_reportlms\local\plan_limit::notice();
+
+    if ($limitnotice !== null) {
+        echo html_writer::div($limitnotice, 'local-reportlms-limit alert alert-warning');
+    }
+}
+
 // The token is minted per page load and is good for a few minutes only, so it
 // is built here rather than cached anywhere.
 echo html_writer::tag('iframe', '', [

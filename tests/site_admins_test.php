@@ -475,6 +475,16 @@ final class site_admins_test extends \advanced_testcase {
             }
 
             /**
+             * Answer like a Report LMS that sends no plan limit.
+             *
+             * @param string $apikey
+             * @return array
+             */
+            public function health(string $apikey): array {
+                return [];
+            }
+
+            /**
              * Keep the payload and accept it.
              *
              * @param string $pushpath

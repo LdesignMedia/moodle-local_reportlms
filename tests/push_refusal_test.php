@@ -73,6 +73,16 @@ final class push_refusal_test extends \advanced_testcase {
                 $this->reason = $reason;
             }
 
+            /**
+             * Answer like a Report LMS that sends no plan limit.
+             *
+             * @param string $apikey
+             * @return array
+             */
+            public function health(string $apikey): array {
+                return [];
+            }
+
             public function push(
                 string $pushpath,
                 string $rawbody,

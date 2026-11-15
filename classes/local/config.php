@@ -53,6 +53,9 @@ class config {
     /** @var string Where the plugin sends the contact email the moment it is saved. */
     public const CONTACT_PATH = '/api/v1/push/contact';
 
+    /** @var string Where the plugin sends a claim code, to prove which account runs this site. */
+    public const CLAIM_PATH = '/api/v1/push/claim';
+
     /** @var string Where the SaaS serves the embedded dashboard. */
     public const DEFAULT_EMBED_PATH = '/embed';
 
@@ -74,6 +77,38 @@ class config {
         }
 
         return rtrim($baseurl, '/');
+    }
+
+    /**
+     * Whether a base URL is safe to send this site's key to.
+     *
+     * The key travels on every run, so only https, except on a machine of
+     * one's own: localhost, 127.0.0.1 and any host under .test may use plain
+     * http for development.
+     *
+     * @param string $url
+     *
+     * @return bool
+     */
+    public static function is_secure_url(string $url): bool {
+        $parts = parse_url(trim($url));
+
+        if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return false;
+        }
+
+        $scheme = strtolower($parts['scheme']);
+        $host = strtolower($parts['host']);
+
+        if ($scheme === 'https') {
+            return true;
+        }
+
+        if ($scheme !== 'http') {
+            return false;
+        }
+
+        return $host === 'localhost' || $host === '127.0.0.1' || substr($host, -5) === '.test';
     }
 
     /**
